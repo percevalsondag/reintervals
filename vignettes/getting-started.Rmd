@@ -156,7 +156,7 @@ The *tolerance* interval is the one re-routed to the validated Montes ANOVA
 closed form on this structure (Section 3); a validated closed form for the
 CI/PI/new-group-mean case is planned for v2.
 
-## 5. Two honest caveats
+## 5. Limitations
 
 * **The `vg_floored` flag is a defensive guard you should not normally see.**
   A valid `lmer` fit has a positive-semidefinite random-effect covariance, so the
