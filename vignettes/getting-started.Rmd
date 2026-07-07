@@ -1,0 +1,178 @@
+---
+title: "Getting started with reintervals"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Getting started with reintervals}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
+options(width = 90)
+library(reintervals)
+```
+
+`reintervals` computes four kinds of interval for a linear mixed model fitted
+with `lme4::lmer()`, through one uniform interface, and returns them in one tidy
+`lmm_interval` data frame.
+
+## 1. The four interval types --- and when to use each
+
+| Verb | Answers | Use when you want... |
+|---|---|---|
+| `ci_lmm()` | confidence interval for the **mean** | uncertainty in the average response at a point |
+| `pi_lmm()` | prediction interval for **one future observation** | where a single new measurement will fall |
+| `ti_lmm()` | tolerance interval covering a proportion `P` of the **population** | a content/coverage statement (e.g. "99% of units, 95% confident") |
+| `new_group_mean_lmm()` | the **CInew / new-batch-mean** interval | where the mean of one new, unobserved group/batch will fall |
+
+`lmm_predict(model, interval = ...)` is a `predict()`-style wrapper over the
+four. The engine that computes each interval is chosen automatically from the
+fitted model (you can override with `method = `).
+
+## 2. The four verbs on a random-intercept model
+
+We use `sleepstudy` (reaction time by `Days`, random intercept per `Subject`):
+
+```{r ri-fit}
+fm <- lme4::lmer(Reaction ~ Days + (1 | Subject), data = lme4::sleepstudy)
+
+ci_lmm(fm, newdata = data.frame(Days = 5))
+pi_lmm(fm, newdata = data.frame(Days = 5))
+ti_lmm(fm, newdata = data.frame(Days = 5), P = 0.99)
+new_group_mean_lmm(fm, newdata = data.frame(Days = 5))
+```
+
+### Reading the output
+
+Every verb returns the same `lmm_interval` columns:
+
+* the **eval-point column(s)**, named by the actual predictor (`Days` here);
+* `type` (`ci`/`pi`/`ti`/`new_group_mean`), `estimate`, `lower`, `upper`;
+* `level` (the confidence, `1 - alpha`) and `P` (content proportion --- a value
+  for `ti`, `NA` for the coverage intervals); `sides`;
+* `method` (the engine that ran) and `design` (the route-independent model
+  class);
+* the per-row flags `singular`, `boundary`, `vg_floored`.
+
+Engine-specific extras (degrees of freedom, GPQ/ANOVA intermediates) live in an
+attribute, and the random-intercept topology in another:
+
+```{r ri-attrs}
+ci <- ci_lmm(fm, newdata = data.frame(Days = 5))
+str(attr(ci, "diagnostics"))
+attr(ci, "grouping")
+```
+
+## 3. Stability worked examples that double as validation
+
+The next two examples are **not illustrations** --- they are the package
+reproducing its published validation oracles, live.
+
+### Montes-Burdick-Leblond (2019) Appendix A
+
+`mbl_appendix_a` is the committed Appendix A dataset (11 lots, mixing
+multi-timepoint stability lots with release-only single-observation lots). The
+published two-sided 99%-content / 95%-confidence tolerance interval at month 12
+is **(57.25, 75.41)**:
+
+```{r mbl}
+head(mbl_appendix_a)
+fm_mbl <- lme4::lmer(Y ~ Month + (1 | Lot), data = mbl_appendix_a)
+ti_lmm(fm_mbl, newdata = data.frame(Month = 12), P = 0.99)
+```
+
+The dispatcher routes this single-observation design to the unweighted lot-mean
+ANOVA engine (`method = "anova-mls"`), which reproduces the published number.
+
+### Oliva-Aviles & Hauser (2025) GPQ
+
+`oliva_hauser_dgp` is the published Section-5 data-generating specification. The
+content variance the GPQ method targets at `t0 = 20` has the closed form
+**`tau^2 = 8.439`**:
+
+```{r gpq-closed}
+oliva_hauser_dgp$tau2_at_t0
+```
+
+The GPQ engine is Monte Carlo: its `tau^2` estimate (`tau2_med`) is noisy on a
+single dataset but recovers the closed-form value **in expectation**. Simulating
+20 datasets from the published DGP and averaging:
+
+```{r gpq-recovery}
+d <- oliva_hauser_dgp
+sim_one <- function(seed, K = 40) {
+  set.seed(seed)
+  Lc <- chol(matrix(c(d$s2_0, d$s01, d$s01, d$s2_1), 2, 2))
+  do.call(rbind, lapply(seq_len(K), function(k) {
+    a <- as.numeric(crossprod(Lc, rnorm(2)))                 # batch random effects
+    data.frame(batch = k, time = d$times,
+               y = (d$beta0 + a[1]) + (d$beta1 + a[2]) * d$times +
+                   rnorm(length(d$times), 0, sqrt(d$s2e)))
+  }))
+}
+tau2_med <- vapply(1:20, function(s) {
+  x <- sim_one(s)
+  g <- ti_gpq_raw(x$y, x$time, x$batch, t0 = 20, P = 0.90, level = 0.95,
+                  c_resid = 0, control = lmm_interval_control(seed = s, M = 2000))
+  attr(g, "diagnostics")$tau2_med
+}, numeric(1))
+
+c(closed_form = d$tau2_at_t0, mean_gpq_tau2 = mean(tau2_med))
+```
+
+The mean GPQ `tau^2` recovers the published `8.439` (the package's test suite
+checks both the exact closed form and this expectation on CI).
+
+## 4. The engine / scope map
+
+The engine is chosen from the fitted model's structure (full mapping in
+`?reintervals-models`):
+
+| Model class | Engine (`method`) |
+|---|---|
+| random intercept (any fixed effects) | `ems-mls` |
+| random intercept + fixed slope, clean balanced | `ems-mls` |
+| random intercept + fixed slope, single-observation / unbalanced | `anova-mls` |
+| random slope, future-observation | `reml-mls` (`gpq` if singular) |
+| random slope, batch-mean (`over = "group_mean"`) | `gpq` |
+
+**v1 scope:** general fixed effects for random-intercept models; a **single time
+covariate** for random-slope models (the stability design).
+
+### A warning you should understand
+
+On a fixed-slope model fitted to single-observation / unbalanced lots, the EMS
+confidence/prediction/new-group-mean intervals can be **anti-conservative (too
+narrow)**, because REML precision-weighting down-weights the single-observation
+lots. The coverage verbs **warn** on this structure (the interval is still
+returned). Here the warning fires on the MBL data:
+
+```{r c1-warning}
+ci_lmm(fm_mbl, newdata = data.frame(Month = 12))
+```
+
+The *tolerance* interval is the one re-routed to the validated Montes ANOVA
+closed form on this structure (Section 3); a validated closed form for the
+CI/PI/new-group-mean case is planned for v2.
+
+## 5. Two honest caveats
+
+* **The `vg_floored` flag is a defensive guard you should not normally see.**
+  A valid `lmer` fit has a positive-semidefinite random-effect covariance, so the
+  between-group variance `V_G(t0) = z0' Sigma z0` is non-negative at every `t0`.
+  The floor-and-flag only triggers if a (numerically degenerate) fit drives it
+  below zero; in normal use it stays `FALSE`/`NA`. Do not be alarmed by a guard
+  you will not hit.
+
+* **`V_G` is quadratic in the time covariate.** Evaluating a slope interval at a
+  `t0` outside the observed time range extrapolates that quadratic; do it
+  knowingly. There is no guard or warning for extrapolation.
+
+## 6. Where to go next
+
+* `?reintervals` --- package overview and the engine/scope map.
+* `?reintervals-models` --- the model-class to engine mapping and design tags.
+* `?ci_lmm` --- the full `lmm_interval` output contract (shared by all verbs).
+* `NEWS.md` --- the change log and the v2 roadmap (multi-covariate random-slope
+  intervals).

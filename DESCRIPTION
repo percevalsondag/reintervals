@@ -1,0 +1,39 @@
+Package: reintervals
+Title: Confidence, Prediction, Tolerance, and New-Group-Mean Intervals for
+    Linear Mixed Models
+Version: 0.0.0.9000
+Authors@R:
+    person("Perceval", "Sondag", email = "reintervals@gmail.com",
+           role = c("aut", "cre", "cph"),
+           comment = c(ORCID = "0009-0001-9183-6991"))
+Description: Confidence, prediction, tolerance, and new-group-mean (also
+    called CInew or new-batch-mean) intervals for linear mixed models fitted
+    with 'lme4' ('lmerMod' objects), returned through one uniform interface.
+    Several validated interval engines are provided and selected automatically
+    for the fitted model, with a manual override: an expected-mean-square,
+    modified large-sample construction for random-intercept models (Francq,
+    Lin and Hoyer (2019) <doi:10.1002/sim.8386>); a restricted-maximum-
+    likelihood closed form for random-slope models; an unweighted lot-mean
+    analysis-of-variance closed form for unbalanced single-observation
+    fixed-slope stability designs (Montes, Burdick and Leblond (2019)
+    <doi:10.5731/pdajpst.2018.008839>); and a generalized-pivotal-quantity
+    Monte Carlo engine (Oliva-Aviles and Hauser (2025)
+    <doi:10.1080/00401706.2024.2407324>). General fixed effects are supported for random-intercept models;
+    random-slope models are supported for a single time covariate (the
+    stability design). The methods serve general linear-mixed-model interval
+    estimation, with particular support for pharmaceutical stability and
+    shelf-life work and for bioassay applications through the tolerance and
+    new-group-mean intervals.
+License: MIT + file LICENSE
+Encoding: UTF-8
+Language: en-US
+LazyData: true
+Depends: R (>= 4.1)
+Imports: lme4, Matrix, numDeriv, stats
+Suggests: testthat (>= 3.0.0), knitr, rmarkdown, pbkrtest
+Config/testthat/edition: 3
+Roxygen: list(markdown = TRUE)
+VignetteBuilder: knitr
+URL: https://github.com/percevalsondag/reintervals
+BugReports: https://github.com/percevalsondag/reintervals/issues
+Config/roxygen2/version: 8.0.0

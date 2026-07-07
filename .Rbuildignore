@@ -1,0 +1,11 @@
+^\.github$
+^README\.Rmd$
+^paper\.md$
+^paper\.bib$
+^CONTRIBUTING\.md$
+^CODE_OF_CONDUCT\.md$
+^cran-comments\.md$
+^[^/]*\.html$
+^\.DS_Store$
+^data-raw$
+^LICENSE\.md$
