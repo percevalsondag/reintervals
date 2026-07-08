@@ -48,7 +48,7 @@
 #'   \item{tau2_at_t0}{the closed-form content variance at `t0` (8.439388).}
 #'   \item{citation}{the source reference.}
 #' }
-#' @source Oliva-Aviles C, Hauser S (2025). *Technometrics* 67(2):193-202 \doi{10.1080/00401706.2024.2407324},
+#' @source Oliva-Aviles C, Hauser P (2025). *Technometrics* 67(2):193-202 \doi{10.1080/00401706.2024.2407324},
 #'   Section 5.
 #' @seealso [ti_gpq_raw()], [reintervals-models].
 #' @examples

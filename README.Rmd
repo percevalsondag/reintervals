@@ -134,5 +134,5 @@ please cite the package (`citation("reintervals")`) and the underlying methods:
   calculate random effects model tolerance intervals to set release and
   shelf-life specification limits of pharmaceutical products. *PDA Journal of
   Pharmaceutical Science and Technology*. <doi:10.5731/pdajpst.2018.008839>
-- Oliva-Aviles, C., & Hauser, S. (2025). *Technometrics*, 67(2), 193–202.
+- Oliva-Aviles, C., & Hauser, P. (2025). *Technometrics*, 67(2), 193–202.
   <doi:10.1080/00401706.2024.2407324>

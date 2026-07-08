@@ -19,7 +19,7 @@ covariance, slope variance of \code{V} (at \code{kappa = 1}).}
 }
 }
 \source{
-Oliva-Aviles C, Hauser S (2025). \emph{Technometrics} 67(2):193-202 \doi{10.1080/00401706.2024.2407324},
+Oliva-Aviles C, Hauser P (2025). \emph{Technometrics} 67(2):193-202 \doi{10.1080/00401706.2024.2407324},
 Section 5.
 }
 \usage{

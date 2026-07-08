@@ -253,7 +253,7 @@
 #' @return A data frame, one row per `t0`: `method = "gpq"`, `time`, `estimate`,
 #'   `lower`, `upper`, `design = "random_slope_correlated"`, plus audit fields
 #'   (`tau2_med`, `s2e_med`, `frac_boundary`, `K`, `df_resid`, `phi1`).
-#' @references Oliva-Aviles C, Hauser S (2025). *Technometrics* 67(2):193-202. \doi{10.1080/00401706.2024.2407324}
+#' @references Oliva-Aviles C, Hauser P (2025). *Technometrics* 67(2):193-202. \doi{10.1080/00401706.2024.2407324}
 #' @seealso [ti_lmm()] (the dispatcher), [ti_anova_raw()] (the ANOVA raw engine),
 #'   [reintervals-models].
 #' @examples

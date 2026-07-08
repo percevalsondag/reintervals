@@ -58,7 +58,7 @@ ti_gpq_raw(d$Reaction, d$Days, d$Subject, t0 = 5,
            control = lmm_interval_control(seed = 1, M = 2000))
 }
 \references{
-Oliva-Aviles C, Hauser S (2025). \emph{Technometrics} 67(2):193-202. \doi{10.1080/00401706.2024.2407324}
+Oliva-Aviles C, Hauser P (2025). \emph{Technometrics} 67(2):193-202. \doi{10.1080/00401706.2024.2407324}
 }
 \seealso{
 \code{\link[=ti_lmm]{ti_lmm()}} (the dispatcher), \code{\link[=ti_anova_raw]{ti_anova_raw()}} (the ANOVA raw engine),
