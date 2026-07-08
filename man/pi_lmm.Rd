@@ -60,9 +60,9 @@ observation at \code{newdata}. Dispatch and arguments are as for \code{\link[=ci
 
 On a fixed-slope model fitted to single-observation / unbalanced lots (the
 release-only stability structure), the EMS confidence, prediction, and
-new-group-mean intervals can be \strong{anti-conservative (too narrow)}, because
+new-group-mean intervals can be anti-conservative (too narrow), because
 REML precision-weighting down-weights the single-observation lots.
-\code{\link[=ci_lmm]{ci_lmm()}}, \code{\link[=pi_lmm]{pi_lmm()}}, and \code{\link[=new_group_mean_lmm]{new_group_mean_lmm()}} \strong{emit a warning} when
+\code{\link[=ci_lmm]{ci_lmm()}}, \code{\link[=pi_lmm]{pi_lmm()}}, and \code{\link[=new_group_mean_lmm]{new_group_mean_lmm()}} emit a warning when
 that structure is detected (the interval is still returned, unchanged). The
 \emph{tolerance} interval (\code{\link[=ti_lmm]{ti_lmm()}}) is instead routed to the validated Montes
 ANOVA closed form on this structure; a validated closed form for the

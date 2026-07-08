@@ -77,8 +77,8 @@ observation / staggered / unbalanced -> the Montes ANOVA/MLS closed form.
 \item \strong{Random intercept, no fixed slope} -> EMS engine.
 }
 
-For slope models the between-group variance \code{V_G(t0)} is \strong{quadratic in the
-time covariate}, so evaluating at a \code{t0} outside the observed time range is
+For slope models the between-group variance \code{V_G(t0)} is quadratic in the
+time covariate, so evaluating at a \code{t0} outside the observed time range is
 an extrapolation of that quadratic and should be done knowingly (the interval
 is computed without a guard or warning). The same applies to the other slope
 verbs (\code{\link[=ci_lmm]{ci_lmm()}}, \code{\link[=pi_lmm]{pi_lmm()}}, \code{\link[=new_group_mean_lmm]{new_group_mean_lmm()}}).

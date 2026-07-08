@@ -28,13 +28,13 @@
 #'
 #' @section Extrapolation in time (slope models):
 #' For the random-slope and fixed-slope models the between-group variance
-#' `V_G(t0) = z0' Sigma z0` is **quadratic in the time covariate**. Evaluating an
+#' `V_G(t0) = z0' Sigma z0` is quadratic in the time covariate. Evaluating an
 #' interval at a time point outside the observed range therefore extrapolates
 #' that quadratic; the package computes it without a guard or warning, so
 #' out-of-range `t0` should be requested knowingly.
 #'
 #' @section new_group_mean (CInew / new-batch-mean):
-#' [new_group_mean_lmm()] is the **CInew / new-batch-mean** interval --- a
+#' [new_group_mean_lmm()] is the CInew / new-batch-mean interval --- a
 #' prediction interval for the mean of one new, as-yet-unobserved group/batch
 #' (the prediction interval with the residual component removed). It is listed
 #' here under both names so it is discoverable as "CInew" or "new batch mean".

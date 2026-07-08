@@ -26,7 +26,7 @@ or \code{"new_group_mean"}.}
 \item{newdata}{Row(s) giving the fixed-effect combination(s); the time column
 supplies the evaluation point(s). \code{NULL} uses the first model-frame row.}
 
-\item{P, over}{Content proportion and tolerance target; honored \strong{only} for
+\item{P, over}{Content proportion and tolerance target; honored only for
 \code{interval = "tolerance"} (forwarded to \code{\link[=ti_lmm]{ti_lmm()}}). Supplying a non-default
 \code{P}/\code{over} with any other \code{interval} is an error.}
 
@@ -64,7 +64,7 @@ freedom \code{df}, standard error \code{se}, and any GPQ / ANOVA intermediates);
 \description{
 A predict-style wrapper over the four interval verbs (\code{\link[=ci_lmm]{ci_lmm()}}, \code{\link[=pi_lmm]{pi_lmm()}},
 \code{\link[=ti_lmm]{ti_lmm()}}, \code{\link[=new_group_mean_lmm]{new_group_mean_lmm()}}), selected by \code{interval}. This is a plain
-function, \strong{not} an S3 method --- it does not override \code{lme4}'s
+function, not an S3 method --- it does not override \code{lme4}'s
 \code{predict.merMod}.
 }
 \examples{

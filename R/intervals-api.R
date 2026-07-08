@@ -217,9 +217,9 @@ print.lmm_interval <- function(x, ...) {
 #' @section Anti-conservative drift on single-observation fixed-slope data:
 #' On a fixed-slope model fitted to single-observation / unbalanced lots (the
 #' release-only stability structure), the EMS confidence, prediction, and
-#' new-group-mean intervals can be **anti-conservative (too narrow)**, because
+#' new-group-mean intervals can be anti-conservative (too narrow), because
 #' REML precision-weighting down-weights the single-observation lots.
-#' [ci_lmm()], [pi_lmm()], and [new_group_mean_lmm()] **emit a warning** when
+#' [ci_lmm()], [pi_lmm()], and [new_group_mean_lmm()] emit a warning when
 #' that structure is detected (the interval is still returned, unchanged). The
 #' *tolerance* interval ([ti_lmm()]) is instead routed to the validated Montes
 #' ANOVA closed form on this structure; a validated closed form for the
@@ -271,10 +271,10 @@ pi_lmm <- function(model, newdata = NULL, alpha = NULL, level = NULL,
 #' New-group-mean (CInew / new-batch-mean) interval
 #'
 #' One of the four interval verbs: a prediction interval for the mean of one new,
-#' as-yet-unobserved group/batch --- the **CInew / new-batch-mean** interval. It
+#' as-yet-unobserved group/batch --- the CInew / new-batch-mean interval. It
 #' is the prediction interval with the residual component removed,
 #' \eqn{\mu(t_0) \pm t_{\nu_G}\sqrt{V_F + V_G}}; coverage is `level`/`alpha`, so
-#' it carries **no content `P`** (unlike [ti_lmm()]). Dispatch and arguments are
+#' it carries no content `P` (unlike [ti_lmm()]). Dispatch and arguments are
 #' as for [ci_lmm()].
 #'
 #' @inheritParams ci_lmm
@@ -340,13 +340,13 @@ new_group_mean_lmm <- function(model, newdata = NULL, alpha = NULL, level = NULL
 #'
 #' A predict-style wrapper over the four interval verbs ([ci_lmm()], [pi_lmm()],
 #' [ti_lmm()], [new_group_mean_lmm()]), selected by `interval`. This is a plain
-#' function, **not** an S3 method --- it does not override `lme4`'s
+#' function, not an S3 method --- it does not override `lme4`'s
 #' `predict.merMod`.
 #'
 #' @inheritParams ti_lmm
 #' @param interval Which interval: `"confidence"`, `"prediction"`, `"tolerance"`,
 #'   or `"new_group_mean"`.
-#' @param P,over Content proportion and tolerance target; honored **only** for
+#' @param P,over Content proportion and tolerance target; honored only for
 #'   `interval = "tolerance"` (forwarded to [ti_lmm()]). Supplying a non-default
 #'   `P`/`over` with any other `interval` is an error.
 #' @inherit ci_lmm return
