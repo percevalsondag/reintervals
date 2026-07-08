@@ -102,7 +102,7 @@
 #'
 #' Method-pure (never touches `lme4`). The between- and within-lot mean squares
 #' are sums of squares over their degrees of freedom and so are non-negative by
-#' construction; no ANOVA-estimate truncation arises.
+#' construction; no ANOVA-estimate truncation.
 #'
 #' @param y Numeric response.
 #' @param time Numeric time/age covariate (same length as `y`).

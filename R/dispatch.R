@@ -1,7 +1,7 @@
 # =============================================================================
 # Top-level tolerance-interval dispatch. The classifier routes from the fitted
 # model's random structure, its fixed-effect structure, the requested target,
-# and the singular flag:
+# and the flag:
 #
 #   * any random slope present -> SLOPE path, target-aware:
 #       - future-observation: closed-form MLS (ti_vfun) when the fit is
@@ -13,7 +13,7 @@
 #     target-aware auto above.
 #
 #   * random intercept + a single fixed slope:
-#       - clean balanced -> EMS engine: exact, paper-anchored.
+#       - balanced -> EMS engine: exact, paper-anchored.
 #       - single-observation / release-only lots, or staggered / unbalanced
 #         entry -> the Montes ANOVA/MLS closed form. The EMS path drifts ~2.4%
 #         anti-conservative against the Montes oracle on single-obs lots (REML
@@ -22,14 +22,14 @@
 #
 #   * random intercept, no fixed slope (one-way / nested / crossed) -> EMS engine.
 #
-# Each engine keeps its OWN singular guard (they do different jobs; not unified):
+# Each engine keeps its own singular guard (they do different jobs; not unified):
 #   * EMS path  -> reintervals' Hessian -> bounded-Satterthwaite guard (the
 #     PI-width guard pinned by test-singular-guard.R).
 #   * slope path -> the guard carried by vfun_extract (its own
 #     Satterthwaite -> containment df fallback + singular/boundary flags) plus
 #     the singular -> GPQ engine switch in .choose_slope_engine().
 #
-# The Satterthwaite df FALLBACK is also NOT shared: the EMS fallback
+# The Satterthwaite df fallback is also not shared: the EMS fallback
 # (.satterthwaite_df, vc-extract.R) and the slope fallback (.vfun_df_containment,
 # vfun-extract.R) are distinct functions validated against distinct oracles.
 #
@@ -79,8 +79,8 @@
   length(unique(tsets)) == 1L                            # identical time grids
 }
 
-## The single detector for "fixed-slope model with single-observation /
-## unbalanced lots" -- the structure on which (a) ti_lmm re-routes the TOLERANCE
+## The detector for "fixed-slope model with single-observation /
+## unbalanced lots": the structure on which (a) ti_lmm re-routes the TOLERANCE
 ## interval to the Montes ANOVA closed form, and (b) the EMS CI/PI/new-group-mean
 ## drift anti-conservative (REML precision-weighting). TRUE iff: no random slope,
 ## exactly one fixed covariate (a fixed-slope model), and NOT clean balanced.
@@ -96,7 +96,7 @@
 ## Target-aware slope-engine selection (the GPQ routing policy).
 ## Returns "closed" or "gpq"; errors only on the one unsafe forced combination.
 ## Pure function of (target, singular, engine) so the (target x singular) routing
-## matrix is testable WITHOUT a fit -- the singular-vs-closed routing rule is
+## matrix is testable without a fit. The singular-vs-closed routing rule is
 ## exercised directly.
 .choose_slope_engine <- function(target, singular, engine) {
   if (engine == "closed" && target == "true_value") {

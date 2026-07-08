@@ -53,25 +53,12 @@ freedom \code{df}, standard error \code{se}, and any GPQ / ANOVA intermediates);
 }
 \description{
 One of the four interval verbs: a prediction interval for the mean of one new,
-as-yet-unobserved group/batch --- the CInew / new-batch-mean interval. It
+as-yet-unobserved group/batch: the CInew / new-batch-mean interval. It
 is the prediction interval with the residual component removed,
 \eqn{\mu(t_0) \pm t_{\nu_G}\sqrt{V_F + V_G}}; coverage is \code{level}/\code{alpha}, so
 it carries no content \code{P} (unlike \code{\link[=ti_lmm]{ti_lmm()}}). Dispatch and arguments are
 as for \code{\link[=ci_lmm]{ci_lmm()}}.
 }
-\section{Anti-conservative drift on single-observation fixed-slope data}{
-
-On a fixed-slope model fitted to single-observation / unbalanced lots (the
-release-only stability structure), the EMS confidence, prediction, and
-new-group-mean intervals can be anti-conservative (too narrow), because
-REML precision-weighting down-weights the single-observation lots.
-\code{\link[=ci_lmm]{ci_lmm()}}, \code{\link[=pi_lmm]{pi_lmm()}}, and \code{\link[=new_group_mean_lmm]{new_group_mean_lmm()}} emit a warning when
-that structure is detected (the interval is still returned, unchanged). The
-\emph{tolerance} interval (\code{\link[=ti_lmm]{ti_lmm()}}) is instead routed to the validated Montes
-ANOVA closed form on this structure; a validated closed form for the
-confidence / prediction / new-group-mean case is planned for a future version.
-}
-
 \examples{
 fm <- lme4::lmer(Reaction ~ Days + (1 + Days | Subject),
                  data = lme4::sleepstudy)

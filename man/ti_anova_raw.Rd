@@ -50,7 +50,7 @@ observation / staggered fixed-slope designs to this engine automatically; use
 \details{
 Method-pure (never touches \code{lme4}). The between- and within-lot mean squares
 are sums of squares over their degrees of freedom and so are non-negative by
-construction; no ANOVA-estimate truncation arises.
+construction; no ANOVA-estimate truncation.
 }
 \examples{
 lot <- rep(c("A", "B", "C", "D", "E", "F"), c(6, 5, 2, 5, 2, 1))

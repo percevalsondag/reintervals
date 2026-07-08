@@ -1,10 +1,9 @@
 # =============================================================================
-# Public surface: the four interval verbs (ci_lmm / pi_lmm / ti_lmm /
-# new_group_mean_lmm), the predict-style wrapper (lmm_predict), and the control
-# constructor (lmm_interval_control). These wrappers translate the uniform
-# argument contract into the engine calls and stamp the harmonized
-# provenance (method / design / grouping) onto the result; the numbers come from
-# the engines unchanged.
+# The public verbs ci_lmm, pi_lmm, ti_lmm, new_group_mean_lmm. Plus the
+# lmm_predict wrapper and lmm_interval_control. These are thin wrappers: they
+# take the shared arguments, dispatch to the right engine, and tag the result
+# with its method, design, and grouping. The numbers are the engine's own; the
+# wrappers don't change them.
 # =============================================================================
 
 #' Tuning controls for interval Monte-Carlo (GPQ)
@@ -31,7 +30,7 @@ lmm_interval_control <- function(seed = NULL, M = 10000L) {
   structure(list(seed = seed, M = as.integer(M)), class = "lmm_interval_control")
 }
 
-## alpha / level as a mutually-exclusive pair (the rgamma rate/scale pattern).
+## alpha / level as a mutually-exclusive pair.
 ## Returns alpha. both -> error; neither -> 0.05; level -> 1 - level.
 .resolve_alpha <- function(alpha, level) {
   if (!is.null(alpha) && !is.null(level)) {
@@ -175,7 +174,7 @@ print.lmm_interval <- function(x, ...) {
   invisible(x)
 }
 
-#' Confidence interval for the mean of a linear mixed model
+#' Confidence interval for the mean of a population, from a linear mixed model
 #'
 #' One of the four interval verbs ([ci_lmm()], [pi_lmm()], [ti_lmm()],
 #' [new_group_mean_lmm()]). `ci_lmm()` gives a confidence interval for the mean
@@ -214,7 +213,7 @@ print.lmm_interval <- function(x, ...) {
 #'   `attr(., "grouping")` is the random-intercept topology (`"oneway"`,
 #'   `"nested"`, `"crossed"`, or `NA` for slope models).
 #'
-#' @section Anti-conservative drift on single-observation fixed-slope data:
+#' @section Known limitation: 
 #' On a fixed-slope model fitted to single-observation / unbalanced lots (the
 #' release-only stability structure), the EMS confidence, prediction, and
 #' new-group-mean intervals can be anti-conservative (too narrow), because
@@ -250,7 +249,7 @@ ci_lmm <- function(model, newdata = NULL, alpha = NULL, level = NULL,
 #'
 #' @inheritParams ci_lmm
 #' @inherit ci_lmm return
-#' @inheritSection ci_lmm Anti-conservative drift on single-observation fixed-slope data
+#' @inheritSection ci_lmm Known limitation: 
 #' @seealso [ci_lmm()], [ti_lmm()], [new_group_mean_lmm()], [lmm_predict()],
 #'   [reintervals-models].
 #' @examples
@@ -271,7 +270,7 @@ pi_lmm <- function(model, newdata = NULL, alpha = NULL, level = NULL,
 #' New-group-mean (CInew / new-batch-mean) interval
 #'
 #' One of the four interval verbs: a prediction interval for the mean of one new,
-#' as-yet-unobserved group/batch --- the CInew / new-batch-mean interval. It
+#' as-yet-unobserved group/batch: the CInew / new-batch-mean interval. It
 #' is the prediction interval with the residual component removed,
 #' \eqn{\mu(t_0) \pm t_{\nu_G}\sqrt{V_F + V_G}}; coverage is `level`/`alpha`, so
 #' it carries no content `P` (unlike [ti_lmm()]). Dispatch and arguments are
@@ -279,7 +278,7 @@ pi_lmm <- function(model, newdata = NULL, alpha = NULL, level = NULL,
 #'
 #' @inheritParams ci_lmm
 #' @inherit ci_lmm return
-#' @inheritSection ci_lmm Anti-conservative drift on single-observation fixed-slope data
+#' @inheritSection ci_lmm Known limitation: 
 #' @seealso [ci_lmm()], [pi_lmm()], [ti_lmm()], [lmm_predict()],
 #'   [reintervals-models].
 #' @examples

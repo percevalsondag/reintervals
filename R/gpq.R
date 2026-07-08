@@ -1,5 +1,5 @@
 ## ---------------------------------------------------------------------------
-## gpq.R  --  Oliva-Aviles & Hauser (2025, Technometrics 67:2, 193-202)
+## gpq.R      Oliva-Aviles & Hauser (2025, Technometrics 67:2, 193-202)
 ##            generalized-pivotal-quantity (GPQ) (P-content, gamma-confidence)
 ##            tolerance interval for the RANDOM-INTERCEPT, RANDOM-SLOPE
 ##            single-temperature stability model (their Eq. 3):

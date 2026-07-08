@@ -2,7 +2,7 @@
 % Please edit documentation in R/intervals-api.R
 \name{ci_lmm}
 \alias{ci_lmm}
-\title{Confidence interval for the mean of a linear mixed model}
+\title{Confidence interval for the mean of a population, from a linear mixed model}
 \usage{
 ci_lmm(
   model,
@@ -59,7 +59,7 @@ designs (including a fixed slope) use the expected-mean-square engine;
 random-slope designs use the REML closed form. See \link{reintervals-models} for
 the model-class to engine map and \code{\link[=lmm_predict]{lmm_predict()}} for the unified entry point.
 }
-\section{Anti-conservative drift on single-observation fixed-slope data}{
+\section{Known limitation}{
 
 On a fixed-slope model fitted to single-observation / unbalanced lots (the
 release-only stability structure), the EMS confidence, prediction, and
