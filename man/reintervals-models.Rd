@@ -51,6 +51,15 @@ prediction interval for the mean of one new, as-yet-unobserved group/batch
 here under both names so it is discoverable as "CInew" or "new batch mean".
 }
 
+\section{One-sided intervals}{
+
+One-sided intervals (sides = "lower" or "upper") are currently available only
+for the Montes single-observation tolerance interval and the random-slope
+engines. The expected-mean-square (EMS) engine used for random-intercept and
+balanced fixed-slope designs produces two-sided intervals only; one-sided EMS
+intervals are planned for a future release.
+}
+
 \seealso{
 \code{\link[=ci_lmm]{ci_lmm()}}, \code{\link[=pi_lmm]{pi_lmm()}}, \code{\link[=ti_lmm]{ti_lmm()}}, \code{\link[=new_group_mean_lmm]{new_group_mean_lmm()}},
 \code{\link[=lmm_predict]{lmm_predict()}}, \code{\link[=ti_anova_raw]{ti_anova_raw()}}, \code{\link[=ti_gpq_raw]{ti_gpq_raw()}}.

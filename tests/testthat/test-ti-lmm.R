@@ -23,20 +23,19 @@ test_that("ti_lmm rejects the true_value target for the fixed-slope design", {
   expect_error(.ti_ems(fit_52(), target = "true_value"), "not supported")
 })
 
-test_that("ti_lmm returns NA + note for a genuinely off-catalog design (crossed, no interaction)", {
+test_that("ti_lmm errors for a genuinely off-catalog design (crossed, no interaction)", {
   skip_if_not_installed("lme4")
   # two crossed random mains WITHOUT an interaction term -> outside the catalog
-  # (unbalanced nested/crossed WITH interaction are now supported in M2).
+  # (unbalanced nested/crossed WITH interaction are now supported in M2). No
+  # closed-form variance decomposition exists, so ti_lmm signals a clean error
+  # (previously it returned NA bounds + a warning).
   dat <- expand.grid(a = factor(1:4), b = factor(1:4))
   dat$y <- as.numeric(dat$a) + as.numeric(dat$b)
   m <- suppressWarnings(suppressMessages(
     lme4::lmer(y ~ 1 + (1 | a) + (1 | b), data = dat,
                control = lme4::lmerControl(check.conv.singular = "ignore"))
   ))
-  expect_warning(out <- .ti_ems(m), "no closed-form")
-  expect_true(is.na(out$lower))
-  expect_true(is.na(out$upper))
-  expect_match(attr(out, "note"), "no closed-form")
+  expect_error(.ti_ems(m), "not available")
 })
 
 test_that("ti_lmm rejects random-slope models", {

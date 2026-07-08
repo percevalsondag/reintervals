@@ -52,12 +52,14 @@
   desc <- .design_of(model)
   comps <- .var_components(model)
   dc <- .design_components(desc, comps, target, .counts_if_unbalanced(model, desc))
+  if (is.null(dc$ems)) {
+    stop(sprintf("Tolerance intervals are not available for a '%s' design (no closed-form variance decomposition). Confidence, prediction, and new-group-mean intervals are available for this model.", desc$type), call. = FALSE)
+  }
   fx <- .fixed(model, newdata)
   singular <- .is_singular(model)
   nr <- nrow(fx$L)
 
   bounds <- function(i) {
-    if (is.null(dc$ems)) return(c(NA_real_, NA_real_))
     comp <- re_components(
       components = comps, dfs = c(pi = Inf),     # df unused by ti_francq (normal-based)
       mean = fx$fit[i], var_mean = fx$var_fix[i],
@@ -75,11 +77,8 @@
   attr(out, "design") <- desc$type
   attr(out, "balanced") <- isTRUE(desc$balanced)
   attr(out, "singular") <- singular
-  if (!is.null(dc$note)) attr(out, "note") <- dc$note
 
-    if (is.null(dc$ems)) {
-    warning(dc$note, call. = FALSE)
-  } else if (singular) {
+  if (singular) {
     warning("Singular fit: a variance component is at the boundary (zero); the ",
             "tolerance interval reflects a near-degenerate model.", call. = FALSE)
   }

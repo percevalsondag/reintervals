@@ -83,6 +83,16 @@ an extrapolation of that quadratic and should be done knowingly (the interval
 is computed without a guard or warning). The same applies to the other slope
 verbs (\code{\link[=ci_lmm]{ci_lmm()}}, \code{\link[=pi_lmm]{pi_lmm()}}, \code{\link[=new_group_mean_lmm]{new_group_mean_lmm()}}).
 }
+\section{Availability}{
+
+Tolerance intervals require a closed-form variance decomposition. They are
+available for one-way, nested, and crossed-with-interaction random-intercept
+designs, the fixed-slope stability design, and random-slope models. For a
+design without such a decomposition (two crossed factors with no interaction
+term, or four or more grouping factors), ti_lmm() signals an error; ci_lmm(),
+pi_lmm(), and new_group_mean_lmm() remain available for those models.
+}
+
 \examples{
 # random intercepts, no slope -> EMS engine
 fi <- lme4::lmer(Reaction ~ Days + (1 | Subject), data = lme4::sleepstudy)

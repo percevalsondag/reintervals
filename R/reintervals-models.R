@@ -39,6 +39,13 @@
 #' (the prediction interval with the residual component removed). It is listed
 #' here under both names so it is discoverable as "CInew" or "new batch mean".
 #'
+#' @section One-sided intervals:
+#' One-sided intervals (sides = "lower" or "upper") are currently available only
+#' for the Montes single-observation tolerance interval and the random-slope
+#' engines. The expected-mean-square (EMS) engine used for random-intercept and
+#' balanced fixed-slope designs produces two-sided intervals only; one-sided EMS
+#' intervals are planned for a future release.
+#'
 #' @seealso [ci_lmm()], [pi_lmm()], [ti_lmm()], [new_group_mean_lmm()],
 #'   [lmm_predict()], [ti_anova_raw()], [ti_gpq_raw()].
 #' @name reintervals-models
