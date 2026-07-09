@@ -137,7 +137,7 @@ The engine is chosen from the fitted model's structure (full mapping in
 | random slope, future-observation | `reml-mls` (`gpq` if singular) |
 | random slope, batch-mean (`over = "group_mean"`) | `gpq` |
 
-**v1 scope:** general fixed effects for random-intercept models; a **single time
+**v1 scope:** general fixed effects for random-intercept models; a **single continuous
 covariate** for random-slope models (the stability design).
 
 ### A warning you should understand

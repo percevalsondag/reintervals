@@ -65,8 +65,7 @@ identical: on balanced fixed-slope data the reml-mls and anova-mls engines share
 the variance-component decomposition exactly but apply different tolerance 
 factors (a Graybill--Wang two-component construction [@graybill1980confidence] versus the Montes factor), 
 so their tolerance intervals differ slightly. Both are validated against their 
-respective published sources. The Satterthwaite-style degrees-of-freedom behavior 
-near variance-component boundaries follows the analysis of @karl2026.
+respective published sources. The random-slope degrees of freedom use a generalized Satterthwaite approximation, with a fallback to a natural (containment) degrees of freedom when that approximation degenerates --- as it does near variance-component boundaries, the regime analyzed by @karl2026.
 
 Validation is layered: First, the interval arithmetic is verified against 
 committed reference values to a tight tolerance (~`1e-9`) on continuous 
@@ -94,7 +93,7 @@ coverage beyond this measurement.
 # Scope
 
 Version 1 supports general fixed effects for random-intercept models, and a
-single time covariate for random-slope models (the stability design). The planned
+single continuous covariate for random-slope models (the stability design). The planned
 extension is multi-covariate random-slope intervals.
 
 # References

@@ -33,7 +33,7 @@ the eval-point column(s) named by the model predictor(s), and engine-specific
 diagnostics in `attr(., "diagnostics")`.
 
 ## Scope (v1)
-General fixed effects for random-intercept models; a single time covariate for
+General fixed effects for random-intercept models; a single continuous covariate for
 random-slope models (the stability design). On single-observation / unbalanced
 fixed-slope data the EMS confidence/prediction/new-group-mean intervals warn
 that they may be anti-conservative; the tolerance interval is routed to the

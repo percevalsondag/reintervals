@@ -123,7 +123,7 @@
     fe <- lme4::fixef(model)
     time_var <- setdiff(names(fe), "(Intercept)")
     if (length(time_var) != 1L) {
-      stop("random-slope intervals require a single time covariate (~ 1 + time); ",
+      stop("random-slope intervals require a single continuous covariate (e.g. ~ 1 + time); ",
          "multiple fixed effects with a random slope are a planned v2 extension.",
          call. = FALSE)
     }

@@ -79,7 +79,7 @@
 
   slope_name <- setdiff(re_terms, "(Intercept)")
   if (has_slope && length(slope_name) != 1L)
-    stop("vfun_extract(): expected a single time/slope term; got: ",
+    stop("vfun_extract(): expected a single slope term; got: ",
          paste(slope_name, collapse = ", "), call. = FALSE)
 
   if (!has_slope) {

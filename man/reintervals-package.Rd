@@ -43,7 +43,7 @@ GPQ (\code{"gpq"}) when the fit is singular \cr
 random slope, batch-mean \tab GPQ Monte Carlo (\code{"gpq"}) \cr
 }
 \strong{v1 scope.} General fixed effects are supported for random-intercept
-models; random-slope models are supported for a single time covariate (the
+models; random-slope models are supported for a single continuous covariate (the
 stability design). The two tier-2 direct engines \code{\link[=ti_anova_raw]{ti_anova_raw()}} and
 \code{\link[=ti_gpq_raw]{ti_gpq_raw()}} compute from raw \verb{(y, time, group)} vectors without a fit.
 }

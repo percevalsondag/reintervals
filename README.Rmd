@@ -104,7 +104,7 @@ The engine is chosen from the fitted model's structure (full mapping in
 | random slope, batch-mean | GPQ Monte Carlo (`"gpq"`) |
 
 **v1 scope:** general fixed effects are supported for random-intercept models;
-random-slope models are supported for a **single time covariate** (the stability
+random-slope models are supported for a **single continuous covariate** (the stability
 design). The tier-2 engines `ti_anova_raw()` and `ti_gpq_raw()` compute from raw
 `(y, time, group)` vectors without a fitted model.
 
