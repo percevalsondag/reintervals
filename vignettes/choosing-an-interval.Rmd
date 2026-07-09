@@ -1,0 +1,155 @@
+---
+title: "Choosing an interval"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Choosing an interval}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
+```
+
+`reintervals` computes four interval types for a linear mixed model, and picks
+the computational engine automatically from the fitted model. This vignette is
+the map: given your model, which intervals are available, which method you get
+by default, and what to watch for.
+
+```{r setup, message = FALSE}
+library(reintervals)
+library(lme4)
+```
+
+## The four intervals
+
+| Verb | Answers |
+|---|---|
+| `ci_lmm()` | Confidence interval for the **mean**. |
+| `pi_lmm()` | Prediction interval for a **single future observation**. |
+| `ti_lmm()` | Tolerance interval covering a **proportion `P` of the population**. |
+| `new_group_mean_lmm()` | Interval for the **mean of one new, as-yet-unobserved group** (CInew / new-batch-mean). |
+
+## The four engines
+
+| Engine (`method`) | Used for | Reference |
+|---|---|---|
+| `ems-mls` | Random-intercept designs and the balanced fixed-slope design (expected-mean-square / observed-information MLS). | Francq, Lin & Hoyer (2019) |
+| `anova-mls` | Single-observation / unbalanced fixed-slope (stability) tolerance intervals (unweighted lot-mean ANOVA). | Montes, Burdick & Leblond (2019) |
+| `reml-mls` | Random-slope closed-form intervals. | Graybill–Wang MLS two-component bound (Graybill & Wang 1980); generalized Satterthwaite df |
+| `gpq` | Random-slope batch-mean target, and singular random-slope tolerance intervals (generalized pivotal quantity, Monte-Carlo). | Oliva-Aviles & Hauser (2025) |
+
+The engine is chosen automatically from the model's structure; `method =` lets
+you pin it (within what is valid — see below).
+
+## Which interval for which model
+
+Read down to your model structure. `ems`, `anova`, `reml`, `gpq` are the engine
+tags; superscript letters are explained below.
+
+| Model / situation | CI | PI | TI | CI_new |
+|---|---|---|---|---|
+| Random intercept — one-way (balanced or unbalanced) | `ems` | `ems` | `ems` | `ems` |
+| Random intercept — nested (balanced or unbalanced) | `ems` | `ems` | `ems` | `ems` |
+| Random intercept — crossed **with** interaction (balanced/unbalanced; >2 VCs) | `ems` | `ems` | `ems` | `ems` |
+| Random intercept — crossed **no** interaction | `ems` | `ems` | **error** ^a^ | `ems` |
+| Random intercept — ≥4 grouping factors (off-catalog) | `ems` | `ems` | **error** ^a^ | `ems` |
+| Random intercept + fixed slope — clean balanced | `ems` | `ems` | `ems` | `ems` |
+| Random intercept + fixed slope — single-obs / staggered / unbalanced | `ems` ^b^ | `ems` ^b^ | **`anova`** ^c^ | `ems` ^b^ |
+| Random slope — non-singular, future-observation target | `reml` | `reml` | `reml` | `reml` |
+| Random slope — non-singular, batch-mean target (`over = "group_mean"`) | — ^d^ | — ^d^ | **`gpq`** | — ^d^ |
+| Random slope — singular fit | `reml` ^e^ | `reml` ^e^ | **`gpq`** ^e^ | `reml` ^e^ |
+| Random slope + ≥2 fixed effects | **error** ^f^ | **error** ^f^ | **error** ^f^ | **error** ^f^ |
+
+^a^ These designs have no closed-form variance decomposition, so `ti_lmm()`
+signals a clear error. CI, PI, and CI_new remain available.
+
+^b^ On single-observation / unbalanced fixed-slope data the EMS coverage
+intervals can be anti-conservative (too narrow); `ci_lmm()`, `pi_lmm()`, and
+`new_group_mean_lmm()` emit a warning. The interval is returned unchanged.
+
+^c^ `ti_lmm()` re-routes to the Montes ANOVA closed form (`anova-mls`), which is
+validated for this structure.
+
+^d^ `over = "group_mean"` (batch-mean) is a `ti_lmm()` argument only, and the
+batch-mean *tolerance* target is random-slope-only in this version. For other
+designs, `new_group_mean_lmm()` gives an interval for a new batch's mean — it is
+available for random-intercept, fixed-slope, and random-slope models. The
+coverage verbs carry no batch-mean target.
+
+^e^ For a singular random-slope fit, the tolerance interval switches to the GPQ
+engine (the closed form's batch-mean/singular behavior is not validated); CI, PI,
+and CI_new stay on the closed form, flagged `singular`.
+
+^f^ Random-slope support is limited to a single continuous covariate (`~ 1 + x`)
+in this version — time in the stability use case, but any continuous predictor works.
+
+## Choosing the method by hand
+
+By default `method = "auto"` selects the one engine valid for your model. For
+most models there is no alternative — requesting a different engine errors. Only
+two cases offer a genuine choice, both for tolerance intervals:
+
+- **Single-observation fixed-slope TI:** default `"anova-mls"` (Montes, validated
+  for this structure); `"ems-mls"` forces the EMS engine with no re-route — but
+  that's the path flagged as anti-conservative here, so it's mainly for comparison.
+- **Random-slope TI (future-observation target):** default `"reml-mls"` (closed
+  form) on a non-singular fit; `"gpq"` (Monte-Carlo) is also valid and becomes the
+  default automatically when the fit is singular. For the batch-mean target, only
+  `"gpq"` is available.
+
+## Worked examples
+
+
+A random-intercept + fixed-slope model — every verb uses `ems-mls`:
+
+```{r ex-ems}
+fm <- lmer(Reaction ~ Days + (1 | Subject), data = sleepstudy)
+ci_lmm(fm, newdata = data.frame(Days = 5))
+ti_lmm(fm, newdata = data.frame(Days = 5), P = 0.99)
+```
+
+A random-slope model — the verbs use the `reml-mls` closed form:
+
+```{r ex-slope}
+fs <- lmer(Reaction ~ Days + (Days | Subject), data = sleepstudy)
+ci_lmm(fs, newdata = data.frame(Days = 5))
+```
+
+The batch-mean tolerance interval on the same slope model uses GPQ (Monte-Carlo
+set a seed for reproducibility):
+
+```{r ex-gpq}
+ti_lmm(fs, newdata = data.frame(Days = 5), P = 0.99,
+       over = "group_mean",
+       control = lmm_interval_control(seed = 1, M = 20000))
+```
+
+## Limitations in this version
+
+- **One-sided intervals** (`sides = "lower"` / `"upper"`) are available only for
+  the Montes single-observation tolerance interval and the random-slope engines.
+  The EMS engine (random-intercept and balanced fixed-slope) is two-sided only.
+- **Tolerance intervals** require a closed-form variance decomposition; for
+  crossed-no-interaction and ≥4-factor designs, `ti_lmm()` errors (CI/PI/CI_new
+  remain available).
+- **Batch-mean tolerance intervals** (`over = "group_mean"`) are currently
+  available only for random-slope models; a random-intercept batch-mean tolerance
+  interval is planned for a future release.
+- **Random-slope** models are supported for a single continuous covariate (time
+  in the stability design, but any continuous predictor works).
+
+## References
+
+- Francq, B. G., Lin, D., & Hoyer, W. (2019). Confidence, prediction, and
+  tolerance in linear mixed models. *Statistics in Medicine*, 38(30), 5603–5622.
+  <doi:10.1002/sim.8386>
+- Montes, R. O., Burdick, R. K., & Leblond, D. J. (2019). Simple approach to
+  calculate random effects model tolerance intervals to set release and
+  shelf-life specification limits of pharmaceutical products. *PDA Journal of
+  Pharmaceutical Science and Technology*. <doi:10.5731/pdajpst.2018.008839>
+- Graybill, F. A., & Wang, C.-M. (1980). Confidence intervals on nonnegative
+  linear combinations of variances. *Journal of the American Statistical
+  Association*, 75(372), 869–873.
+- Oliva-Aviles, C., & Hauser, P. (2025). *Technometrics*, 67(2), 193–202.
+  <doi:10.1080/00401706.2024.2407324>
