@@ -63,7 +63,7 @@ fitted model's structure, and may be overridden. Where more than one engine can
 produce a tolerance interval for the same design, the results are close but not 
 identical: on balanced fixed-slope data the reml-mls and anova-mls engines share 
 the variance-component decomposition exactly but apply different tolerance 
-factors (a Graybill--Wang two-component construction versus the Montes factor), 
+factors (a Graybill--Wang two-component construction [@graybill1980confidence] versus the Montes factor), 
 so their tolerance intervals differ slightly. Both are validated against their 
 respective published sources. The Satterthwaite-style degrees-of-freedom behavior 
 near variance-component boundaries follows the analysis of @karl2026.

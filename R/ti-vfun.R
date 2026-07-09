@@ -27,6 +27,9 @@
 #'   `upper`, `content`, `conf`, `df`, `sides`, `design` (the model type),
 #'   `method = "reml-mls"`, and the `singular` / `boundary` flags.
 #' @seealso `ti_francq()` (the EMS counterpart), `vfun_extract()`.
+#' @references Graybill FA, Wang CM (1980). Confidence intervals on nonnegative
+#'   linear combinations of variances. Journal of the American Statistical
+#'   Association 75(372):869-873.
 #' @examples
 #' fm <- lme4::lmer(Reaction ~ Days + (1 + Days | Subject),
 #'                  data = lme4::sleepstudy)
@@ -66,7 +69,7 @@ ti_vfun <- function(comp, content = 0.99, conf = 0.95,
   nu_e <- comp$dfs[["e"]]
   nE   <- comp$n_E
 
-  ## Graybill-Wang two-component content-variance bound 
+  ## Graybill-Wang two-component content-variance bound (Graybill & Wang 1980)
   H_G <- nu_G / stats::qchisq(1 - conf, nu_G) - 1
   H_e <- nu_e / stats::qchisq(1 - conf, nu_e) - 1
   U   <- V_T + sqrt((H_G * V_G)^2 + (H_e * s2e)^2)
