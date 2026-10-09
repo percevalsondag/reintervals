@@ -1,6 +1,6 @@
-# reintervals 0.0.0.9000 (development)
+# reintervals 0.1.0
 
-First development version: confidence, prediction, tolerance, and
+Initial release: confidence, prediction, tolerance, and
 new-group-mean intervals for linear mixed models, through one uniform interface.
 
 ## Interval verbs

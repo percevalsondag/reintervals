@@ -249,7 +249,7 @@ ci_lmm <- function(model, newdata = NULL, alpha = NULL, level = NULL,
 #'
 #' @inheritParams ci_lmm
 #' @inherit ci_lmm return
-#' @inheritSection ci_lmm Known limitation: 
+#' @inheritSection ci_lmm Known limitation
 #' @seealso [ci_lmm()], [ti_lmm()], [new_group_mean_lmm()], [lmm_predict()],
 #'   [reintervals-models].
 #' @examples
@@ -278,7 +278,7 @@ pi_lmm <- function(model, newdata = NULL, alpha = NULL, level = NULL,
 #'
 #' @inheritParams ci_lmm
 #' @inherit ci_lmm return
-#' @inheritSection ci_lmm Known limitation: 
+#' @inheritSection ci_lmm Known limitation
 #' @seealso [ci_lmm()], [pi_lmm()], [ti_lmm()], [lmm_predict()],
 #'   [reintervals-models].
 #' @examples
