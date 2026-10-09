@@ -29,13 +29,13 @@ functions that operate on raw `(response, time, group)` vectors complete the int
 # Statement of need
 
 Several widely used tools each cover part of the linear-mixed-model interval
-problem well. `predict.merMod` in `lme4` [@bates2015], with `emmeans`
-(estimated marginal means) and `ggeffects` (adjusted predictions / marginal
+problem well. `predict.merMod` in `lme4` [@bates2015], with `emmeans` [@emmeans]
+(estimated marginal means) and `ggeffects` [@ggeffects] (adjusted predictions / marginal
 effects), give point predictions and confidence intervals for the mean or for
-marginal effects. `merTools` provides
-simulation-based prediction intervals for `merMod` fits. `ciTools` provides
+marginal effects. `merTools` [@merTools] provides
+simulation-based prediction intervals for `merMod` fits. `ciTools` [@ciTools] provides
 confidence and prediction intervals for random-intercept models. The `tolerance`
-package provides tolerance intervals for many distributions and some regression
+package [@tolerance] provides tolerance intervals for many distributions and some regression
 settings, for simpler designs and without the mixed-model degrees-of-freedom
 treatment.
 
