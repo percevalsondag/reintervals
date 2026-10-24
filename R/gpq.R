@@ -53,7 +53,12 @@
                       sides = c("two.sided", "lower", "upper"),
                       c_resid = 1, M = 10000L, seed = NULL) {
   sides <- match.arg(sides)
-  if (!is.null(seed)) { old <- .Random.seed_safe(); on.exit(.restore_seed(old), add = TRUE); set.seed(seed) }
+  ## a per-call seed must not disturb the caller's stream: withr sets it and restores
+  ## the caller's RNG state on exit; with seed = NULL the ambient stream is used as-is
+  if (!is.null(seed))
+    return(withr::with_seed(seed, .gpq_core(y, time, batch, t0, content = content,
+                                            conf = conf, sides = sides, c_resid = c_resid,
+                                            M = M, seed = NULL)))
 
   batch <- factor(batch)
   ok <- !is.na(y) & !is.na(time) & !is.na(batch)
@@ -218,15 +223,6 @@
     out[interior] <- 0.5 * (blo + bhi)
   }
   out
-}
-
-## RNG-state save/restore so a per-call seed doesn't disturb the caller's stream
-.Random.seed_safe <- function() if (exists(".Random.seed", envir = .GlobalEnv))
-  get(".Random.seed", envir = .GlobalEnv) else NULL
-.restore_seed <- function(s) {
-  if (is.null(s)) { if (exists(".Random.seed", envir = .GlobalEnv))
-    rm(".Random.seed", envir = .GlobalEnv)
-  } else assign(".Random.seed", s, envir = .GlobalEnv)
 }
 
 #' GPQ tolerance interval from raw data (direct engine, advanced)

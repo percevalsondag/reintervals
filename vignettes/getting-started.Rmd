@@ -9,7 +9,7 @@ vignette: >
 
 ```{r setup, include = FALSE}
 knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
-options(width = 90)
+old <- options(width = 90)
 library(reintervals)
 ```
 
@@ -176,3 +176,7 @@ CI/PI/new-group-mean case is planned for v2.
 * `?ci_lmm` --- the full `lmm_interval` output contract (shared by all verbs).
 * `NEWS.md` --- the change log and the v2 roadmap (multi-covariate random-slope
   intervals).
+
+```{r teardown, include = FALSE}
+options(old)
+```
