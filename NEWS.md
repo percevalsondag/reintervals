@@ -20,9 +20,18 @@
   random-slope `Cov(phi)` is `NULL` only when the Hessian or its inverse fails;
   the `boundary` flag is an advisory flag on the point estimate (time-scale
   dependent) and does not drive the df fallback; `n_E` uses the target's content
-  variance; the `true_value` tolerance-interval error no longer claims to apply
-  only to the fixed-slope design; and the `Cov(theta)` Hessian is described as
-  the REML log-likelihood on the variance scale, with beta at its GLS value.
+  variance; the `true_value` tolerance-interval documentation and errors (in
+  both the closed-form constructor and the EMS dispatch path) no longer claim
+  to apply only to the fixed-slope design; the `Cov(theta)` and random-slope
+  `Cov(phi)` Hessians (and the prediction-interval df built on them) are
+  described as the REML log-likelihood on the variance-component scale, with
+  beta at its GLS value, not a profiled REML; and printing a
+  `vfun_components` with a `NULL` `Cov(phi)` now says "Hessian or its inverse
+  unavailable" rather than "singular".
+* The getting-started vignette's engine-routing description has been
+  corrected (only the tolerance interval is rerouted on singular random-slope
+  fits and on single-observation fixed-slope designs; `method =` overrides are
+  limited to each design's allowed engines).
 
 ## Pending
 <!-- Placeholder for the two outstanding fixes (new-group-mean construction;

@@ -19,8 +19,8 @@
 #' @param conf Confidence level (`gamma`). Default 0.95.
 #' @param target `"observable"` (default; future-value variance = all
 #'   components). `"true_value"` (between-level only) is **not supported for the
-#'   tolerance interval for the fixed-slope design** and is rejected; the prediction interval does
-#'   support it.
+#'   tolerance interval for any design** and is rejected; the prediction
+#'   interval does support it.
 #'
 #' @return A data frame with the `newdata` predictor columns plus `type = "TI"`,
 #'   `estimate`, `lower`, `upper`, `level`, `conf`. `attr(., "design")` is the
@@ -43,9 +43,10 @@
   }
   target <- match.arg(target)
   if (target == "true_value") {
-    stop("true_value tolerance intervals are not supported for the random-intercept fixed-slope design (only ",
-         "`target = \"observable\"`). The prediction interval (intervals_lmm / ",
-         "pi_newobs) does support true_value.", call. = FALSE)
+    stop("The true_value (between-level only) tolerance interval is not ",
+         "supported for any design; only `target = \"observable\"` is ",
+         "implemented. The prediction interval (intervals_lmm / pi_newobs) ",
+         "does support true_value.", call. = FALSE)
   }
   .assert_random_intercepts(model)
   desc <- .design_of(model)

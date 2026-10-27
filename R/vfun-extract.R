@@ -231,8 +231,9 @@
 #' The slope-engine extraction path: it parses a fitted `merMod` stability model
 #' (random intercept + fixed slope, correlated random slope, or independent
 #' random slope; see [reintervals-models]), reconstructs `Cov(phi)` from the
-#' observed information (the numerical Hessian of the profiled REML negative
-#' log-likelihood), evaluates the time-quadratic between-batch variance
+#' observed information (the numerical Hessian of the REML negative
+#' log-likelihood on the variance-component scale, with beta at its GLS value),
+#' evaluates the time-quadratic between-batch variance
 #' `V_G(t0) = z0' Sigma z0` and the Satterthwaite/containment degrees of freedom
 #' at a single time point `t0`, and returns a populated, validated
 #' `vfun_components`.

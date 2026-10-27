@@ -4,7 +4,8 @@
 #' for a future observation (Eq. 21). Both are general across random-intercept
 #' designs, balanced or unbalanced: the prediction-interval degrees of freedom
 #' come from the observed Fisher information (the numerical Hessian of the
-#' profiled REML log-likelihood, Eq. 23-24), not from a balanced-design formula.
+#' REML log-likelihood on the variance-component scale, with beta at its GLS
+#' value, Eq. 23-24), not from a balanced-design formula.
 #'
 #' This is a thin wrapper: it reaches `lme4` only through `vc_extract()`'s
 #' internals and delegates the arithmetic to the method-pure constructors

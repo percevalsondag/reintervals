@@ -235,7 +235,7 @@ print.vfun_components <- function(x, ...) {
   cat("  phi      :",
       paste(names(x$phi), signif(x$phi, 4), sep = "=", collapse = ", "), "\n")
   cat("  cov      :",
-      if (is.null(x$cov)) "<NULL> (singular / Hessian unavailable)"
+      if (is.null(x$cov)) "<NULL> (Hessian or its inverse unavailable)"
       else sprintf("%d x %d", nrow(x$cov), ncol(x$cov)), "\n")
   cat("  @ t0     :", format(x$t0), "\n")
   cat("  mean     :", format(x$mean), " var_mean:", format(x$var_mean), "\n")

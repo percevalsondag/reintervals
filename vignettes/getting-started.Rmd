@@ -28,7 +28,8 @@ with `lme4::lmer()`, through one uniform interface, and returns them in one tidy
 
 `lmm_predict(model, interval = ...)` is a `predict()`-style wrapper over the
 four. The engine that computes each interval is chosen automatically from the
-fitted model (you can override with `method = `).
+fitted model; `method = ` can override it only within the engines allowed for
+that model's design (Section 4).
 
 ## 2. The four verbs on a random-intercept model
 
@@ -126,16 +127,36 @@ checks both the exact closed form and this expectation on CI).
 
 ## 4. The engine / scope map
 
-The engine is chosen from the fitted model's structure (full mapping in
-`?reintervals-models`):
+The engine is chosen from the fitted model's structure, and can differ between
+the tolerance interval and the other three verbs (full mapping in
+`vignette("choosing-an-interval")` and `?reintervals-models`):
 
-| Model class | Engine (`method`) |
-|---|---|
-| random intercept (any fixed effects) | `ems-mls` |
-| random intercept + fixed slope, clean balanced | `ems-mls` |
-| random intercept + fixed slope, single-observation / unbalanced | `anova-mls` |
-| random slope, future-observation | `reml-mls` (`gpq` if singular) |
-| random slope, batch-mean (`over = "group_mean"`) | `gpq` |
+| Model class | CI / PI / new-group-mean | TI |
+|---|---|---|
+| random intercept (any fixed effects) | `ems-mls` | `ems-mls` |
+| random intercept + fixed slope, clean balanced | `ems-mls` | `ems-mls` |
+| random intercept + fixed slope, single-observation / unbalanced | `ems-mls` (warns: may be anti-conservative) | `anova-mls` |
+| random slope, non-singular, future-observation | `reml-mls` | `reml-mls` |
+| random slope, singular fit, future-observation | `reml-mls` (flagged `singular`) | `gpq` |
+| random slope, batch-mean (`over = "group_mean"`, TI only) | --- | `gpq` |
+
+Only the tolerance interval is re-routed: on a singular random-slope fit the TI
+moves to `gpq` while CI, PI, and new-group-mean stay on `reml-mls` (flagged
+`singular`); on a single-observation / unbalanced fixed-slope design the TI moves
+to `anova-mls` while CI, PI, and new-group-mean stay on `ems-mls` and warn (see
+below).
+
+`method = "auto"` (the default) picks the engine in the table. Any other value
+is accepted only if it is in the allowed set for that model's design and
+interval; anything else is an error. For CI, PI, and new-group-mean the allowed
+engine is the one in the table (`ems-mls`, or `reml-mls` for random slopes), so
+there is no alternative. Only the tolerance interval offers a choice: on a
+fixed-slope model, `"ems-mls"` and `"anova-mls"` are both allowed (forcing
+`"ems-mls"` on single-observation / unbalanced data takes the anti-conservative
+path, mainly for comparison); on a random-slope model with the
+future-observation target, `"reml-mls"` and `"gpq"` are both allowed. Every
+other design (random intercept without a fixed slope, and the random-slope
+batch-mean target) has a single allowed TI engine.
 
 **v1 scope:** general fixed effects for random-intercept models; a **single continuous
 covariate** for random-slope models (the stability design).
