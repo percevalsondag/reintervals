@@ -2,13 +2,13 @@
 % Please edit documentation in R/ti-montes.R
 \name{ti_anova_raw}
 \alias{ti_anova_raw}
-\title{Montes ANOVA/MLS tolerance interval from raw data (direct engine, advanced)}
+\title{ANOVA/MLS tolerance interval from raw data (direct engine, advanced)}
 \usage{
 ti_anova_raw(
   y,
   time,
   lot,
-  t0,
+  t0 = NULL,
   P = 0.95,
   alpha = NULL,
   level = NULL,
@@ -18,36 +18,51 @@ ti_anova_raw(
 \arguments{
 \item{y}{Numeric response.}
 
-\item{time}{Numeric time/age covariate (same length as \code{y}).}
+\item{time}{Numeric time/age covariate (same length as \code{y}), or \code{NULL} for
+the one-way (Hoffman-Kringle) interval with no covariate.}
 
-\item{lot}{Lot/batch factor (same length as \code{y}).}
+\item{lot}{Lot/batch (grouping) factor (same length as \code{y}).}
 
-\item{t0}{Time point(s) at which to evaluate the interval.}
+\item{t0}{Time point(s) at which to evaluate the interval; must be \code{NULL}
+(the default) when \code{time = NULL}.}
 
 \item{P}{Content proportion (default 0.95; pharma stability typically 0.99).}
 
 \item{alpha, level}{Confidence as a mutually-exclusive pair (give at most one);
 \code{level = 1 - alpha}, default \code{alpha = 0.05}.}
 
-\item{sides}{\code{"two.sided"} (default), \code{"lower"}, or \code{"upper"}.}
+\item{sides}{\code{"two.sided"} (default), \code{"lower"}, or \code{"upper"}. One-sided
+intervals are available only with a time covariate.}
 }
 \value{
-A data frame, one row per \code{t0}: \code{time}, \code{type = "TI"}, \code{estimate},
-\code{lower}, \code{upper}, \code{content}, \code{conf}, \code{df}, \code{sides},
-\code{design = "random_intercept_fixed_slope"}, \code{method = "anova-mls"}, and
-\code{singular}/\code{boundary} flags. ANOVA intermediates \code{beta_hat}, \code{n_E}, \code{U},
-\code{Vhat_Y} are attached as attributes.
+A data frame (one row per \code{t0}, or one row when \code{time = NULL}):
+\code{time} (only with a time covariate), \code{type = "TI"}, \code{estimate}, \code{lower},
+\code{upper}, \code{content}, \code{conf}, \code{df}, \code{sides}, \code{design}
+(\code{"random_intercept_fixed_slope"}, or \code{"random_intercept"} when
+\code{time = NULL}), \code{method = "anova-mls"}, and \code{singular}/\code{boundary} flags.
+ANOVA intermediates are attached as attributes: \code{n_E}, \code{U}, \code{Vhat_Y}
+(Hoffman-Kringle's \code{N_e} and \code{sTOT2} when \code{time = NULL}), \code{C1}, \code{C2}
+(their \code{H1}, \code{H2}), and \code{beta_hat} (with a time covariate).
 }
 \description{
 Tier-2 direct engine: the published closed-form (ANOVA mean-square / modified
-large-sample) tolerance interval of Montes, Burdick & Leblond (2019, Appendix
-A) for the random-intercept + fixed-slope stability model --- the
-\emph{unweighted lot-mean} estimator --- from raw \verb{(y, time, lot)} vectors, without
-a fitted \code{lmer} model. The fit-based dispatcher \code{\link[=ti_lmm]{ti_lmm()}} routes single-
-observation / staggered fixed-slope designs to this engine automatically; use
-\code{ti_anova_raw()} directly when you have data but no model object.
+large-sample) tolerance interval from raw vectors, without a fitted \code{lmer}
+model. Two cases share one estimator (the \emph{unweighted lot-mean} ANOVA):
 }
 \details{
+\itemize{
+\item \strong{With a time covariate} (\code{time}, \code{t0} given): the Montes, Burdick &
+Leblond (2019, Appendix A) interval for the random-intercept + fixed-slope
+stability model. \code{\link[=ti_lmm]{ti_lmm()}} routes single-observation / staggered
+fixed-slope designs here automatically.
+\item \strong{Without one} (\code{time = NULL}, \code{t0 = NULL}): the Hoffman & Kringle (2005)
+two-sided interval for the one-way random-effects model, balanced or
+unbalanced (restated in Hoffman & Kringle 2007, Eqs. 1-2). It is the same
+computation with the slope removed (residual df \code{N - I}, centre = the
+unweighted mean of the group means). \code{\link[=ti_lmm]{ti_lmm()}} uses it by default for an
+intercept-only model with one random-intercept factor. Two-sided only.
+}
+
 Method-pure (never touches \code{lme4}). The between- and within-lot mean squares
 are sums of squares over their degrees of freedom and so are non-negative by
 construction; no ANOVA-estimate truncation.
@@ -60,13 +75,24 @@ ti_anova_raw(
   time = c(0, 1, 3, 6, 9, 12, 0, 1, 3, 6, 9, 0, 3, 0, 1, 3, 6, 9, 0, 1, 0),
   lot  = lot, t0 = 12, P = 0.99
 )
+# one-way, no covariate: Hoffman & Kringle (2005), here (0.846, 1.114)
+ti_anova_raw(hk_assay$conc, time = NULL, lot = hk_assay$run,
+             P = 0.95, level = 0.90)
 }
 \references{
 Montes RO, Burdick RK, Leblond DJ (2019). Simple approach to
 calculate random effects model tolerance intervals to set release and
 shelf-life specification limits of pharmaceutical products. \emph{PDA Journal of Pharmaceutical Science and Technology}. \doi{10.5731/pdajpst.2018.008839}
+
+Hoffman D, Kringle R (2005). Two-sided tolerance intervals for balanced and
+unbalanced random effects models. \emph{Journal of Biopharmaceutical
+Statistics} 15(2):283-293. \doi{10.1081/BIP-200048826}
+
+Hoffman D, Kringle R (2007). A total error approach for the validation of
+quantitative analytical methods. \emph{Pharmaceutical Research}
+24(6):1157-1164. \doi{10.1007/s11095-007-9242-3}
 }
 \seealso{
 \code{\link[=ti_lmm]{ti_lmm()}} (the dispatcher), \code{\link[=ti_gpq_raw]{ti_gpq_raw()}} (the GPQ raw engine),
-\link{reintervals-models}.
+\link{hk_assay}, \link{reintervals-models}.
 }

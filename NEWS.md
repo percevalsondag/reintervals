@@ -1,6 +1,40 @@
-# reintervals 0.1.1
+# reintervals 0.2.0
+
+## New features
+* `ti_lmm()` computes the Hoffman & Kringle (2005) two-sided tolerance
+  interval for an intercept-only model with one random-intercept factor
+  (`y ~ 1 + (1 | g)`), balanced or unbalanced. It is the slope-free branch of
+  the `anova-mls` engine and is now the default for that design (previously
+  `ems-mls`); `method = "ems-mls"` still gives the Francq et al. (2019)
+  interval. The two coincide on balanced data with a non-singular fit and
+  differ on singular or unbalanced data. `ti_anova_raw()` gives the same
+  interval from raw data with `time = NULL`.
+* New dataset `hk_assay`: the Hoffman & Kringle (2007) Table III assay data
+  (6 runs x 3 replicates). Hoffman & Kringle (2005) Table 6 misprints run 5 /
+  replicate 3 as 1.020 (correct: 0.998); Francq et al. (2019) Sections 5.2-5.3
+  used the misprinted value.
+* `lmm_interval_control()` gains `ci_df`, the confidence-interval df rule for
+  random-intercept models: `"satterthwaite"` (default) or `"kenward-roger"`
+  (requires pbkrtest and errors if it is not installed). The df source is
+  reported in `attr(., "diagnostics")$df_method`.
+* Random-slope `ti_lmm()` reports why GPQ was used, per row, in
+  `attr(., "diagnostics")$route_reason`.
 
 ## Bug fixes
+* The random-intercept confidence-interval df no longer depends on which
+  packages are installed. It used Kenward-Roger when pbkrtest was installed
+  and otherwise the residual df N - p, because the Satterthwaite df was never
+  given the variance-component covariance. It now uses Satterthwaite with that
+  covariance computed.
+* When the Satterthwaite df is unavailable (typically a singular fit), the
+  confidence interval falls back to the SAS-style containment df (A - 1 for
+  one-way and nested designs, min(A, B) - 1 for crossed ones) instead of the
+  anti-conservative N - p.
+* Random-slope tolerance intervals switch to GPQ not only on a singular fit
+  but also, at a given `t0`, when the Satterthwaite df of the closed form's
+  between-group or residual variance is unavailable (its containment fallback
+  fired). Such fits are non-singular but sit near the variance-component
+  boundary.
 * A model whose single non-intercept fixed term is a factor or logical
   covariate (e.g. `y ~ grp + (1 | lot)` with a 2-level `grp`) was misdetected as
   the fixed-slope stability design. When every lot had at least two
@@ -34,8 +68,8 @@
   limited to each design's allowed engines).
 
 ## Pending
-<!-- Placeholder for the two outstanding fixes (new-group-mean construction;
-     CI df method), pending design decisions. -->
+<!-- Placeholder for the outstanding new-group-mean construction fix,
+     pending design decisions. -->
 
 # reintervals 0.1.0
 

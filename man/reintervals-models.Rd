@@ -56,8 +56,9 @@ here under both names so it is discoverable as "CInew" or "new batch mean".
 One-sided intervals (sides = "lower" or "upper") are currently available only
 for the Montes single-observation tolerance interval and the random-slope
 engines. The expected-mean-square (EMS) engine used for random-intercept and
-balanced fixed-slope designs produces two-sided intervals only; one-sided EMS
-intervals are planned for a future release.
+balanced fixed-slope designs, and the Hoffman-Kringle tolerance interval used
+for intercept-only one-way models, produce two-sided intervals only; one-sided
+EMS intervals are planned for a future release.
 }
 
 \seealso{

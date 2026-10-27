@@ -6,28 +6,42 @@
 # wrappers don't change them.
 # =============================================================================
 
-#' Tuning controls for interval Monte-Carlo (GPQ)
+#' Tuning controls for the interval engines
 #'
 #' Tuning knobs only --- the RNG seed and Monte-Carlo size used when the
-#' GPQ algorithm runs. Algorithm *selection* is the `method` argument, not this.
+#' GPQ algorithm runs, and the denominator-df rule of the random-intercept
+#' confidence interval. Algorithm *selection* is the `method` argument, not this.
 #'
 #' @param seed Optional integer seed for the GPQ draws (reproducibility / GxP
 #'   traceability). `NULL` uses the ambient RNG state.
 #' @param M Number of GPQ Monte-Carlo realizations. Default 10000.
+#' @param ci_df Denominator-df rule for the confidence interval ([ci_lmm()]) on
+#'   random-intercept models: `"satterthwaite"` (default; Satterthwaite with the
+#'   observed-information covariance of the variance components, falling back to
+#'   the SAS-style containment df --- e.g. `A - 1` for a one-way or nested
+#'   design, `min(A, B) - 1` for a crossed one --- when it is unavailable, as on
+#'   a singular fit) or `"kenward-roger"` (requires \pkg{pbkrtest} and errors if
+#'   it is not installed; never a silent fallback). The df source is reported in
+#'   `attr(., "diagnostics")$df_method`. Random-slope models use their own
+#'   generalized Satterthwaite df and reject `"kenward-roger"`.
 #' @return An `lmm_interval_control` list (passed to a verb's `control`
-#'   argument); a list with elements `seed` and `M`.
+#'   argument); a list with elements `seed`, `M`, and `ci_df`.
 #' @seealso [ci_lmm()], [ti_lmm()], [ti_gpq_raw()].
 #' @examples
 #' lmm_interval_control(seed = 1, M = 5000)
+#' lmm_interval_control(ci_df = "kenward-roger")
 #' @export
-lmm_interval_control <- function(seed = NULL, M = 10000L) {
+lmm_interval_control <- function(seed = NULL, M = 10000L,
+                                 ci_df = c("satterthwaite", "kenward-roger")) {
+  ci_df <- match.arg(ci_df)
   if (!is.null(seed) && (!is.numeric(seed) || length(seed) != 1L || is.na(seed))) {
     stop("`seed` must be NULL or a single number.", call. = FALSE)
   }
   if (!is.numeric(M) || length(M) != 1L || is.na(M) || M < 1) {
     stop("`M` must be a single positive integer.", call. = FALSE)
   }
-  structure(list(seed = seed, M = as.integer(M)), class = "lmm_interval_control")
+  structure(list(seed = seed, M = as.integer(M), ci_df = ci_df),
+            class = "lmm_interval_control")
 }
 
 ## alpha / level as a mutually-exclusive pair.
@@ -100,7 +114,8 @@ lmm_interval_control <- function(seed = NULL, M = 10000L) {
 .value_cols <- c("time", "type", "estimate", "lower", "upper", "level", "conf",
                  "content", "P", "sides", "df", "se", "method", "design",
                  "singular", "boundary", "vg_floored", "tau2_med", "s2e_med",
-                 "frac_boundary", "K", "df_resid", "phi1", "c_resid", "n_E")
+                 "frac_boundary", "K", "df_resid", "phi1", "c_resid", "n_E",
+                 "df_method", "route_reason")
 
 ## The output unifier. Maps any engine's native frame to the single tidy
 ## contract; relabels only, never recomputes. Universal columns, in order:
@@ -142,11 +157,11 @@ lmm_interval_control <- function(seed = NULL, M = 10000L) {
 
   ## diagnostics -> attribute (off the core shape, still retrievable)
   diag <- list()
-  for (cn in c("df", "se", "tau2_med", "s2e_med", "frac_boundary", "K",
-               "df_resid", "phi1", "c_resid")) {
+  for (cn in c("df", "df_method", "se", "tau2_med", "s2e_med", "frac_boundary",
+               "K", "df_resid", "phi1", "c_resid", "route_reason")) {
     if (cn %in% names(native)) diag[[cn]] <- native[[cn]]
   }
-  for (a in c("beta_hat", "n_E", "U", "Vhat_Y")) {
+  for (a in c("beta_hat", "n_E", "U", "Vhat_Y", "C1", "C2")) {
     v <- attr(native, a); if (!is.null(v)) diag[[a]] <- v
   }
   attr(out, "diagnostics") <- diag
@@ -192,7 +207,8 @@ print.lmm_interval <- function(x, ...) {
 #' @param method `"auto"` (default) chooses the algorithm by structure; one of
 #'   `"ems-mls"`, `"reml-mls"`, `"anova-mls"`, `"gpq"` forces that engine and
 #'   errors if it is incompatible with the model.
-#' @param control An [lmm_interval_control()] object (the GPQ `seed` and `M`).
+#' @param control An [lmm_interval_control()] object (the GPQ `seed` and `M`,
+#'   and the confidence-interval df rule `ci_df`).
 #'
 #' @return An `lmm_interval` object (a data frame), one row per evaluation point,
 #'   with columns, in order:
@@ -209,7 +225,10 @@ print.lmm_interval <- function(x, ...) {
 #'     \item the per-row flags `singular`, `boundary`, `vg_floored`.
 #'   }
 #'   `attr(., "diagnostics")` is a list of engine-specific extras (degrees of
-#'   freedom `df`, standard error `se`, and any GPQ / ANOVA intermediates);
+#'   freedom `df`; for the random-intercept confidence interval its source
+#'   `df_method` --- `"satterthwaite"`, `"containment"`, or `"kenward-roger"`;
+#'   for the random-slope tolerance interval the GPQ `route_reason`; standard
+#'   error `se`; and any GPQ / ANOVA intermediates);
 #'   `attr(., "grouping")` is the random-intercept topology (`"oneway"`,
 #'   `"nested"`, `"crossed"`, or `NA` for slope models).
 #'
@@ -330,7 +349,8 @@ new_group_mean_lmm <- function(model, newdata = NULL, alpha = NULL, level = NULL
             "/ new-group-mean interval here (planned v2).", call. = FALSE)
   }
   out <- .interval_lmm(model, newdata = newdata, kind = kind, level = level,
-                       sides = sides)
+                       sides = sides,
+                       ci_df = if (is.null(control$ci_df)) "satterthwaite" else control$ci_df)
   tag <- if (.has_random_slope(model)) NULL else "ems-mls"   # slope row already tagged
   .unify_intervals(out, model, kind = kind, method_tag = tag)
 }

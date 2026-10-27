@@ -4,7 +4,8 @@
 #' `lb` of Francq, Lin & Hoyer (2019), Equation 12:
 #' \deqn{l\hat\beta \pm t_{1 - \alpha/2,\, \nu}\, \sqrt{l \hat C_{11} l'}.}
 #' The denominator degrees of freedom `nu` are supplied by the extraction layer
-#' (Kenward-Roger via \pkg{pbkrtest}, or a Satterthwaite fallback) and read from
+#' (Satterthwaite with a SAS-style containment fallback, or Kenward-Roger on
+#' request via `lmm_interval_control(ci_df = )`) and read from
 #' `comp$dfs["ci"]`. This constructor is method-pure: it consumes the numbers in
 #' an `re_components` object and never touches `lme4`, so it can be checked
 #' directly against a paper's printed values.

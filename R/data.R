@@ -55,3 +55,42 @@
 #' # the published content-variance functional, reproduced exactly:
 #' oliva_hauser_dgp$tau2_at_t0
 "oliva_hauser_dgp"
+
+#' Hoffman & Kringle (2007) Table III assay data
+#'
+#' The one-way random-effects worked example of Hoffman & Kringle (2007),
+#' Table III (their Example 1): an assay concentration measured in 6 analytical
+#' runs with 3 replicates each. It is the published oracle for the
+#' Hoffman-Kringle (2005) two-sided tolerance interval: with content
+#' `P = 0.95` and confidence `0.90`, [ti_lmm()] (default `"anova-mls"`) or
+#' [ti_anova_raw()] with `time = NULL` reproduces the published
+#' `(0.846, 1.114)`; with `P = 0.667` it reproduces `(0.914, 1.046)`.
+#'
+#' The same data appear in Hoffman & Kringle (2005), Table 6, with run 5 /
+#' replicate 3 misprinted as `1.020`. The correct value is `0.998`: only it is
+#' consistent with the published mean `0.9798` and mean squares (between
+#' `0.003251`, within `0.001167`). Francq, Lin & Hoyer (2019), Sections 5.2-5.3,
+#' used the misprinted value, which is why their intervals for this example
+#' differ slightly from Hoffman & Kringle's.
+#'
+#' @format A data frame with 18 rows and 3 columns:
+#' \describe{
+#'   \item{run}{analytical run (factor, 6 levels).}
+#'   \item{replicate}{replicate number within run (integer, 1-3).}
+#'   \item{conc}{measured concentration.}
+#' }
+#' @source Hoffman D, Kringle R (2007). A total error approach for the
+#'   validation of quantitative analytical methods. *Pharmaceutical Research*
+#'   24(6):1157-1164. \doi{10.1007/s11095-007-9242-3}. Table III.
+#' @references Hoffman D, Kringle R (2005). Two-sided tolerance intervals for
+#'   balanced and unbalanced random effects models. *Journal of
+#'   Biopharmaceutical Statistics* 15(2):283-293. \doi{10.1081/BIP-200048826}
+#'
+#'   Francq BG, Lin D, Hoyer W (2019). Confidence, prediction, and tolerance in
+#'   linear mixed models. *Statistics in Medicine* 38(30):5603-5622.
+#'   \doi{10.1002/sim.8386}
+#' @seealso [ti_lmm()], [ti_anova_raw()], [reintervals-models].
+#' @examples
+#' fm <- lme4::lmer(conc ~ 1 + (1 | run), data = hk_assay)
+#' ti_lmm(fm, P = 0.95, level = 0.90)   # Hoffman-Kringle: (0.846, 1.114)
+"hk_assay"

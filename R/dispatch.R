@@ -5,7 +5,8 @@
 #
 #   * any random slope present -> SLOPE path, target-aware:
 #       - future-observation: closed-form MLS (ti_vfun) when the fit is
-#         non-singular; GPQ when singular.
+#         non-singular; GPQ when singular, and also (per t0) when the
+#         Satterthwaite df of nu_G or nu_e is unavailable (containment fallback).
 #       - batch-mean: GPQ always. The closed form has a verified non-singular
 #         breakdown for this target (~0.89 coverage at small tau^2), so it is
 #         never used here, singular or not.
@@ -20,7 +21,13 @@
 #         precision-weighting down-weights them); the output therefore changes
 #         discontinuously at this boundary by design.
 #
-#   * random intercept, no fixed slope (one-way / nested / crossed) -> EMS engine.
+#   * intercept-only fixed part with exactly ONE random-intercept factor (one-way)
+#     -> the Hoffman-Kringle (2005) one-way interval, i.e. the slope-free branch
+#     of the anova-mls core, balanced or not. method = "ems-mls" (Francq 2019)
+#     stays available; the two coincide on balanced non-singular data.
+#
+#   * any other random-intercept model, no fixed slope (one-way with covariates /
+#     nested / crossed) -> EMS engine.
 #
 # Each engine keeps its own singular guard (they do different jobs; not unified):
 #   * EMS path  -> reintervals' Hessian -> bounded-Satterthwaite guard (the
@@ -110,6 +117,14 @@
   !.m1_is_clean_balanced(model, time_name)
 }
 
+## The Hoffman-Kringle one-way detector: no random slope, an intercept-only
+## fixed part (no covariates), and exactly one random-intercept grouping factor.
+.is_oneway_intercept_only <- function(model) {
+  if (.has_random_slope(model)) return(FALSE)
+  identical(names(lme4::fixef(model)), "(Intercept)") &&
+    length(lme4::getME(model, "cnms")) == 1L
+}
+
 ## Target-aware slope-engine selection (the GPQ routing policy).
 ## Returns "closed" or "gpq"; errors only on the one unsafe forced combination.
 ## Pure function of (target, singular, engine) so the (target x singular) routing
@@ -172,22 +187,43 @@
   chosen   <- .choose_slope_engine(target, singular, engine)
   design   <- .slope_design(model)
 
-  if (chosen == "gpq") {
+  ## Per-t0 route. Under the default (engine = "auto", future-observation target,
+  ## non-singular fit) the closed form is also abandoned for GPQ at any t0 where
+  ## the Satterthwaite df of nu_G or nu_e -- the two df the closed-form TI uses
+  ## -- is unavailable and vfun_extract() fell back to containment.
+  comps <- NULL
+  if (chosen == "closed") {
+    comps <- lapply(t0s, function(t0) vfun_extract(model, t0 = t0, target = target))
+  }
+  df_bad <- if (is.null(comps) || engine != "auto") rep(FALSE, length(t0s)) else
+    vapply(comps, function(cp) any(attr(cp, "df_fallback")[c("G", "e")] %in% TRUE),
+           logical(1))
+  use_gpq <- chosen == "gpq" | df_bad
+  reason <- if (engine != "auto") rep("method", length(t0s))
+            else if (target == "true_value") rep("group_mean_target", length(t0s))
+            else if (singular) rep("singular", length(t0s))
+            else ifelse(df_bad, "df_unavailable", "none")
+
+  rows <- vector("list", length(t0s))
+  if (any(use_gpq)) {
     yts <- .model_yts(model, time_var)
     c_resid <- if (target == "observable") 1 else 0       # future-obs vs batch-mean
-    g <- .gpq_core(yts$y, yts$time, yts$batch, t0 = t0s,
+    g <- .gpq_core(yts$y, yts$time, yts$batch, t0 = t0s[use_gpq],
                     content = content, conf = conf, sides = sides,
                     c_resid = c_resid, M = M, seed = seed)
-    return(.gpq_rows(g, design = design, sides = sides, singular = singular))
+    gr <- .gpq_rows(g, design = design, sides = sides, singular = singular)
+    rows[use_gpq] <- split(gr, seq_len(nrow(gr)))
   }
-
   ## closed-form MLS (observable target). true_value never reaches here: auto
   ## routes batch-mean to GPQ, and engine = "closed" + true_value already errored.
-  rows <- lapply(t0s, function(t0) {
-    comp <- vfun_extract(model, t0 = t0, target = target)
-    ti_vfun(comp, content = content, conf = conf, sides = sides)
-  })
+  for (i in which(!use_gpq)) {
+    rows[[i]] <- ti_vfun(comps[[i]], content = content, conf = conf, sides = sides)
+  }
+  ## GPQ and closed-form rows carry different audit columns; align on the union.
+  cols <- unique(unlist(lapply(rows, names)))
+  rows <- lapply(rows, function(r) { for (cn in setdiff(cols, names(r))) r[[cn]] <- NA; r[cols] })
   out <- do.call(rbind, rows); rownames(out) <- NULL
+  out$route_reason <- reason
   out
 }
 
@@ -212,11 +248,21 @@
 #' the engine that is exact/validated for that case --- all transparently:
 #'
 #' * **Random slope.** `over = "observation"` uses the REML closed-form MLS
-#'   interval when the fit is non-singular and the GPQ interval when singular;
-#'   `over = "group_mean"` always uses GPQ.
+#'   interval when the fit is non-singular and the GPQ interval when the fit is
+#'   singular or, at a given `t0`, when the Satterthwaite df of the closed form's
+#'   between-group or residual variance is unavailable (its containment fallback
+#'   fired); `over = "group_mean"` always uses GPQ. The reason is reported per
+#'   row in `attr(., "diagnostics")$route_reason` (`"none"`, `"singular"`,
+#'   `"df_unavailable"`, `"group_mean_target"`, or `"method"` when forced).
 #' * **Random intercept + fixed slope.** Clean balanced -> EMS engine; single-
 #'   observation / staggered / unbalanced -> the Montes ANOVA/MLS closed form.
-#' * **Random intercept, no fixed slope** -> EMS engine.
+#' * **Intercept-only one-way** (`y ~ 1 + (1 | g)`, one grouping factor, no
+#'   covariates), balanced or not -> the Hoffman & Kringle (2005) closed form
+#'   (`"anova-mls"`, two-sided only). `method = "ems-mls"` gives the Francq et
+#'   al. (2019) interval instead; the two coincide on balanced data with a
+#'   non-singular fit and differ on singular or unbalanced data.
+#' * **Any other random-intercept model, no fixed slope** (one-way with
+#'   covariates, nested, crossed) -> EMS engine.
 #'
 #' For slope models the between-group variance `V_G(t0)` is quadratic in the
 #' time covariate, so evaluating at a `t0` outside the observed time range is
@@ -246,14 +292,21 @@
 #' @param sides `"two.sided"` (default), `"lower"`, or `"upper"`.
 #' @param method `"auto"` (default) chooses the algorithm by structure; one of
 #'   `"ems-mls"`, `"reml-mls"`, `"anova-mls"`, `"gpq"` forces it and errors if
-#'   incompatible with the model.
+#'   incompatible with the model. `"anova-mls"` is available for fixed-slope
+#'   models and for intercept-only one-way models (Hoffman-Kringle).
 #' @param control [lmm_interval_control()] tuning (GPQ seed / M).
 #'
 #' @inherit ci_lmm return
 #' @seealso [ci_lmm()], [pi_lmm()], [new_group_mean_lmm()], [lmm_predict()],
 #'   [reintervals-models].
+#' @references Hoffman D, Kringle R (2005). Two-sided tolerance intervals for
+#'   balanced and unbalanced random effects models. *Journal of
+#'   Biopharmaceutical Statistics* 15(2):283-293. \doi{10.1081/BIP-200048826}
 #' @examples
-#' # random intercepts, no slope -> EMS engine
+#' # intercept-only one-way -> Hoffman-Kringle (anova-mls)
+#' fh <- lme4::lmer(conc ~ 1 + (1 | run), data = hk_assay)
+#' ti_lmm(fh, P = 0.95, level = 0.90)
+#' # random intercept + fixed slope (clean balanced) -> EMS engine
 #' fi <- lme4::lmer(Reaction ~ Days + (1 | Subject), data = lme4::sleepstudy)
 #' ti_lmm(fi, newdata = data.frame(Days = 0))
 #' # random slope, future-observation -> REML closed form
@@ -319,6 +372,21 @@ ti_lmm <- function(model, newdata = NULL, P = 0.95,
          "\"auto\", \"ems-mls\", or \"anova-mls\".", call. = FALSE)
   }
 
+  ## Intercept-only one-way -> Hoffman-Kringle (the slope-free branch of the
+  ## anova-mls core), unless method = "ems-mls" asks for Francq.
+  if (.is_oneway_intercept_only(model) && method %in% c("auto", "anova-mls")) {
+    if (sides != "two.sided") {
+      stop("The Hoffman-Kringle (2005) one-way tolerance interval (the default ",
+           "engine for an intercept-only one-way model) is two-sided only.",
+           call. = FALSE)
+    }
+    out <- .montes_core(as.numeric(lme4::getME(model, "y")), time = NULL,
+                        lot = lme4::getME(model, "flist")[[1]], t0 = NULL,
+                        content = P, conf = conf)
+    out$singular <- .is_singular(model)   # report the fit's flag, like the other verbs
+    return(.unify_intervals(out, model, kind = "ti", P_value = P))  # carries anova-mls
+  }
+
   ## Fixed-slope single-obs / staggered -> Montes ANOVA; else EMS. `method` can
   ## force. Uses the shared .is_single_obs_m1() detector (identical to the inline
   ## `is_m1 && !.m1_is_clean_balanced()` it replaces) so the routing here and the
@@ -326,7 +394,8 @@ ti_lmm <- function(model, newdata = NULL, P = 0.95,
   use_montes <- .is_single_obs_m1(model)
   if (method == "anova-mls") {
     if (!is_m1) {
-      stop("method = \"anova-mls\" needs a fixed-slope (random intercept + fixed slope) model.", call. = FALSE)
+      stop("method = \"anova-mls\" needs a fixed-slope (random intercept + ",
+           "fixed slope) model or an intercept-only one-way model.", call. = FALSE)
     }
     use_montes <- TRUE
   }

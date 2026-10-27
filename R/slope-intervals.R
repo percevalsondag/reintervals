@@ -112,14 +112,21 @@
 ## intervals_lmm, new_group_mean via .ngm_ems); random-slope -> the slope ports.
 .interval_lmm <- function(model, newdata = NULL,
                           kind = c("CI", "PI", "new_group_mean"),
-                          level = 0.95, sides = c("two.sided", "lower", "upper")) {
+                          level = 0.95, sides = c("two.sided", "lower", "upper"),
+                          ci_df = c("satterthwaite", "kenward-roger")) {
   if (!inherits(model, "lmerMod")) {
     stop("`model` must be a fitted `lmerMod` (an lmer fit).", call. = FALSE)
   }
   kind  <- match.arg(kind)
   sides <- match.arg(sides)
+  ci_df <- match.arg(ci_df)
 
   if (.has_random_slope(model)) {
+    if (kind == "CI" && ci_df == "kenward-roger") {
+      stop("ci_df = \"kenward-roger\" applies to random-intercept models; the ",
+           "random-slope confidence interval uses its own generalized ",
+           "Satterthwaite df.", call. = FALSE)
+    }
     fe <- lme4::fixef(model)
     time_var <- setdiff(names(fe), "(Intercept)")
     if (length(time_var) != 1L) {
@@ -150,5 +157,5 @@
          call. = FALSE)
   }
   intervals_lmm(model, newdata = newdata, level = level, conf = level,
-                which = kind)
+                which = kind, ci_method = ci_df)
 }

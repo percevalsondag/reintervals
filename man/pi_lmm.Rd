@@ -29,7 +29,8 @@ at most one. \code{level} is \code{1 - alpha}; the default is \code{alpha = 0.05
 \code{"ems-mls"}, \code{"reml-mls"}, \code{"anova-mls"}, \code{"gpq"} forces that engine and
 errors if it is incompatible with the model.}
 
-\item{control}{An \code{\link[=lmm_interval_control]{lmm_interval_control()}} object (the GPQ \code{seed} and \code{M}).}
+\item{control}{An \code{\link[=lmm_interval_control]{lmm_interval_control()}} object (the GPQ \code{seed} and \code{M},
+and the confidence-interval df rule \code{ci_df}).}
 }
 \value{
 An \code{lmm_interval} object (a data frame), one row per evaluation point,
@@ -47,7 +48,10 @@ the value for \code{ti}, \code{NA} for the coverage intervals); \code{sides};
 \item the per-row flags \code{singular}, \code{boundary}, \code{vg_floored}.
 }
 \code{attr(., "diagnostics")} is a list of engine-specific extras (degrees of
-freedom \code{df}, standard error \code{se}, and any GPQ / ANOVA intermediates);
+freedom \code{df}; for the random-intercept confidence interval its source
+\code{df_method} --- \code{"satterthwaite"}, \code{"containment"}, or \code{"kenward-roger"};
+for the random-slope tolerance interval the GPQ \code{route_reason}; standard
+error \code{se}; and any GPQ / ANOVA intermediates);
 \code{attr(., "grouping")} is the random-intercept topology (\code{"oneway"},
 \code{"nested"}, \code{"crossed"}, or \code{NA} for slope models).
 }

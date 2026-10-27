@@ -199,26 +199,53 @@
        var_fix = diag(l %*% c11 %*% t(l)))
 }
 
-## ---- CI denominator df: Kenward-Roger, else Satterthwaite (never NA) --------
-.ci_ddf <- function(model, Lrow, theta = NULL, ci_df = NULL) {
-  if (!is.null(ci_df)) return(as.numeric(ci_df))
-  if (requireNamespace("pbkrtest", quietly = TRUE)) {
+## ---- CI denominator df ------------------------------------------------------
+## Default: Satterthwaite on the contrast variance l C11 l', with theta's
+## observed-information covariance COMPUTED (.theta_cov); when that df is NA,
+## non-finite, or < 1 (typically a singular fit, where the Hessian is not used)
+## it falls back to the SAS-style containment df. Kenward-Roger is used only on
+## explicit request (lmm_interval_control(ci_df = "kenward-roger")) and errors if
+## pbkrtest is not installed or the KR df cannot be computed -- it never falls
+## back silently, so the result never depends on which packages are installed.
+## Returns list(df, method) with method "satterthwaite", "containment",
+## "kenward-roger" (or "user" for the internal numeric override).
+.ci_ddf <- function(model, Lrow, theta = NULL, ci_df = NULL,
+                    df_method = c("satterthwaite", "kenward-roger")) {
+  if (!is.null(ci_df)) return(list(df = as.numeric(ci_df), method = "user"))
+  df_method <- match.arg(df_method)
+  if (df_method == "kenward-roger") {
+    if (!requireNamespace("pbkrtest", quietly = TRUE)) {
+      stop("ci_df = \"kenward-roger\" requires the 'pbkrtest' package, which is ",
+           "not installed. Install it, or use the default ci_df = ",
+           "\"satterthwaite\".", call. = FALSE)
+    }
     ddf <- tryCatch(pbkrtest::get_Lb_ddf(model, as.numeric(Lrow)),
                     error = function(e) NA_real_)
-    if (isTRUE(is.finite(ddf) && ddf > 0)) return(ddf)
+    if (!isTRUE(is.finite(ddf) && ddf > 0)) {
+      stop("The Kenward-Roger df could not be computed for this model; use the ",
+           "default ci_df = \"satterthwaite\".", call. = FALSE)
+    }
+    return(list(df = ddf, method = "kenward-roger"))
   }
-  .ci_ddf_satterthwaite(model, Lrow, theta)
+  if (is.null(theta)) theta <- .theta_cov(model)
+  d <- .ci_ddf_satterthwaite(model, Lrow, theta)
+  if (isTRUE(is.finite(d) && d >= 1)) return(list(df = d, method = "satterthwaite"))
+  list(df = .ddf_containment(model), method = "containment")
 }
 
+## Binding for testthat::local_mocked_bindings(): lets the tests mask
+## requireNamespace("pbkrtest") to prove the CI df does not depend on which
+## packages are installed. A NULL binding is skipped by R's function lookup, so
+## every requireNamespace() call still reaches base::requireNamespace.
+requireNamespace <- NULL
+
 ## Satterthwaite df for the contrast variance l C11 l', reusing the observed-
-## information covariance from .theta_cov(). Falls back to the residual df when
-## that covariance is unavailable (e.g. singular fit). Never returns NA.
+## information covariance from .theta_cov(). NA when that covariance is
+## unavailable (e.g. singular fit) or the delta-method variance is degenerate;
+## .ci_ddf() then falls back to containment.
 .ci_ddf_satterthwaite <- function(model, Lrow, theta) {
   l <- as.numeric(Lrow)
-  resid_df <- function() {
-    max(1, length(lme4::getME(model, "y")) - length(lme4::fixef(model)))
-  }
-  if (is.null(theta) || is.null(theta$cov_theta)) return(resid_df())
+  if (is.null(theta) || is.null(theta$cov_theta)) return(NA_real_)
   Al <- theta$parts$Al; th <- theta$parts$th
   X <- theta$parts$X; N <- theta$parts$N; k <- theta$parts$k
   cvar <- function(t) {
@@ -228,10 +255,31 @@
     as.numeric(t(l) %*% c11 %*% l)
   }
   g <- tryCatch(numDeriv::grad(cvar, th), error = function(e) NULL)
-  if (is.null(g)) return(resid_df())
+  if (is.null(g)) return(NA_real_)
   var_c <- as.numeric(t(g) %*% theta$cov_theta %*% g)
-  if (!is.finite(var_c) || var_c <= 0) return(resid_df())
+  if (!is.finite(var_c) || var_c <= 0) return(NA_real_)
   2 * cvar(th)^2 / var_c
+}
+
+## SAS-style containment df (the DDFM=CONTAIN rank rule). Every random-intercept
+## term contains the intercept; with the terms ordered coarsest first (fewest
+## levels, i.e. main effects before the nested / interaction terms that contain
+## them -- the order SAS's RANDOM statement uses; lme4's own term order puts the
+## finest term first and would give a rank contribution of 0 to the coarse
+## term), r_k = rank[X Z_1..Z_k] - rank[X Z_1..Z_{k-1}] and df = max(1, min r_k).
+## One-way and nested: A - 1 (minus any between-group fixed columns); crossed
+## A x B: min(A, B) - 1. Ranks are numerical (QR).
+.ddf_containment <- function(model) {
+  X <- as.matrix(lme4::getME(model, "X"))
+  Zl <- lapply(lme4::getME(model, "Ztlist"), function(zt) as.matrix(Matrix::t(zt)))
+  Zl <- Zl[order(vapply(Zl, ncol, numeric(1)))]           # coarsest term first
+  rk <- function(M) qr(M)$rank
+  M <- X; r_prev <- rk(M); r <- numeric(length(Zl))
+  for (k in seq_along(Zl)) {
+    M <- cbind(M, Zl[[k]]); r_k <- rk(M)
+    r[k] <- r_k - r_prev; r_prev <- r_k
+  }
+  max(1, min(r))
 }
 
 #' Extract variance components and degrees of freedom from a fitted model
@@ -240,9 +288,10 @@
 #' constructors: it is the only function in the package that touches `lme4`,
 #' `Matrix`, or `numDeriv`. It rejects random slopes, detects the design,
 #' estimates the variance components and the observed-information
-#' prediction-interval degrees of freedom (the numerical Hessian of the profiled
-#' REML log-likelihood, Francq 2019 Eq. 23-24), builds the design's
-#' expected-mean-square decomposition for the tolerance interval, and returns a
+#' prediction-interval degrees of freedom (the numerical Hessian of the REML
+#' log-likelihood on the variance-component scale, Francq 2019 Eq. 23-24),
+#' builds the design's expected-mean-square decomposition for the tolerance
+#' interval, and returns a
 #' canonical `re_components` object evaluated at one prediction point.
 #'
 #' The returned object carries two attributes: `singular`
@@ -279,7 +328,7 @@ vc_extract <- function(model, design = NULL,
   dc <- .design_components(desc, theta$components, target,
                           .counts_if_unbalanced(model, desc))
   fx <- .fixed(model, newdata)
-  ci_ddf <- .ci_ddf(model, fx$L[1, ], theta = theta)
+  ci_ddf <- .ci_ddf(model, fx$L[1, ], theta = theta)$df
 
   comp <- re_components(
     components = theta$components,

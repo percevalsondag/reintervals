@@ -258,7 +258,10 @@
 #' @param boundary_tol A component is flagged near-boundary if below this
 #'   fraction of total variance. Default `1e-4`.
 #'
-#' @return A `vfun_components` object at `t0`, with `attr(., "target")` set.
+#' @return A `vfun_components` object at `t0`, with `attr(., "target")` set and
+#'   `attr(., "df_fallback")`, a logical vector over `F`, `T`, `G`, `e` that is
+#'   `TRUE` where the Satterthwaite df was unavailable and the containment df was
+#'   used (`NA` when `df_method = "containment"`).
 #' @seealso `vfun_components()`, `vc_extract()` (the EMS path).
 #' @examples
 #' fm <- lme4::lmer(Reaction ~ Days + (1 + Days | Subject),
@@ -310,16 +313,19 @@ vfun_extract <- function(model, t0,
   gVe <- stats::setNames(as.numeric(names(phi) == "s2e"), names(phi))
   grad_vF <- numDeriv::grad(function(p) parsed$vF_fun(p, x0), phi)
 
+  ## Each returns c(df, fell_back): fell_back = 1 when the Satterthwaite df was
+  ## unavailable and the containment df was used (NA when containment is forced).
   resolve_df <- function(value, grad_vec, w_between) {
-    if (df_method == "containment") return(.vfun_df_containment(parsed, w_between))
+    if (df_method == "containment") return(c(.vfun_df_containment(parsed, w_between), NA))
     d <- .vfun_df_satterthwaite(value, grad_vec, cov)
-    if (is.finite(d) && d > 0) return(d)
-    .vfun_df_containment(parsed, w_between)        # fallback on degenerate df
+    if (is.finite(d) && d > 0) return(c(d, 0))
+    c(.vfun_df_containment(parsed, w_between), 1)  # fallback on degenerate df
   }
-  nu_F <- resolve_df(V_F, grad_vF, w_between = 1)
-  nu_T <- resolve_df(V_T, gVT, w_between = if (V_T > 0) V_G / V_T else 0)
-  nu_G <- resolve_df(V_G, gVG, w_between = 1)
-  nu_e <- resolve_df(s2e, gVe, w_between = 0)
+  rF <- resolve_df(V_F, grad_vF, w_between = 1)
+  rT <- resolve_df(V_T, gVT, w_between = if (V_T > 0) V_G / V_T else 0)
+  rG <- resolve_df(V_G, gVG, w_between = 1)
+  re <- resolve_df(s2e, gVe, w_between = 0)
+  nu_F <- rF[1]; nu_T <- rT[1]; nu_G <- rG[1]; nu_e <- re[1]
 
   out <- vfun_components(
     type = type, phi = phi, cov = cov,
@@ -330,6 +336,8 @@ vfun_extract <- function(model, t0,
   )
   attr(out, "target") <- target
   attr(out, "vg_floored") <- vg$floored
+  attr(out, "df_fallback") <- c(F = rF[2] == 1, T = rT[2] == 1, G = rG[2] == 1,
+                                e = re[2] == 1)
   out
 }
 

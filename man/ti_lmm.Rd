@@ -37,7 +37,8 @@ one. \code{level} is \code{1 - alpha}; default \code{alpha = 0.05}.}
 
 \item{method}{\code{"auto"} (default) chooses the algorithm by structure; one of
 \code{"ems-mls"}, \code{"reml-mls"}, \code{"anova-mls"}, \code{"gpq"} forces it and errors if
-incompatible with the model.}
+incompatible with the model. \code{"anova-mls"} is available for fixed-slope
+models and for intercept-only one-way models (Hoffman-Kringle).}
 
 \item{control}{\code{\link[=lmm_interval_control]{lmm_interval_control()}} tuning (GPQ seed / M).}
 }
@@ -57,7 +58,10 @@ the value for \code{ti}, \code{NA} for the coverage intervals); \code{sides};
 \item the per-row flags \code{singular}, \code{boundary}, \code{vg_floored}.
 }
 \code{attr(., "diagnostics")} is a list of engine-specific extras (degrees of
-freedom \code{df}, standard error \code{se}, and any GPQ / ANOVA intermediates);
+freedom \code{df}; for the random-intercept confidence interval its source
+\code{df_method} --- \code{"satterthwaite"}, \code{"containment"}, or \code{"kenward-roger"};
+for the random-slope tolerance interval the GPQ \code{route_reason}; standard
+error \code{se}; and any GPQ / ANOVA intermediates);
 \code{attr(., "grouping")} is the random-intercept topology (\code{"oneway"},
 \code{"nested"}, \code{"crossed"}, or \code{NA} for slope models).
 }
@@ -70,11 +74,21 @@ the engine that is exact/validated for that case --- all transparently:
 \details{
 \itemize{
 \item \strong{Random slope.} \code{over = "observation"} uses the REML closed-form MLS
-interval when the fit is non-singular and the GPQ interval when singular;
-\code{over = "group_mean"} always uses GPQ.
+interval when the fit is non-singular and the GPQ interval when the fit is
+singular or, at a given \code{t0}, when the Satterthwaite df of the closed form's
+between-group or residual variance is unavailable (its containment fallback
+fired); \code{over = "group_mean"} always uses GPQ. The reason is reported per
+row in \code{attr(., "diagnostics")$route_reason} (\code{"none"}, \code{"singular"},
+\code{"df_unavailable"}, \code{"group_mean_target"}, or \code{"method"} when forced).
 \item \strong{Random intercept + fixed slope.} Clean balanced -> EMS engine; single-
 observation / staggered / unbalanced -> the Montes ANOVA/MLS closed form.
-\item \strong{Random intercept, no fixed slope} -> EMS engine.
+\item \strong{Intercept-only one-way} (\code{y ~ 1 + (1 | g)}, one grouping factor, no
+covariates), balanced or not -> the Hoffman & Kringle (2005) closed form
+(\code{"anova-mls"}, two-sided only). \code{method = "ems-mls"} gives the Francq et
+al. (2019) interval instead; the two coincide on balanced data with a
+non-singular fit and differ on singular or unbalanced data.
+\item \strong{Any other random-intercept model, no fixed slope} (one-way with
+covariates, nested, crossed) -> EMS engine.
 }
 
 For slope models the between-group variance \code{V_G(t0)} is quadratic in the
@@ -94,7 +108,10 @@ pi_lmm(), and new_group_mean_lmm() remain available for those models.
 }
 
 \examples{
-# random intercepts, no slope -> EMS engine
+# intercept-only one-way -> Hoffman-Kringle (anova-mls)
+fh <- lme4::lmer(conc ~ 1 + (1 | run), data = hk_assay)
+ti_lmm(fh, P = 0.95, level = 0.90)
+# random intercept + fixed slope (clean balanced) -> EMS engine
 fi <- lme4::lmer(Reaction ~ Days + (1 | Subject), data = lme4::sleepstudy)
 ti_lmm(fi, newdata = data.frame(Days = 0))
 # random slope, future-observation -> REML closed form
@@ -103,6 +120,11 @@ ti_lmm(fs, newdata = data.frame(Days = 5))
 # random slope, batch-mean -> GPQ
 ti_lmm(fs, newdata = data.frame(Days = 5), over = "group_mean",
        control = lmm_interval_control(seed = 1))
+}
+\references{
+Hoffman D, Kringle R (2005). Two-sided tolerance intervals for
+balanced and unbalanced random effects models. \emph{Journal of
+Biopharmaceutical Statistics} 15(2):283-293. \doi{10.1081/BIP-200048826}
 }
 \seealso{
 \code{\link[=ci_lmm]{ci_lmm()}}, \code{\link[=pi_lmm]{pi_lmm()}}, \code{\link[=new_group_mean_lmm]{new_group_mean_lmm()}}, \code{\link[=lmm_predict]{lmm_predict()}},

@@ -73,7 +73,7 @@ test_that("the four verbs carry harmonised provenance (method/design/grouping)",
   expect_identical(ci$design, "random_slope_correlated")
   expect_true(is.na(attr(ci, "grouping")))
   # EMS verb: ems-mls + random_intercept + grouping
-  ti <- suppressWarnings(ti_lmm(fit_52(), P = 0.99))
+  ti <- suppressWarnings(ti_lmm(fit_52(), P = 0.99, method = "ems-mls"))
   expect_identical(ti$method, "ems-mls")
   expect_identical(ti$design, "random_intercept")
   expect_null(attr(ti, "design"))                       # legacy attr dropped (now a column)

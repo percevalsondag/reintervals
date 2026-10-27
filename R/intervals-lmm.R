@@ -18,12 +18,17 @@
 #' @param level Prediction level (`1 - psi`) for the PI. Default 0.95.
 #' @param conf Confidence level for the CI. Default 0.95.
 #' @param which Character subset of `c("CI", "PI")`. Default both.
-#' @param ci_df Optional numeric overriding the CI denominator df. `NULL`
-#'   (default) uses Kenward-Roger df via \pkg{pbkrtest}, or a Satterthwaite
-#'   fallback when that package is absent.
+#' @param ci_df Optional numeric overriding the CI denominator df (internal).
+#'   `NULL` (default) uses `ci_method`.
+#' @param ci_method CI df rule: `"satterthwaite"` (default; Satterthwaite with
+#'   the observed-information covariance of the variance components, falling
+#'   back to the SAS-style containment df when it is unavailable) or
+#'   `"kenward-roger"` (requires \pkg{pbkrtest}; errors otherwise).
 #'
 #' @return A data frame with the `newdata` predictor columns plus `type`,
-#'   `estimate`, `lower`, `upper`, `df`, `level`. When the PI is computed the
+#'   `estimate`, `lower`, `upper`, `df`, `df_method` (the CI df source:
+#'   `"satterthwaite"`, `"containment"`, or `"kenward-roger"`; `NA` on PI rows),
+#'   `level`. When the PI is computed the
 #'   variance components are attached as `attr(., "components")` and
 #'   `attr(., "pi_df_fallback")` flags the singular-fit df guard (see
 #'   `vc_extract()`). `attr(., "singular")` (`lme4::isSingular()`) is always
@@ -38,13 +43,19 @@
 #' intervals_lmm(fm, newdata = data.frame(Days = c(0, 9)))
 #' @noRd
 intervals_lmm <- function(model, newdata = NULL, level = 0.95, conf = 0.95,
-                          which = c("CI", "PI"), ci_df = NULL) {
+                          which = c("CI", "PI"), ci_df = NULL,
+                          ci_method = c("satterthwaite", "kenward-roger")) {
   if (!inherits(model, "lmerMod")) {
     stop("`model` must be a fitted `lmerMod` (an lmer fit).", call. = FALSE)
   }
   which <- match.arg(which, c("CI", "PI"), several.ok = TRUE)
+  ci_method <- match.arg(ci_method)
   fx <- .fixed(model, newdata)
-  theta <- if ("PI" %in% which) .theta_cov(model) else NULL
+  ## theta (observed information) is needed for the PI df and for the default
+  ## Satterthwaite CI df; a Kenward-Roger or overridden CI-only call skips it.
+  need_theta <- "PI" %in% which ||
+    ("CI" %in% which && is.null(ci_df) && ci_method == "satterthwaite")
+  theta <- if (need_theta) .theta_cov(model) else NULL
   comps <- if (!is.null(theta)) theta$components else .var_components(model)
   nr <- nrow(fx$L)
   base <- fx$newdata
@@ -58,16 +69,17 @@ intervals_lmm <- function(model, newdata = NULL, level = 0.95, conf = 0.95,
 
   blocks <- list()
   if ("CI" %in% which) {
-    ddf <- vapply(seq_len(nr),
-                  function(i) .ci_ddf(model, fx$L[i, ], theta = theta, ci_df = ci_df),
-                  numeric(1))
+    dd <- lapply(seq_len(nr), function(i)
+      .ci_ddf(model, fx$L[i, ], theta = theta, ci_df = ci_df, df_method = ci_method))
+    ddf <- vapply(dd, function(x) x$df, numeric(1))
     cis <- lapply(seq_len(nr), function(i) ci_mean(make_comp(i, ddf[i]), conf = conf))
     blocks$CI <- cbind(base, data.frame(
       type = "CI",
       estimate = vapply(cis, function(x) x$estimate, numeric(1)),
       lower = vapply(cis, function(x) x$lower, numeric(1)),
       upper = vapply(cis, function(x) x$upper, numeric(1)),
-      df = ddf, level = conf
+      df = ddf, df_method = vapply(dd, function(x) x$method, character(1)),
+      level = conf, stringsAsFactors = FALSE
     ), row.names = NULL)
   }
   if ("PI" %in% which) {
@@ -78,13 +90,14 @@ intervals_lmm <- function(model, newdata = NULL, level = 0.95, conf = 0.95,
       estimate = vapply(pis, function(x) x$estimate, numeric(1)),
       lower = vapply(pis, function(x) x$lower, numeric(1)),
       upper = vapply(pis, function(x) x$upper, numeric(1)),
-      df = theta$df_pi, level = level
+      df = theta$df_pi, df_method = NA_character_, level = level,
+      stringsAsFactors = FALSE
     ), row.names = NULL)
   }
 
   out <- do.call(rbind, blocks)
   rownames(out) <- NULL
-  if (!is.null(theta)) {
+  if ("PI" %in% which) {
     attr(out, "components") <- theta$components
     attr(out, "pi_df_fallback") <- isTRUE(theta$pi_df_fallback)
   }

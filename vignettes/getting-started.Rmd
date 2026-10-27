@@ -133,30 +133,42 @@ the tolerance interval and the other three verbs (full mapping in
 
 | Model class | CI / PI / new-group-mean | TI |
 |---|---|---|
-| random intercept (any fixed effects) | `ems-mls` | `ems-mls` |
+| random intercept, intercept-only one-way (`y ~ 1 + (1 | g)`) | `ems-mls` | `anova-mls` (Hoffman & Kringle 2005) |
+| random intercept, any other fixed part or grouping | `ems-mls` | `ems-mls` |
 | random intercept + fixed slope, clean balanced | `ems-mls` | `ems-mls` |
 | random intercept + fixed slope, single-observation / unbalanced | `ems-mls` (warns: may be anti-conservative) | `anova-mls` |
 | random slope, non-singular, future-observation | `reml-mls` | `reml-mls` |
-| random slope, singular fit, future-observation | `reml-mls` (flagged `singular`) | `gpq` |
+| random slope, future-observation, singular fit or TI df unavailable | `reml-mls` (flagged `singular`) | `gpq` |
 | random slope, batch-mean (`over = "group_mean"`, TI only) | --- | `gpq` |
 
 Only the tolerance interval is re-routed: on a singular random-slope fit the TI
 moves to `gpq` while CI, PI, and new-group-mean stay on `reml-mls` (flagged
-`singular`); on a single-observation / unbalanced fixed-slope design the TI moves
-to `anova-mls` while CI, PI, and new-group-mean stay on `ems-mls` and warn (see
-below).
+`singular`), and it also moves to `gpq` at any `t0` where the closed form's
+Satterthwaite df for the between-group or residual variance is unavailable; on a
+single-observation / unbalanced fixed-slope design the TI moves to `anova-mls`
+while CI, PI, and new-group-mean stay on `ems-mls` and warn (see below). The
+intercept-only one-way TI uses `anova-mls`, the Hoffman & Kringle (2005)
+interval, balanced or not.
+
+On the random-intercept path the confidence interval uses a Satterthwaite df,
+falling back to the SAS-style containment df (`A - 1` one-way or nested,
+`min(A, B) - 1` crossed) when that is unavailable; Kenward-Roger df are used only
+on request (`lmm_interval_control(ci_df = "kenward-roger")`). The df source is in
+`attr(., "diagnostics")$df_method`.
 
 `method = "auto"` (the default) picks the engine in the table. Any other value
 is accepted only if it is in the allowed set for that model's design and
 interval; anything else is an error. For CI, PI, and new-group-mean the allowed
 engine is the one in the table (`ems-mls`, or `reml-mls` for random slopes), so
-there is no alternative. Only the tolerance interval offers a choice: on a
-fixed-slope model, `"ems-mls"` and `"anova-mls"` are both allowed (forcing
-`"ems-mls"` on single-observation / unbalanced data takes the anti-conservative
-path, mainly for comparison); on a random-slope model with the
-future-observation target, `"reml-mls"` and `"gpq"` are both allowed. Every
-other design (random intercept without a fixed slope, and the random-slope
-batch-mean target) has a single allowed TI engine.
+there is no alternative. Only the tolerance interval offers a choice: on an
+intercept-only one-way model, `"anova-mls"` (Hoffman & Kringle, the default) and
+`"ems-mls"` (Francq et al.) are both allowed; on a fixed-slope model,
+`"ems-mls"` and `"anova-mls"` are both allowed (forcing `"ems-mls"` on
+single-observation / unbalanced data takes the anti-conservative path, mainly
+for comparison); on a random-slope model with the future-observation target,
+`"reml-mls"` and `"gpq"` are both allowed. Every other design (other
+random-intercept models without a fixed slope, and the random-slope batch-mean
+target) has a single allowed TI engine.
 
 **v1 scope:** general fixed effects for random-intercept models; a **single continuous
 covariate** for random-slope models (the stability design).

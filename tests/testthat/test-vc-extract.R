@@ -55,7 +55,7 @@ test_that("vc_extract rejects random-slope models", {
 
 test_that("Section 5.3 unbalanced Hessian df_PI passes the sanity gate", {
   skip_if_not_installed("lme4")
-  # Exact 11.31 needs genuine raw data (see deferred test below). This only
+  # Exact 11.31 from the genuine raw data: oracle O6 in test-hk.R. This only
   # gates the unbalanced Hessian path: finite, positive, below the balanced df,
   # and roughly in range -- so the path has coverage, not a precision claim.
   dat <- build_52_data()
@@ -70,8 +70,5 @@ test_that("Section 5.3 unbalanced Hessian df_PI passes the sanity gate", {
   expect_false(attr(comp53, "pi_df_fallback"))     # interior fit -> Hessian route
 })
 
-test_that("Section 5.3 df_PI == 11.31 from a real fit (DEFERRED)", {
-  skip(paste("Deferred: exact 5.3 df_PI (11.31) needs the genuine",
-             "Hoffman-Kringle raw assay values; constructed unbalanced data",
-             "reaches ~11.13. Sanity-gated in the test above."))
-})
+# The exact Section 5.3 df_PI (11.31) from the genuine raw values is now checked
+# by oracle O6 in test-hk.R (hk_assay with the HK 2005 misprint that Francq used).

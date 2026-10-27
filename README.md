@@ -95,9 +95,10 @@ The engine is chosen from the fitted model's structure (full mapping in
 | Model class | Engine (`method`) |
 |---|---|
 | random intercept (any fixed effects; one-way / nested / crossed) | expected-mean-square / MLS (`"ems-mls"`) |
+| random intercept, intercept-only one-way: tolerance interval | Hoffman & Kringle unweighted-means ANOVA (`"anova-mls"`) |
 | random intercept + fixed slope, clean balanced | `"ems-mls"` |
-| random intercept + fixed slope, single-observation / unbalanced | unweighted lot-mean ANOVA (`"anova-mls"`) |
-| random slope, future-observation | REML closed form (`"reml-mls"`); GPQ when singular |
+| random intercept + fixed slope, single-observation / unbalanced: tolerance interval | unweighted lot-mean ANOVA (`"anova-mls"`) |
+| random slope, future-observation | REML closed form (`"reml-mls"`); GPQ for the tolerance interval when the fit is singular or its Satterthwaite df is unavailable |
 | random slope, batch-mean | GPQ Monte Carlo (`"gpq"`) |
 
 **v1 scope:** general fixed effects are supported for random-intercept models;
