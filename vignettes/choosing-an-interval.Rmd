@@ -34,8 +34,8 @@ library(lme4)
 
 | Engine (`method`) | Used for | Reference |
 |---|---|---|
-| `ems-mls` | Random-intercept designs and the balanced fixed-slope design (expected-mean-square / observed-information MLS). | Francq, Lin & Hoyer (2019) |
-| `anova-mls` | Single-observation / unbalanced fixed-slope (stability) tolerance intervals, and — without a covariate — the intercept-only one-way tolerance interval (unweighted group-mean ANOVA). | Montes, Burdick & Leblond (2019); Hoffman & Kringle (2005) |
+| `ems-mls` | Random-intercept designs and the balanced fixed-slope design (expected-mean-square / observed-information MLS); the new-group-mean interval on nested, crossed, and one-way-with-covariates designs. | Francq, Lin & Hoyer (2019) |
+| `anova-mls` | Single-observation / unbalanced fixed-slope (stability) tolerance intervals, and — without a covariate — the intercept-only one-way tolerance interval (unweighted group-mean ANOVA); the new-group-mean interval on every fixed-slope design and on the intercept-only one-way design. | Montes, Burdick & Leblond (2019); Hoffman & Kringle (2005) |
 | `reml-mls` | Random-slope closed-form intervals. | Graybill–Wang MLS two-component bound (Graybill & Wang 1980); generalized Satterthwaite df |
 | `gpq` | Random-slope batch-mean target, and random-slope tolerance intervals when the fit is singular or the closed form's Satterthwaite df is unavailable (generalized pivotal quantity, Monte-Carlo). | Oliva-Aviles & Hauser (2025) |
 
@@ -45,29 +45,32 @@ you pin it (within what is valid — see below).
 ## Which interval for which model
 
 Read down to your model structure. `ems`, `anova`, `reml`, `gpq` are the engine
-tags; superscript letters are explained below.
+tags; superscript letters are explained below. CI_new (`new_group_mean_lmm()`)
+targets the true mean of a new innermost cell: a new group (one-way), a new
+B-within-A cell (nested), a new (a, b) cell (crossed), or a new lot at `t0`
+(fixed and random slope) ^h^.
 
 | Model / situation | CI | PI | TI | CI_new |
 |---|---|---|---|---|
-| Random intercept — one-way, intercept only (`y ~ 1 + (1 | g)`; balanced or unbalanced) | `ems` | `ems` | **`anova`** ^g^ | `ems` |
-| Random intercept — one-way with covariates (balanced or unbalanced) | `ems` | `ems` | `ems` | `ems` |
+| Random intercept — one-way, intercept only (`y ~ 1 + (1 | g)`; balanced or unbalanced) | `ems` | `ems` | **`anova`** ^g^ | **`anova`** ^h^ |
+| Random intercept — one-way with covariates (balanced or unbalanced) | `ems` | `ems` | `ems` | `ems` ^h^ |
 | Random intercept — nested (balanced or unbalanced) | `ems` | `ems` | `ems` | `ems` |
 | Random intercept — crossed **with** interaction (balanced/unbalanced; >2 VCs) | `ems` | `ems` | `ems` | `ems` |
-| Random intercept — crossed **no** interaction | `ems` | `ems` | **error** ^a^ | `ems` |
-| Random intercept — ≥4 grouping factors (off-catalog) | `ems` | `ems` | **error** ^a^ | `ems` |
-| Random intercept + fixed slope — clean balanced | `ems` | `ems` | `ems` | `ems` |
-| Random intercept + fixed slope — single-obs / staggered / unbalanced | `ems` ^b^ | `ems` ^b^ | **`anova`** ^c^ | `ems` ^b^ |
+| Random intercept — crossed **no** interaction | `ems` | `ems` | **error** ^a^ | **error** ^a^ |
+| Random intercept — ≥4 grouping factors (off-catalog) | `ems` | `ems` | **error** ^a^ | **error** ^a^ |
+| Random intercept + fixed slope — clean balanced | `ems` | `ems` | `ems` | **`anova`** ^h^ |
+| Random intercept + fixed slope — single-obs / staggered / unbalanced | `ems` ^b^ | `ems` ^b^ | **`anova`** ^c^ | **`anova`** ^h^ |
 | Random slope — non-singular, future-observation target | `reml` | `reml` | `reml` | `reml` |
 | Random slope — non-singular, batch-mean target (`over = "group_mean"`) | — ^d^ | — ^d^ | **`gpq`** | — ^d^ |
 | Random slope — singular fit, or TI Satterthwaite df unavailable | `reml` ^e^ | `reml` ^e^ | **`gpq`** ^e^ | `reml` ^e^ |
 | Random slope + ≥2 fixed effects | **error** ^f^ | **error** ^f^ | **error** ^f^ | **error** ^f^ |
 
 ^a^ These designs have no closed-form variance decomposition, so `ti_lmm()`
-signals a clear error. CI, PI, and CI_new remain available.
+and `new_group_mean_lmm()` signal a clear error. CI and PI remain available.
 
-^b^ On single-observation / unbalanced fixed-slope data the EMS coverage
-intervals can be anti-conservative (too narrow); `ci_lmm()`, `pi_lmm()`, and
-`new_group_mean_lmm()` emit a warning. The interval is returned unchanged.
+^b^ On single-observation / unbalanced fixed-slope data the EMS confidence and
+prediction intervals can be anti-conservative (too narrow); `ci_lmm()` and
+`pi_lmm()` emit a warning. The interval is returned unchanged.
 
 ^c^ `ti_lmm()` re-routes to the Montes ANOVA closed form (`anova-mls`), which is
 validated for this structure.
@@ -95,6 +98,17 @@ two-sided only), the one-way case of the unweighted-means ANOVA interval.
 `method = "ems-mls"` gives the Francq et al. (2019) interval instead; the two
 coincide on balanced data with a non-singular fit and differ on singular or
 unbalanced data.
+
+^h^ The new-group-mean interval is `centre ± t_df · sqrt(W)`. On fixed-slope and
+intercept-only one-way designs (`anova-mls`) the centre is the unweighted mean of
+the lot means (at `t0` for a fixed slope) and `W = S2_L (1 + 1/I)` plus, with a
+slope, `S2_E (t0 - tbar)^2 / S_tt`, with a Satterthwaite df (`I - 1` without a
+slope). On nested and one-way-with-covariates designs (`ems-mls`)
+`W = V_F + Σ k_j EMS_j` over the random terms with the top factor's df `A - 1`;
+on crossed designs the same `W` with a Satterthwaite df in which `V_F` is
+attached to the two main effects. `W`, `df`, and the rule are in
+`attr(., "diagnostics")`. The one-way-with-covariates construction has not been
+validated by simulation.
 
 ## Confidence-interval degrees of freedom
 
@@ -165,12 +179,13 @@ ti_lmm(fs, newdata = data.frame(Days = 5), P = 0.99,
   the Montes single-observation tolerance interval and the random-slope engines.
   The EMS engine (random-intercept and balanced fixed-slope) and the
   Hoffman-Kringle one-way tolerance interval are two-sided only.
-- **Tolerance intervals** require a closed-form variance decomposition; for
-  crossed-no-interaction and ≥4-factor designs, `ti_lmm()` errors (CI/PI/CI_new
-  remain available).
+- **Tolerance and new-group-mean intervals** require a closed-form variance
+  decomposition; for crossed-no-interaction and ≥4-factor designs, `ti_lmm()` and
+  `new_group_mean_lmm()` error (CI and PI remain available). Random-intercept
+  new-group-mean intervals are two-sided only.
 - **Batch-mean tolerance intervals** (`over = "group_mean"`) are currently
   available only for random-slope models; a random-intercept batch-mean tolerance
-  interval is planned for a future release.
+  interval is not currently available.
 - **Random-slope** models are supported for a single continuous covariate (time
   in the stability design, but any continuous predictor works).
 

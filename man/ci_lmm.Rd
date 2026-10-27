@@ -66,14 +66,14 @@ the model-class to engine map and \code{\link[=lmm_predict]{lmm_predict()}} for 
 \section{Known limitation}{
 
 On a fixed-slope model fitted to single-observation / unbalanced lots (the
-release-only stability structure), the EMS confidence, prediction, and
-new-group-mean intervals can be anti-conservative (too narrow), because
-REML precision-weighting down-weights the single-observation lots.
-\code{\link[=ci_lmm]{ci_lmm()}}, \code{\link[=pi_lmm]{pi_lmm()}}, and \code{\link[=new_group_mean_lmm]{new_group_mean_lmm()}} emit a warning when
-that structure is detected (the interval is still returned, unchanged). The
-\emph{tolerance} interval (\code{\link[=ti_lmm]{ti_lmm()}}) is instead routed to the validated Montes
-ANOVA closed form on this structure; a validated closed form for the
-confidence / prediction / new-group-mean case is planned for a future version.
+release-only stability structure), the EMS confidence and prediction
+intervals can be anti-conservative (too narrow), because REML
+precision-weighting down-weights the single-observation lots. \code{\link[=ci_lmm]{ci_lmm()}} and
+\code{\link[=pi_lmm]{pi_lmm()}} emit a warning when that structure is detected (the interval is
+still returned, unchanged). The tolerance interval (\code{\link[=ti_lmm]{ti_lmm()}}) and the
+new-group-mean interval (\code{\link[=new_group_mean_lmm]{new_group_mean_lmm()}}) use the unweighted lot-mean
+(Montes) closed forms on this structure and do not warn; no validated
+alternative is currently available for the confidence or prediction interval.
 }
 
 \examples{

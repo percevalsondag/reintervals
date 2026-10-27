@@ -128,25 +128,30 @@ checks both the exact closed form and this expectation on CI).
 ## 4. The engine / scope map
 
 The engine is chosen from the fitted model's structure, and can differ between
-the tolerance interval and the other three verbs (full mapping in
-`vignette("choosing-an-interval")` and `?reintervals-models`):
+the verbs (full mapping in `vignette("choosing-an-interval")` and
+`?reintervals-models`):
 
-| Model class | CI / PI / new-group-mean | TI |
-|---|---|---|
-| random intercept, intercept-only one-way (`y ~ 1 + (1 | g)`) | `ems-mls` | `anova-mls` (Hoffman & Kringle 2005) |
-| random intercept, any other fixed part or grouping | `ems-mls` | `ems-mls` |
-| random intercept + fixed slope, clean balanced | `ems-mls` | `ems-mls` |
-| random intercept + fixed slope, single-observation / unbalanced | `ems-mls` (warns: may be anti-conservative) | `anova-mls` |
-| random slope, non-singular, future-observation | `reml-mls` | `reml-mls` |
-| random slope, future-observation, singular fit or TI df unavailable | `reml-mls` (flagged `singular`) | `gpq` |
-| random slope, batch-mean (`over = "group_mean"`, TI only) | --- | `gpq` |
+| Model class | CI / PI | new-group-mean | TI |
+|---|---|---|---|
+| random intercept, intercept-only one-way (`y ~ 1 + (1 | g)`) | `ems-mls` | `anova-mls` | `anova-mls` (Hoffman & Kringle 2005) |
+| random intercept, nested, crossed (with interaction), or one-way with covariates | `ems-mls` | `ems-mls` | `ems-mls` |
+| random intercept + fixed slope, clean balanced | `ems-mls` | `anova-mls` | `ems-mls` |
+| random intercept + fixed slope, single-observation / unbalanced | `ems-mls` (warns: may be anti-conservative) | `anova-mls` | `anova-mls` |
+| random slope, non-singular, future-observation | `reml-mls` | `reml-mls` | `reml-mls` |
+| random slope, future-observation, singular fit or TI df unavailable | `reml-mls` (flagged `singular`) | `reml-mls` (flagged `singular`) | `gpq` |
+| random slope, batch-mean (`over = "group_mean"`, TI only) | --- | --- | `gpq` |
+
+The new-group-mean interval targets the true mean of a new innermost cell (a new
+group, a new B-within-A cell, a new (a, b) cell, or a new lot at `t0`); on
+fixed-slope and intercept-only one-way designs it uses the unweighted lot-mean
+(Montes) construction.
 
 Only the tolerance interval is re-routed: on a singular random-slope fit the TI
 moves to `gpq` while CI, PI, and new-group-mean stay on `reml-mls` (flagged
 `singular`), and it also moves to `gpq` at any `t0` where the closed form's
 Satterthwaite df for the between-group or residual variance is unavailable; on a
 single-observation / unbalanced fixed-slope design the TI moves to `anova-mls`
-while CI, PI, and new-group-mean stay on `ems-mls` and warn (see below). The
+while CI and PI stay on `ems-mls` and warn (see below). The
 intercept-only one-way TI uses `anova-mls`, the Hoffman & Kringle (2005)
 interval, balanced or not.
 
@@ -159,8 +164,7 @@ on request (`lmm_interval_control(ci_df = "kenward-roger")`). The df source is i
 `method = "auto"` (the default) picks the engine in the table. Any other value
 is accepted only if it is in the allowed set for that model's design and
 interval; anything else is an error. For CI, PI, and new-group-mean the allowed
-engine is the one in the table (`ems-mls`, or `reml-mls` for random slopes), so
-there is no alternative. Only the tolerance interval offers a choice: on an
+engine is the one in the table, so there is no alternative. Only the tolerance interval offers a choice: on an
 intercept-only one-way model, `"anova-mls"` (Hoffman & Kringle, the default) and
 `"ems-mls"` (Francq et al.) are both allowed; on a fixed-slope model,
 `"ems-mls"` and `"anova-mls"` are both allowed (forcing `"ems-mls"` on
@@ -170,8 +174,8 @@ for comparison); on a random-slope model with the future-observation target,
 random-intercept models without a fixed slope, and the random-slope batch-mean
 target) has a single allowed TI engine.
 
-**v1 scope:** general fixed effects for random-intercept models; a **single continuous
-covariate** for random-slope models (the stability design).
+**Scope:** general fixed effects for random-intercept models; a **single
+continuous covariate** for random-slope models (the stability design).
 
 ### A warning you should understand
 
@@ -185,9 +189,9 @@ returned). Here the warning fires on the MBL data:
 ci_lmm(fm_mbl, newdata = data.frame(Month = 12))
 ```
 
-The *tolerance* interval is the one re-routed to the validated Montes ANOVA
-closed form on this structure (Section 3); a validated closed form for the
-CI/PI/new-group-mean case is planned for v2.
+The *tolerance* and *new-group-mean* intervals use the unweighted lot-mean
+(Montes) closed forms on this structure (Section 3) and do not warn; no validated
+alternative is currently available for the confidence or prediction interval.
 
 ## 5. Limitations
 
@@ -207,8 +211,7 @@ CI/PI/new-group-mean case is planned for v2.
 * `?reintervals` --- package overview and the engine/scope map.
 * `?reintervals-models` --- the model-class to engine mapping and design tags.
 * `?ci_lmm` --- the full `lmm_interval` output contract (shared by all verbs).
-* `NEWS.md` --- the change log and the v2 roadmap (multi-covariate random-slope
-  intervals).
+* `NEWS.md` --- the change log.
 
 ```{r teardown, include = FALSE}
 options(old)

@@ -53,7 +53,7 @@
   comps <- .var_components(model)
   dc <- .design_components(desc, comps, target, .counts_if_unbalanced(model, desc))
   if (is.null(dc$ems)) {
-    stop(sprintf("Tolerance intervals are not available for a '%s' design (no closed-form variance decomposition). Confidence, prediction, and new-group-mean intervals are available for this model.", desc$type), call. = FALSE)
+    stop(sprintf("Tolerance intervals are not available for a '%s' design (no closed-form variance decomposition). Confidence and prediction intervals are available for this model.", desc$type), call. = FALSE)
   }
   fx <- .fixed(model, newdata)
   singular <- .is_singular(model)

@@ -16,6 +16,21 @@
 ## where MSBU = J_H * sum((ybar_i - ybar_star)^2) / (I - 1) is HK's
 ## unweighted-means between mean square and J_H = I / sum(1 / J_i).
 ## Provenance there: design = "random_intercept".
+##
+## New-group-mean quantities (attributes ngm_W, ngm_df; consumed by
+## new_group_mean_lmm(), never by the TI). Target: the TRUE mean of a new lot at
+## t0, theta_new = mu + beta t0 + a_new. With D = sum_i (tbar_i - tbar_star)^2,
+##   Var(theta_new - Yhat) = s2a (1 + 1/I) + s2e / (I J_H)
+##                           + s2e (t0 - tbar_star)^2 / S_tt,
+##   E(S2_L) = s2a + s2e / J_H + s2e D / ((I - 1) S_tt),   E(S2_E) = s2e,
+## so W = S2_L (1 + 1/I) + S2_E (t0 - tbar_star)^2 / S_tt has
+## E(W) - Var(theta_new - Yhat) = s2e / J_H + (1 + 1/I) s2e D / ((I - 1) S_tt)
+## >= 0.
+## S2_L and S2_E are independent; df = Satterthwaite on the two positive terms
+## (df I - 1 and r). Slope-free branch: W = S2_L (1 + 1/I) with df I - 1, which
+## on balanced data is the classical t_{I-1} sqrt(MSA (1 + 1/I) / n) interval.
+## Validated by simulation (the paper repo's defect study, E5a: no cell below
+## 0.95 - 2 SE on balanced and single-observation designs).
 ## ---------------------------------------------------------------------------
 .montes_core <- function(y, time, lot, t0, content = 0.99, conf = 0.95,
                          sides = c("two.sided", "lower", "upper")) {
@@ -98,6 +113,12 @@
 
   t_eval <- if (has_time) t0 else NA_real_
   nE_vec <- numeric(length(t_eval))
+  ## new-group-mean variance W and its df (see header)
+  c1 <- 1 + 1 / I
+  c2 <- if (has_time) (t_eval - tbar_star)^2 / S_ttw else 0
+  ngm_W  <- c1 * S2_L + c2 * S2_E
+  ngm_df <- if (has_time) ngm_W^2 / ((c1 * S2_L)^2 / s + (c2 * S2_E)^2 / r) else
+    rep(s, length(t_eval))
   rows <- lapply(seq_along(t_eval), function(i) {
     tt     <- t_eval[i]
     Yhat   <- if (has_time) ybar_star + beta_hat * (tt - tbar_star) else ybar_star
@@ -124,6 +145,8 @@
   attr(out, "Vhat_Y")   <- Vhat_Y
   attr(out, "C1")       <- C1
   attr(out, "C2")       <- C2
+  attr(out, "ngm_W")    <- ngm_W
+  attr(out, "ngm_df")   <- ngm_df
   out
 }
 

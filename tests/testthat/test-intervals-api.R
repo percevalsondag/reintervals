@@ -173,14 +173,14 @@ test_that("A4: new_group_mean_lmm handles multi-row newdata (each row correct, s
   fm  <- suppressWarnings(lme4::lmer(Y ~ Month + (1 | Lot), data = mbl_appendix_a,
                                      control = lc))
   nd  <- data.frame(Month = c(0, 6, 12))
-  # MBL is single-obs fixed-slope -> the C1 anti-conservative warning fires (tested
-  # in the C1 block); suppress it here since this test is about multi-row mechanics.
-  out <- suppressWarnings(new_group_mean_lmm(fm, newdata = nd, level = 0.95))
+  # MBL is single-obs fixed-slope -> the new-group mean uses the anova-mls (Fa)
+  # construction, which does not warn (the C1 warning is CI / PI only).
+  out <- new_group_mean_lmm(fm, newdata = nd, level = 0.95)
   expect_s3_class(out, "lmm_interval")
   expect_equal(nrow(out), 3L)
   expect_equal(out$Month, c(0, 6, 12))
   expect_true(all(out$type == "new_group_mean"))
-  expect_true(all(out$method == "ems-mls"))
+  expect_true(all(out$method == "anova-mls"))
   expect_true(all(is.finite(out$lower)) && all(out$upper > out$lower))
   # each row equals the single-row call at that Month (the loop is row-correct)
   for (i in seq_len(3)) {
@@ -217,14 +217,14 @@ test_that("B8: print/as.data.frame dispatch for the internal classes", {
 })
 
 # ---- C1: anti-conservative warning on single-obs / unbalanced fixed-slope -----
-test_that("C1 FIRES: ci/pi/new_group_mean warn on single-obs (MBL) fixed-slope data", {
+test_that("C1 FIRES: ci/pi warn on single-obs (MBL) fixed-slope data; new_group_mean does not", {
   skip_if_not_installed("lme4")
   fm <- suppressWarnings(lme4::lmer(Y ~ Month + (1 | Lot), data = mbl_appendix_a,
                                     control = lc))
   nd <- data.frame(Month = 12)
   expect_warning(ci_lmm(fm, newdata = nd),             "anti-conservative")
   expect_warning(pi_lmm(fm, newdata = nd),             "anti-conservative")
-  expect_warning(new_group_mean_lmm(fm, newdata = nd), "anti-conservative")
+  expect_warning(new_group_mean_lmm(fm, newdata = nd), NA)    # Fa: no warning
 })
 
 test_that("C1 DOES NOT FIRE: clean balanced M1, plain random-intercept, slope, or ti_lmm", {

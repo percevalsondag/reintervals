@@ -172,7 +172,7 @@
   time_var <- setdiff(names(fe), "(Intercept)")
   if (length(time_var) != 1L) {
     stop("random-slope intervals require a single continuous covariate (e.g. ~ 1 + time); ",
-         "multiple fixed effects with a random slope are a planned v2 extension.",
+         "multiple fixed effects with a random slope are not currently supported.",
          call. = FALSE)
   }
   t0s <- if (is.null(newdata)) stats::model.frame(model)[[time_var]][1] else
@@ -275,8 +275,8 @@
 #' available for one-way, nested, and crossed-with-interaction random-intercept
 #' designs, the fixed-slope stability design, and random-slope models. For a
 #' design without such a decomposition (two crossed factors with no interaction
-#' term, or four or more grouping factors), ti_lmm() signals an error; ci_lmm(),
-#' pi_lmm(), and new_group_mean_lmm() remain available for those models.
+#' term, or four or more grouping factors), ti_lmm() and new_group_mean_lmm()
+#' signal an error; ci_lmm() and pi_lmm() remain available for those models.
 #'
 #' @param model A fitted `lmerMod`.
 #' @param newdata Row(s) giving the fixed-effect combination(s); the time column

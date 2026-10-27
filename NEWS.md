@@ -30,6 +30,20 @@
   confidence interval falls back to the SAS-style containment df (A - 1 for
   one-way and nested designs, min(A, B) - 1 for crossed ones) instead of the
   anti-conservative N - p.
+* The random-intercept new-group-mean interval (`new_group_mean_lmm()`) was
+  anti-conservative, with coverage as low as 0.80: it used the
+  observable-variance df and collapsed when a variance component was truncated
+  to zero. It now targets the true mean of a new innermost cell (a new group,
+  B-within-A cell, or (a, b) cell; a new lot at `t0` for the fixed-slope
+  design) with constructions validated by simulation: the unweighted lot-mean
+  (Montes) construction for fixed-slope and intercept-only one-way designs
+  (`anova-mls`), and an EMS construction with the top factor's df (nested) or
+  a Satterthwaite df with `V_F` attached to the main effects (crossed)
+  (`ems-mls`). `W`, `df`, and `df_rule` are reported in
+  `attr(., "diagnostics")`. Designs without a closed-form decomposition now
+  signal an error. On single-observation fixed-slope designs the
+  new-group-mean interval no longer warns (the warning remains for the
+  confidence and prediction intervals).
 * Random-slope tolerance intervals switch to GPQ not only on a singular fit
   but also, at a given `t0`, when the Satterthwaite df of the closed form's
   between-group or residual variance is unavailable (its containment fallback
@@ -66,10 +80,6 @@
   corrected (only the tolerance interval is rerouted on singular random-slope
   fits and on single-observation fixed-slope designs; `method =` overrides are
   limited to each design's allowed engines).
-
-## Pending
-<!-- Placeholder for the outstanding new-group-mean construction fix,
-     pending design decisions. -->
 
 # reintervals 0.1.0
 

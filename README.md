@@ -114,11 +114,12 @@ on CI: the Francq, Lin & Hoyer (2019) worked numbers; the Montes-Burdick-Leblond
 arithmetic against committed reference values to ~`1e-9`; and the GPQ content
 variance against the Oliva-Aviles & Hauser (2025) closed form (`tau^2 = 8.439`).
 
-## Scope and roadmap
+## Scope
 
-v1 covers general-fixed-effect random-intercept models and single-time-covariate
-random-slope (stability) models. The planned v2 extension is multi-covariate
-random-slope intervals; see `NEWS.md` for the change log.
+The package covers general-fixed-effect random-intercept models and
+single-time-covariate random-slope (stability) models. Random-slope models with
+more than one fixed-effect covariate are not currently supported; see `NEWS.md`
+for the change log.
 
 ## License and citation
 

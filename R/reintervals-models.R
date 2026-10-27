@@ -45,7 +45,7 @@
 #' engines. The expected-mean-square (EMS) engine used for random-intercept and
 #' balanced fixed-slope designs, and the Hoffman-Kringle tolerance interval used
 #' for intercept-only one-way models, produce two-sided intervals only; one-sided
-#' EMS intervals are planned for a future release.
+#' EMS intervals are not currently available.
 #'
 #' @seealso [ci_lmm()], [pi_lmm()], [ti_lmm()], [new_group_mean_lmm()],
 #'   [lmm_predict()], [ti_anova_raw()], [ti_gpq_raw()].

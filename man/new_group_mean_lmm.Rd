@@ -56,24 +56,45 @@ error \code{se}; and any GPQ / ANOVA intermediates);
 \code{"nested"}, \code{"crossed"}, or \code{NA} for slope models).
 }
 \description{
-One of the four interval verbs: a prediction interval for the mean of one new,
-as-yet-unobserved group/batch: the CInew / new-batch-mean interval. It
-is the prediction interval with the residual component removed,
-\eqn{\mu(t_0) \pm t_{\nu_G}\sqrt{V_F + V_G}}; coverage is \code{level}/\code{alpha}, so
-it carries no content \code{P} (unlike \code{\link[=ti_lmm]{ti_lmm()}}). Dispatch and arguments are
-as for \code{\link[=ci_lmm]{ci_lmm()}}.
+One of the four interval verbs: an interval for the mean of one new,
+as-yet-unobserved group/batch (the CInew / new-batch-mean interval). Its
+coverage is \code{level}/\code{alpha}, so it carries no content \code{P} (unlike
+\code{\link[=ti_lmm]{ti_lmm()}}).
 }
-\section{Known limitation}{
+\section{Target}{
 
-On a fixed-slope model fitted to single-observation / unbalanced lots (the
-release-only stability structure), the EMS confidence, prediction, and
-new-group-mean intervals can be anti-conservative (too narrow), because
-REML precision-weighting down-weights the single-observation lots.
-\code{\link[=ci_lmm]{ci_lmm()}}, \code{\link[=pi_lmm]{pi_lmm()}}, and \code{\link[=new_group_mean_lmm]{new_group_mean_lmm()}} emit a warning when
-that structure is detected (the interval is still returned, unchanged). The
-\emph{tolerance} interval (\code{\link[=ti_lmm]{ti_lmm()}}) is instead routed to the validated Montes
-ANOVA closed form on this structure; a validated closed form for the
-confidence / prediction / new-group-mean case is planned for a future version.
+The target is the \strong{true} mean of a new innermost cell: a new group in a
+one-way design, a new B-within-A cell in a nested design, a new (a, b) cell
+in a crossed design; for the fixed-slope and random-slope designs, the true
+mean of a new lot at \code{t0}.
+}
+
+\section{Constructions}{
+
+The interval is \verb{centre +/- t_df * sqrt(W)}, with \code{W}, \code{df} and the rule
+reported in \code{attr(., "diagnostics")} (\code{W}, \code{df}, \code{df_rule}):
+\itemize{
+\item fixed slope (one grouping factor, any balance): the unweighted
+lot-mean (Montes) centre \code{Yhat(t0)} with
+\code{W = S2_L (1 + 1/I) + S2_E (t0 - tbar)^2 / S_tt} and a Satterthwaite df
+on the two mean squares (\code{df_rule = "anova-satterthwaite"}, method
+\code{"anova-mls"});
+\item intercept-only one-way: the unweighted mean of group means with
+\code{W = S2_L (1 + 1/I)} and \code{df = I - 1} (\code{"anova-single"},
+\code{"anova-mls"});
+\item nested, and one-way with other fixed effects:
+\verb{W = V_F + sum_j k_j EMS_j} over the random terms (REML-implied expected
+mean squares, synthesis coefficients when unbalanced) with the top
+factor's df \code{A - 1} (\code{"top-factor"}, \code{"ems-mls"});
+\item crossed with interaction: the same \code{W}, with a Satterthwaite df in
+which \code{V_F} is attached to the two main-effect terms
+(\code{"satterthwaite-vf"}, \code{"ems-mls"});
+\item random slope: the REML closed form
+\eqn{\mu(t_0) \pm t_{\nu_G}\sqrt{V_F + V_G}} (\code{"reml-mls"}).
+}
+A design without a closed-form variance decomposition (two crossed factors
+without their interaction, three or more grouping factors) is an error.
+Random-intercept new-group-mean intervals are two-sided only.
 }
 
 \examples{

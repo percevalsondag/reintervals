@@ -35,6 +35,14 @@ test_that("singular fit: all four verbs report singular = TRUE (CI included)", {
 
   expect_true(all(ci_lmm(m)$singular))
   expect_true(all(pi_lmm(m)$singular))
-  expect_true(all(new_group_mean_lmm(m)$singular))
+  # new_group_mean: every run mean here is exactly 0.981, so the unweighted
+  # between-group mean square is 0 and the anova-mls W is 0 -> a clear error,
+  # not a zero-width interval. On an ordinary singular fit (MSA < MSE) it
+  # returns an interval flagged singular.
+  expect_error(new_group_mean_lmm(m), "not positive")
+  set.seed(4); g <- factor(rep(1:5, each = 3))
+  m2 <- suppressMessages(lme4::lmer(y ~ 1 + (1 | g), data = data.frame(g = g, y = 10 + rnorm(15))))
+  expect_true(lme4::isSingular(m2))
+  expect_true(all(new_group_mean_lmm(m2)$singular))
   expect_true(all(suppressWarnings(ti_lmm(m))$singular))   # TI also warns on singular
 })
