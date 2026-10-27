@@ -44,6 +44,12 @@
   signal an error. On single-observation fixed-slope designs the
   new-group-mean interval no longer warns (the warning remains for the
   confidence and prediction intervals).
+* A variance-component covariance matrix (the inverse observed information)
+  that is not positive definite is now treated as unavailable: the
+  containment df is used and the random-slope tolerance interval routes to
+  GPQ. Previously an indefinite matrix could yield arbitrarily large
+  Satterthwaite df (anti-conservative), and the routing could differ between
+  evaluation times of the same fit.
 * Random-slope tolerance intervals switch to GPQ not only on a singular fit
   but also, at a given `t0`, when the Satterthwaite df of the closed form's
   between-group or residual variance is unavailable (its containment fallback

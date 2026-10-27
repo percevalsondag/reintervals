@@ -150,6 +150,7 @@
                                            error = function(e) NULL)
   cov_theta <- if (is.null(hmat)) NULL else tryCatch(solve(-hmat),
                                                      error = function(e) NULL)
+  if (!.is_pd_cov(cov_theta)) cov_theta <- NULL   # not a covariance -> fallbacks
   vS <- if (is.null(cov_theta)) NA_real_ else sum(cov_theta)
   use_hessian <- isTRUE(is.finite(vS) && vS > 0) && !singular
   df_pi <- if (use_hessian) 2 * sigmaT2^2 / vS else .satterthwaite_df(model, sigmaT2)
@@ -160,6 +161,23 @@
        components = stats::setNames(th, c(gn, "Residual")),
        cov_theta = if (use_hessian) cov_theta else NULL,
        parts = list(Al = Al, th = th, X = X, N = N, k = k))
+}
+
+## Is M a usable covariance matrix of variance-component estimates? Symmetric
+## (to 1e-8 relative) and positive definite with every eigenvalue
+## > tol * max|eigenvalue|, tol = 1e-8 (relative, so scale-free). An indefinite
+## or numerically singular inverse Hessian is not a covariance: the quadratic
+## forms g' M g behind every Satterthwaite df can then be ~0 or negative, giving
+## arbitrarily large (anti-conservative) df. Used by .theta_cov() (EMS path: PI
+## df and CI Satterthwaite) and .vfun_vc_cov() (random-slope path); a FALSE
+## result makes the caller drop the matrix (NULL) and use its df fallback.
+.is_pd_cov <- function(M, tol = 1e-8) {
+  if (is.null(M) || !is.matrix(M) || nrow(M) != ncol(M) || any(!is.finite(M))) {
+    return(FALSE)
+  }
+  if (max(abs(M - t(M))) > tol * max(abs(M))) return(FALSE)
+  ev <- eigen((M + t(M)) / 2, symmetric = TRUE, only.values = TRUE)$values
+  all(ev > tol * max(abs(ev)))
 }
 
 ## ---- fixed-effect prediction l'beta and Var(l'beta) = l C11 l' --------------

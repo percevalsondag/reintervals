@@ -208,3 +208,41 @@ test_that("route_reason: closed form on a healthy fit, singular -> gpq, batch-me
   expect_identical(z$method, "gpq")
   expect_identical(attr(z, "diagnostics")$route_reason, "singular")
 })
+
+test_that(".is_pd_cov accepts a PD covariance and rejects indefinite / singular / malformed ones", {
+  expect_true(.is_pd_cov(matrix(c(2, 0.5, 0.5, 1), 2)))                  # PD
+  expect_false(.is_pd_cov(matrix(c(1, 2, 2, 1), 2)))                     # eigen 3, -1
+  expect_false(.is_pd_cov(matrix(c(1, 1, 1, 1), 2)))                     # singular
+  expect_false(.is_pd_cov(matrix(c(1, 0, 0, 1e-12), 2)))                 # below 1e-8 * max
+  expect_true(.is_pd_cov(matrix(c(1, 0, 0, 1e-6), 2)))                   # above it
+  expect_false(.is_pd_cov(matrix(c(2, 0.5, 0.4, 1), 2)))                 # not symmetric
+  expect_false(.is_pd_cov(NULL))
+  expect_false(.is_pd_cov(matrix(c(1, NA, NA, 1), 2)))
+})
+
+test_that("an indefinite Cov(phi) is unavailable: containment df at every t0 and the TI routes to gpq", {
+  skip_if_not_installed("lme4")
+  skip_on_cran()   # near-boundary fit (the mechanism): status could flip with lme4 jitter
+  # One of the 7 E3 fits whose Satterthwaite df failed at one t0 only, because
+  # the inverse Hessian is indefinite (smallest eigenvalue ~ -1e-9): sigma1 =
+  # 0.05, 20 batches, rep 229, seed = MASTER_SEED + 100000 * k + rep with k = 2
+  # (the coverage study's DGP, scripts/coverage_reml.R).
+  set.seed(20261026L + 100000L * 2L + 229L)
+  d <- expand.grid(time = c(0, 3, 6, 9, 12), batch = factor(1:20))
+  b0 <- rnorm(20, 0, 3); b1 <- rnorm(20, 0, 0.05)
+  d$y <- 100 - 2 * d$time + b0[d$batch] + b1[d$batch] * d$time + rnorm(nrow(d), 0, 2)
+  fm <- suppressWarnings(suppressMessages(lme4::lmer(y ~ time + (time | batch), data = d)))
+  expect_false(lme4::isSingular(fm))
+  p <- .vfun_parse(fm)
+  H <- numDeriv::hessian(p$reml_nll, p$phi)
+  expect_false(.is_pd_cov(solve(H)))                 # the raw inverse is indefinite
+  for (t0 in c(6, 12)) {
+    cp <- vfun_extract(fm, t0 = t0)
+    expect_null(cp$cov)
+    expect_true(all(attr(cp, "df_fallback")[c("G", "e")]), info = t0)
+  }
+  x <- ti_lmm(fm, data.frame(time = c(6, 12)), P = 0.99,
+              control = lmm_interval_control(seed = 1, M = 2000))
+  expect_identical(x$method, c("gpq", "gpq"))
+  expect_identical(attr(x, "diagnostics")$route_reason, c("df_unavailable", "df_unavailable"))
+})

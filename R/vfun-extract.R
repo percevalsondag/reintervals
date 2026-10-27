@@ -201,29 +201,24 @@
 }
 
 ## ---- Cov(phi) via inverse observed information  ---------
-## SAFEGUARD (2): isSingular + near-boundary detection. cov is NULL when the
-## Hessian fails or is not PD; `boundary` flags a small-but-positive component.
+## SAFEGUARD (2): cov is NULL when the Hessian fails, cannot be inverted, or its
+## inverse is not a valid covariance (.is_pd_cov: symmetric positive definite,
+## every eigenvalue > 1e-8 * the largest |eigenvalue|). An indefinite inverse
+## Hessian makes the Satterthwaite df arbitrarily large (anti-conservative), so
+## a NULL cov sends every df to the containment fallback and the random-slope
+## TI to GPQ. `boundary` flags a small-but-positive component.
 .vfun_vc_cov <- function(parsed, boundary_tol = 1e-4) {
   phi <- parsed$phi
   boundary <- .vfun_is_boundary(phi, boundary_tol)  # variances-only (see helper)
 
   H <- tryCatch(numDeriv::hessian(parsed$reml_nll, phi), error = function(e) NULL)
-  ok <- !is.null(H) && all(is.finite(H))
-  cov <- NULL; singular <- TRUE
-  if (ok) {
+  cov <- NULL
+  if (!is.null(H) && all(is.finite(H))) {
     cov <- tryCatch(solve(H), error = function(e) NULL)
-    if (!is.null(cov) && all(is.finite(cov))) {
-      ev <- tryCatch(eigen(cov, symmetric = TRUE, only.values = TRUE)$values,
-                     error = function(e) NA_real_)
-      singular <- any(!is.finite(ev)) || any(ev <= 0)
-    } else {
-      cov <- NULL
-    }
+    if (!.is_pd_cov(cov)) cov <- NULL
   }
-  if (is.null(cov)) singular <- TRUE
 
-  list(cov = cov, phi = phi, boundary = boundary, singular = singular,
-       ok = !is.null(cov))
+  list(cov = cov, phi = phi, boundary = boundary, ok = !is.null(cov))
 }
 
 #' Build a `vfun_components` from a fitted slope (or fixed-slope) lmer model
