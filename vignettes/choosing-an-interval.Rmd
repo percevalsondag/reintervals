@@ -90,9 +90,12 @@ By default `method = "auto"` selects the one engine valid for your model. For
 most models there is no alternative — requesting a different engine errors. Only
 two cases offer a genuine choice, both for tolerance intervals:
 
-- **Single-observation fixed-slope TI:** default `"anova-mls"` (Montes, validated
-  for this structure); `"ems-mls"` forces the EMS engine with no re-route — but
-  that's the path flagged as anti-conservative here, so it's mainly for comparison.
+- **Fixed-slope (random intercept + fixed slope) TI, any design:** `"anova-mls"`
+  (Montes) and `"ems-mls"` are both accepted, clean balanced designs included. The
+  default is `"ems-mls"` on a clean balanced design and `"anova-mls"` on a
+  single-observation / unbalanced one (validated for that structure); forcing
+  `"ems-mls"` there takes the path flagged as anti-conservative, so it's mainly
+  for comparison.
 - **Random-slope TI (future-observation target):** default `"reml-mls"` (closed
   form) on a non-singular fit; `"gpq"` (Monte-Carlo) is also valid and becomes the
   default automatically when the fit is singular. For the batch-mean target, only
