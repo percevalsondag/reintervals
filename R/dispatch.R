@@ -79,18 +79,35 @@
   length(unique(tsets)) == 1L                            # identical time grids
 }
 
+## The fixed-slope (M1) time column, or NA if the fixed part is not a single
+## numeric time covariate. Maps the one non-intercept fixed TERM to its
+## model-frame column via the terms object (not the coefficient name, which for
+## a factor / logical is e.g. "grpB" / "flagTRUE" and names no column), and
+## requires that column to be numeric. A 2-level factor or a logical covariate
+## also yields one non-intercept coefficient but is NOT a time design -> NA,
+## and the model follows the EMS path.
+.m1_time_name <- function(model) {
+  covars <- setdiff(names(lme4::fixef(model)), "(Intercept)")
+  if (length(covars) != 1L) return(NA_character_)
+  labs <- attr(stats::terms(model, fixed.only = TRUE), "term.labels")
+  if (length(labs) != 1L) return(NA_character_)
+  col <- stats::model.frame(model)[[labs]]
+  if (is.null(col) || !is.numeric(col) || NCOL(col) != 1L) return(NA_character_)
+  labs
+}
+
 ## The detector for "fixed-slope model with single-observation /
 ## unbalanced lots": the structure on which (a) ti_lmm re-routes the TOLERANCE
 ## interval to the Montes ANOVA closed form, and (b) the EMS CI/PI/new-group-mean
 ## drift anti-conservative (REML precision-weighting). TRUE iff: no random slope,
-## exactly one fixed covariate (a fixed-slope model), and NOT clean balanced.
-## Shared by ti_lmm (routing) and the coverage verbs (warning) so the two can
-## never diverge.
+## exactly one numeric fixed covariate (a fixed-slope model; see
+## .m1_time_name), and NOT clean balanced. Shared by ti_lmm (routing) and the
+## coverage verbs (warning) so the two can never diverge.
 .is_single_obs_m1 <- function(model) {
   if (.has_random_slope(model)) return(FALSE)
-  covars <- setdiff(names(lme4::fixef(model)), "(Intercept)")
-  if (length(covars) != 1L) return(FALSE)
-  !.m1_is_clean_balanced(model, covars)
+  time_name <- .m1_time_name(model)
+  if (is.na(time_name)) return(FALSE)
+  !.m1_is_clean_balanced(model, time_name)
 }
 
 ## Target-aware slope-engine selection (the GPQ routing policy).
@@ -281,9 +298,7 @@ ti_lmm <- function(model, newdata = NULL, P = 0.95,
   }
 
   ## ---- random intercept only -------------------------------------------------
-  fe <- lme4::fixef(model)
-  covars <- setdiff(names(fe), "(Intercept)")
-  time_name <- if (length(covars) == 1L) covars else NA_character_
+  time_name <- .m1_time_name(model)
   is_m1 <- !is.na(time_name)
 
   ## batch-mean tolerance is GPQ-only (random slope); DNE for random intercept / fixed-slope

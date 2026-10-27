@@ -23,9 +23,10 @@
 #'
 #' @return A data frame with the `newdata` predictor columns plus `type`,
 #'   `estimate`, `lower`, `upper`, `df`, `level`. When the PI is computed the
-#'   variance components are attached as `attr(., "components")`, and
-#'   `attr(., "pi_df_fallback")` / `attr(., "singular")` flag the singular-fit
-#'   guard (see `vc_extract()`).
+#'   variance components are attached as `attr(., "components")` and
+#'   `attr(., "pi_df_fallback")` flags the singular-fit df guard (see
+#'   `vc_extract()`). `attr(., "singular")` (`lme4::isSingular()`) is always
+#'   set, for the CI and the PI alike.
 #'
 #' @seealso [ti_lmm()] for tolerance intervals; `ci_mean()`, `pi_newobs()`.
 #' @references Francq BG, Lin D, Hoyer W (2019). Confidence, prediction, and
@@ -85,7 +86,9 @@ intervals_lmm <- function(model, newdata = NULL, level = 0.95, conf = 0.95,
   if (!is.null(theta)) {
     attr(out, "components") <- theta$components
     attr(out, "pi_df_fallback") <- isTRUE(theta$pi_df_fallback)
-    attr(out, "singular") <- isTRUE(theta$singular)
   }
+  ## set whether or not theta was computed (a CI-only call skips .theta_cov), so
+  ## the CI reports lme4::isSingular() like the PI / new-group-mean / TI.
+  attr(out, "singular") <- .is_singular(model)
   out
 }

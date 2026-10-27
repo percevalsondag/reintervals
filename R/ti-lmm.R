@@ -2,9 +2,9 @@
 #'
 #' The beta-content / gamma-confidence tolerance interval of Francq, Lin & Hoyer
 #' (2019, Eq. 26), dispatched by the detected random structure (one random
-#' factor; two nested or two crossed random factors). Designs outside that
-#' closed-form catalog --- and, in v1, unbalanced nested/crossed --- return `NA`
-#' bounds with an explanatory `note` attribute; use `intervals_lmm()` for the
+#' factor; two nested or two crossed random factors), balanced or unbalanced
+#' (unbalanced nested/crossed via EMS synthesis). Designs outside that
+#' closed-form catalog signal an error; use `intervals_lmm()` for the
 #' prediction interval there.
 #'
 #' This is a thin wrapper: it reaches `lme4` only through `vc_extract()`'s
@@ -25,8 +25,7 @@
 #' @return A data frame with the `newdata` predictor columns plus `type = "TI"`,
 #'   `estimate`, `lower`, `upper`, `level`, `conf`. `attr(., "design")` is the
 #'   detected structure, `attr(., "balanced")` the balance flag,
-#'   `attr(., "singular")` whether `lme4::isSingular()` flags the fit, and
-#'   `attr(., "note")` any reason the TI was not computed.
+#'   and `attr(., "singular")` whether `lme4::isSingular()` flags the fit.
 #'
 #' @seealso `intervals_lmm()` for CI/PI; `ti_francq()`.
 #' @references Francq BG, Lin D, Hoyer W (2019). Confidence, prediction, and

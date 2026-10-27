@@ -74,7 +74,7 @@ ti_francq <- function(comp, content = 0.95, conf = 0.95,
   }
   if (identical(comp$target, "true_value")) {
     stop("The true_value (between-level only) tolerance interval is not ",
-         "supported for the fixed-slope design; only `target = \"observable\"` is implemented. ",
+         "supported for any design; only `target = \"observable\"` is implemented. ",
          "(`pi_newobs()` does support true_value.) The true_value TI requires ",
          "the difference-of-EMS / sign-unrestricted MLS variant and is deferred ",
          "to a focused follow-up with its own derivation review and validation.",

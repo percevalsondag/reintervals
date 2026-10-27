@@ -22,7 +22,7 @@ test_that("ti_francq implements the documented Eq. 26 (matches re-derivation)", 
   expect_equal(ti$upper, unname(hand[["upper"]]))
 })
 
-test_that("ti_francq reproduces Francq Section 5.2: 95/90 TI ~ [0.845, 1.117]", {
+test_that("ti_francq reproduces Francq et al. (2019) Section 5.2: 95/90 TI ~ [0.845, 1.117]", {
   # "95% TI_90" denotes 95% content (beta) at 90% confidence
   # (gamma) -- the 95/90 pharma convention (maintainer-confirmed). With the
   # source-endorsed formula (a = 1 - conf, z_{(1+content)/2}, lower-tail qchisq)

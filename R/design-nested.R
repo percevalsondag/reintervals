@@ -1,8 +1,9 @@
 #' EMS decomposition for the two-fold nested design (pure, balanced)
 #'
 #' Builds the expected-mean-square linear combination for `y ~ FE + (1|a/b)`
-#' (Francq 2019, Eq. 29-31), balanced data. Pure --- no `lme4`. The unbalanced
-#' nested EMS coefficients are deferred to v2.
+#' (Francq 2019, Eq. 29-31), balanced data. Pure --- no `lme4`. Unbalanced
+#' nested data are handled separately, by Hartley's method of synthesis
+#' (`ems_synthesis()`, design-synthesis.R).
 #'
 #' @param desc A nested design descriptor from `classify_design()` (uses
 #'   `grp_alpha`, `grp_beta`, `A`, `B`, `n`).

@@ -27,24 +27,32 @@
 #'     `s2_0`, `s2_1`, `s2e` are variances (>= 0); `s01` **may be negative**.}
 #'   \item{`cov`}{`Cov(phi)`, the inverse-observed-information (REML-Hessian)
 #'     reconstruction; a symmetric `length(phi) x length(phi)` matrix, or `NULL`
-#'     when the fit is singular and the Hessian is unavailable.}
+#'     when the numerical Hessian or its inverse fails (errors or is
+#'     non-finite). It is not tied to `singular`: a singular fit can still carry
+#'     a `cov`.}
 #'   \item{`mean`, `var_mean`}{The per-`t0` mean-line scalars `mu(t0) = x0'beta`
 #'     and `V_F(t0) = x0' Vbeta x0`.}
 #'   \item{`V_G`, `V_T`, `n_E`}{The quadratic-form payload at `t0`:
 #'     `V_G(t0) = z0' Sigma z0` (between-batch variance, residual excluded),
 #'     `V_T = V_G + s2e` (future-observation variance), and the effective sample
-#'     size `n_E = V_T / V_F` (`Inf` when `V_F = 0`).}
+#'     size `n_E = content_var / V_F`, where the content variance is `V_T`
+#'     for the observable target and `V_G` for the true-value target (`Inf`
+#'     when `V_F = 0`).}
 #'   \item{`dfs`}{Named numeric of the Satterthwaite / containment degrees of
 #'     freedom (e.g. the mean-line, future-obs, between, and residual df). `Inf`
 #'     allowed; values positive.}
 #'   \item{`t0`}{The single time point at which the payload is evaluated.}
 #'   \item{`singular`}{`lme4::isSingular()` flag --- the fit is *exactly*
 #'     degenerate (a variance component on the boundary at zero).}
-#'   \item{`boundary`}{Near-boundary flag --- a variance component is
-#'     small-but-positive (below `boundary_tol` of total variance). Distinct
-#'     from `singular`: this is the regime where the Satterthwaite df collapses
-#'     (Karl, Rushing, Burdick & Hofer 2026) and the batch-mean closed form
-#'     breaks, so the dispatch layer must be able to see it.}
+#'   \item{`boundary`}{Near-boundary flag on the point estimate --- some
+#'     random-effect variance (`s2_0`, `s2_1`) is below `boundary_tol`
+#'     (default `1e-4`) times the total variance (sum of all `s2_*`, residual
+#'     included). Distinct from `singular`. It is advisory only: it does not
+#'     drive the Satterthwaite -> containment df fallback, which triggers on a
+#'     missing `cov` or a non-finite / non-positive Satterthwaite df. Because
+#'     `s2_1` is a slope variance (in units of y^2 per squared time unit), the
+#'     flag depends on the time scale: rescaling time (e.g. months to years)
+#'     can switch it.}
 #' }
 #'
 #' @param type Character model code (see [reintervals-models]).
@@ -59,10 +67,12 @@
 #' @param dfs Named numeric vector of degrees of freedom (positive; `Inf`
 #'   allowed; no `NA`).
 #' @param t0 Numeric scalar time point.
-#' @param cov `Cov(phi)` matrix, or `NULL` (singular fit). Default `NULL`.
+#' @param cov `Cov(phi)` matrix, or `NULL` (Hessian or its inverse
+#'   unavailable). Default `NULL`.
 #' @param singular Logical scalar; the fit is exactly degenerate. Default `FALSE`.
-#' @param boundary Logical scalar; a variance component is small-but-positive
-#'   (near-boundary). Distinct from `singular`. Default `FALSE`.
+#' @param boundary Logical scalar; a random-effect variance is below
+#'   `boundary_tol` x total variance (near-boundary; see above). Distinct from
+#'   `singular`. Default `FALSE`.
 #'
 #' @return An object of class `vfun_components`.
 #'

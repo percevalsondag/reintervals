@@ -1,3 +1,33 @@
+# reintervals 0.1.1
+
+## Bug fixes
+* A model whose single non-intercept fixed term is a factor or logical
+  covariate (e.g. `y ~ grp + (1 | lot)` with a 2-level `grp`) was misdetected as
+  the fixed-slope stability design. When every lot had at least two
+  observations, all four verbs failed ("arguments must have same length"). With
+  single-observation lots, `ci_lmm()`, `pi_lmm()`, and `new_group_mean_lmm()`
+  gave a spurious fixed-slope single-observation warning, and `ti_lmm()` was
+  misrouted to `anova-mls` and failed. The fixed-slope design now requires
+  that term to be a numeric model-frame column (mapped through the model's
+  terms, not the coefficient name). Any other model follows the `ems-mls`
+  path. Numeric-covariate routing is unchanged.
+* `ci_lmm()` now reports `singular` from `lme4::isSingular()`, as `pi_lmm()`,
+  `new_group_mean_lmm()`, and `ti_lmm()` already did. Previously the
+  confidence interval always reported `singular = FALSE`.
+* Internal documentation corrected to match the code: unbalanced nested and
+  crossed designs are supported through EMS synthesis; off-catalog designs make
+  `ti_lmm()` signal an error (they do not return `NA` bounds); the
+  random-slope `Cov(phi)` is `NULL` only when the Hessian or its inverse fails;
+  the `boundary` flag is an advisory flag on the point estimate (time-scale
+  dependent) and does not drive the df fallback; `n_E` uses the target's content
+  variance; the `true_value` tolerance-interval error no longer claims to apply
+  only to the fixed-slope design; and the `Cov(theta)` Hessian is described as
+  the REML log-likelihood on the variance scale, with beta at its GLS value.
+
+## Pending
+<!-- Placeholder for the two outstanding fixes (new-group-mean construction;
+     CI df method), pending design decisions. -->
+
 # reintervals 0.1.0
 
 Initial release: confidence, prediction, tolerance, and

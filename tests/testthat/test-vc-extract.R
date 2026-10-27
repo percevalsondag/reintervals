@@ -16,7 +16,7 @@ test_that("vc_extract reproduces Section 5.2 components and df_PI FROM the Hessi
   expect_false(attr(comp, "pi_df_fallback"))
 })
 
-test_that("vc_extract end-to-end reproduces Section 5.2 CI / PI / TI", {
+test_that("vc_extract end-to-end reproduces Francq et al. (2019) Section 5.2 CI / PI / TI", {
   skip_if_not_installed("lme4")
   comp <- vc_extract(fit_52())
   ci <- ci_mean(comp, conf = 0.95)

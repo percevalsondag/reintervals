@@ -118,8 +118,9 @@
 }
 
 ## ---- total variance, its variance, df_PI (observed Fisher information) -------
-## Cov(theta_hat) from the observed information: a numerical Hessian
-## of the profiled REML log-likelihood (== PROC MIXED ASYCOV). 
+## Cov(theta_hat) from the observed information: a numerical Hessian of the
+## REML log-likelihood on the variance scale (theta = the variance components),
+## with beta at its GLS value for each theta (== PROC MIXED ASYCOV).
 .theta_cov <- function(model) {
   vc <- .assert_random_intercepts(model)
   Zl <- lme4::getME(model, "Ztlist")

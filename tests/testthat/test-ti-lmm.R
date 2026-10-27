@@ -1,6 +1,6 @@
 # fit_52() is provided by helper-fixtures.R.
 
-test_that("ti_lmm reproduces Section 5.2 TI (content = 0.95, conf = 0.90)", {
+test_that("ti_lmm reproduces Francq et al. (2019) Section 5.2 TI (content = 0.95, conf = 0.90)", {
   skip_if_not_installed("lme4")
   out <- .ti_ems(fit_52(), level = 0.95, conf = 0.90)
   expect_equal(c(out$lower, out$upper), c(0.845, 1.117), tolerance = 2e-3)
