@@ -35,7 +35,7 @@ new_re_interval(
 
 \item{df}{Degrees of freedom used for the bound (\code{NA} for the normal-based TI).}
 
-\item{sides}{Character: \code{"two"} (two-sided intervals only).}
+\item{sides}{Character: \code{"two"}, \code{"lower"}, or \code{"upper"}.}
 
 \item{target}{Character target distribution (\code{"observable"} / \code{"true_value"}),
 or \code{NA} for the CI (which concerns the mean, not a future value).}

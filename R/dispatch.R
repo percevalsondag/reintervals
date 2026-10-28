@@ -5,7 +5,8 @@
 #
 #   * any random slope present -> SLOPE path, target-aware:
 #       - future-observation: closed-form MLS (ti_vfun) when the fit is
-#         non-singular; GPQ when singular.
+#         non-singular; GPQ when singular, and also (per t0) when the
+#         Satterthwaite df of nu_G or nu_e is unavailable (containment fallback).
 #       - batch-mean: GPQ always. The closed form has a verified non-singular
 #         breakdown for this target (~0.89 coverage at small tau^2), so it is
 #         never used here, singular or not.
@@ -20,18 +21,24 @@
 #         precision-weighting down-weights them); the output therefore changes
 #         discontinuously at this boundary by design.
 #
-#   * random intercept, no fixed slope (one-way / nested / crossed) -> EMS engine.
+#   * intercept-only fixed part with exactly ONE random-intercept factor (one-way)
+#     -> the Hoffman-Kringle (2005) one-way interval, i.e. the slope-free branch
+#     of the anova-mls core, balanced or not. method = "ems-mls" (Francq 2019)
+#     stays available; the two coincide on balanced non-singular data.
+#
+#   * any other random-intercept model, no fixed slope (one-way with covariates /
+#     nested / crossed) -> EMS engine.
 #
 # Each engine keeps its own singular guard (they do different jobs; not unified):
-#   * EMS path  -> reintervals' Hessian -> bounded-Satterthwaite guard (the
+#   * EMS path  -> reintervals' Hessian -> stratum containment df guard (the
 #     PI-width guard pinned by test-singular-guard.R).
 #   * slope path -> the guard carried by vfun_extract (its own
 #     Satterthwaite -> containment df fallback + singular/boundary flags) plus
 #     the singular -> GPQ engine switch in .choose_slope_engine().
 #
-# The Satterthwaite df fallback is also not shared: the EMS fallback
-# (.satterthwaite_df, vc-extract.R) and the slope fallback (.vfun_df_containment,
-# vfun-extract.R) are distinct functions validated against distinct oracles.
+# The df fallback is also not shared: the EMS fallback (.ddf_containment,
+# vc-extract.R) and the slope fallback (.vfun_df_containment, vfun-extract.R)
+# are distinct functions validated against distinct oracles.
 #
 # The EMS random-slope stop() in vc-extract.R (.assert_random_intercepts) is the
 # guard for anyone calling vc_extract / the EMS engine directly on a random-slope
@@ -79,18 +86,58 @@
   length(unique(tsets)) == 1L                            # identical time grids
 }
 
-## The detector for "fixed-slope model with single-observation /
-## unbalanced lots": the structure on which (a) ti_lmm re-routes the TOLERANCE
-## interval to the Montes ANOVA closed form, and (b) the EMS CI/PI/new-group-mean
-## drift anti-conservative (REML precision-weighting). TRUE iff: no random slope,
-## exactly one fixed covariate (a fixed-slope model), and NOT clean balanced.
-## Shared by ti_lmm (routing) and the coverage verbs (warning) so the two can
-## never diverge.
-.is_single_obs_m1 <- function(model) {
-  if (.has_random_slope(model)) return(FALSE)
+## The fixed-slope (M1) time column, or NA if the fixed part is not a single
+## numeric time covariate. Maps the one non-intercept fixed TERM to its
+## model-frame column via the terms object (not the coefficient name, which for
+## a factor / logical is e.g. "grpB" / "flagTRUE" and names no column), and
+## requires that column to be numeric. A 2-level factor or a logical covariate
+## also yields one non-intercept coefficient but is NOT a time design -> NA,
+## and the model follows the EMS path. The column must also VARY WITHIN at
+## least one level of a grouping factor: a covariate constant within every
+## level (a between-group covariate, e.g. y ~ z + (1 | g)) carries no
+## within-lot slope information, is not a time design -> NA, EMS path.
+.m1_time_name <- function(model) {
   covars <- setdiff(names(lme4::fixef(model)), "(Intercept)")
-  if (length(covars) != 1L) return(FALSE)
-  !.m1_is_clean_balanced(model, covars)
+  if (length(covars) != 1L) return(NA_character_)
+  labs <- attr(stats::terms(model, fixed.only = TRUE), "term.labels")
+  if (length(labs) != 1L) return(NA_character_)
+  col <- stats::model.frame(model)[[labs]]
+  if (is.null(col) || !is.numeric(col) || NCOL(col) != 1L) return(NA_character_)
+  varies_within <- any(vapply(lme4::getME(model, "flist"), function(g)
+    any(tapply(col, g, function(v) length(unique(v)) > 1L), na.rm = TRUE), logical(1)))
+  if (!varies_within) return(NA_character_)
+  labs
+}
+
+## TI ROUTING predicate: a fixed-slope model (no random slope, one numeric
+## covariate varying within lots; see .m1_time_name) that is NOT clean balanced
+## (single-observation lots, or staggered / unequal time grids). ti_lmm routes
+## its tolerance interval to the Montes ANOVA closed form (anova-mls).
+.m1_not_clean_balanced <- function(model) {
+  if (.has_random_slope(model)) return(FALSE)
+  time_name <- .m1_time_name(model)
+  if (is.na(time_name)) return(FALSE)
+  !.m1_is_clean_balanced(model, time_name)
+}
+
+## CI / PI WARNING predicate: a fixed-slope model with AT LEAST ONE
+## single-observation lot. Narrower than the routing predicate: the validation
+## study found the EMS CI / PI mildly anti-conservative on single-observation
+## designs (E4) but not on staggered designs whose lots all have >= 2
+## observations (V2, worst cell 0.943). Separate from the routing predicate on
+## purpose: the TI stays on anova-mls for every non-clean-balanced design.
+.m1_has_single_obs_lot <- function(model) {
+  if (.has_random_slope(model)) return(FALSE)
+  if (is.na(.m1_time_name(model))) return(FALSE)
+  any(table(lme4::getME(model, "flist")[[1]]) < 2L)
+}
+
+## The Hoffman-Kringle one-way detector: no random slope, an intercept-only
+## fixed part (no covariates), and exactly one random-intercept grouping factor.
+.is_oneway_intercept_only <- function(model) {
+  if (.has_random_slope(model)) return(FALSE)
+  identical(names(lme4::fixef(model)), "(Intercept)") &&
+    length(lme4::getME(model, "cnms")) == 1L
 }
 
 ## Target-aware slope-engine selection (the GPQ routing policy).
@@ -140,7 +187,7 @@
   time_var <- setdiff(names(fe), "(Intercept)")
   if (length(time_var) != 1L) {
     stop("random-slope intervals require a single continuous covariate (e.g. ~ 1 + time); ",
-         "multiple fixed effects with a random slope are a planned v2 extension.",
+         "multiple fixed effects with a random slope are not currently supported.",
          call. = FALSE)
   }
   t0s <- if (is.null(newdata)) stats::model.frame(model)[[time_var]][1] else
@@ -154,23 +201,57 @@
   singular <- isTRUE(tryCatch(lme4::isSingular(model), error = function(e) NA))
   chosen   <- .choose_slope_engine(target, singular, engine)
   design   <- .slope_design(model)
+  ## One-sided TIs (future-observation target): Hoffman's (2010) limit on the
+  ## REML closed form, on EVERY fit -- singular and df-unavailable fits
+  ## included. The validation study (W3) validated it on all fits (worst cell
+  ## 0.962), whereas the one-sided GPQ limit under-covered on near-boundary
+  ## singular fits at the edge of the time range (worst 0.928); so the
+  ## singular / df-unavailable re-routing below applies to two-sided TIs only.
+  ## method = "gpq" stays available when forced. The batch-mean target keeps
+  ## GPQ (the closed form does not serve it).
+  one_sided_closed <- engine == "auto" && sides != "two.sided" &&
+    target == "observable"
+  if (one_sided_closed) chosen <- "closed"
 
-  if (chosen == "gpq") {
+  ## Per-t0 route. Under the default (engine = "auto", future-observation target,
+  ## non-singular fit) the closed form is also abandoned for GPQ at any t0 where
+  ## the Satterthwaite df of nu_G or nu_e -- the two df the closed-form TI uses
+  ## -- is unavailable and vfun_extract() fell back to containment.
+  comps <- NULL
+  if (chosen == "closed") {
+    comps <- lapply(t0s, function(t0) vfun_extract(model, t0 = t0, target = target))
+  }
+  df_bad <- if (is.null(comps) || engine != "auto" || one_sided_closed)
+    rep(FALSE, length(t0s)) else
+    vapply(comps, function(cp) any(attr(cp, "df_fallback")[c("G", "e")] %in% TRUE),
+           logical(1))
+  use_gpq <- chosen == "gpq" | df_bad
+  reason <- if (engine != "auto") rep("method", length(t0s))
+            else if (target == "true_value") rep("group_mean_target", length(t0s))
+            else if (one_sided_closed) rep("none", length(t0s))
+            else if (singular) rep("singular", length(t0s))
+            else ifelse(df_bad, "df_unavailable", "none")
+
+  rows <- vector("list", length(t0s))
+  if (any(use_gpq)) {
     yts <- .model_yts(model, time_var)
     c_resid <- if (target == "observable") 1 else 0       # future-obs vs batch-mean
-    g <- .gpq_core(yts$y, yts$time, yts$batch, t0 = t0s,
+    g <- .gpq_core(yts$y, yts$time, yts$batch, t0 = t0s[use_gpq],
                     content = content, conf = conf, sides = sides,
                     c_resid = c_resid, M = M, seed = seed)
-    return(.gpq_rows(g, design = design, sides = sides, singular = singular))
+    gr <- .gpq_rows(g, design = design, sides = sides, singular = singular)
+    rows[use_gpq] <- split(gr, seq_len(nrow(gr)))
   }
-
   ## closed-form MLS (observable target). true_value never reaches here: auto
   ## routes batch-mean to GPQ, and engine = "closed" + true_value already errored.
-  rows <- lapply(t0s, function(t0) {
-    comp <- vfun_extract(model, t0 = t0, target = target)
-    ti_vfun(comp, content = content, conf = conf, sides = sides)
-  })
+  for (i in which(!use_gpq)) {
+    rows[[i]] <- ti_vfun(comps[[i]], content = content, conf = conf, sides = sides)
+  }
+  ## GPQ and closed-form rows carry different audit columns; align on the union.
+  cols <- unique(unlist(lapply(rows, names)))
+  rows <- lapply(rows, function(r) { for (cn in setdiff(cols, names(r))) r[[cn]] <- NA; r[cols] })
   out <- do.call(rbind, rows); rownames(out) <- NULL
+  out$route_reason <- reason
   out
 }
 
@@ -191,15 +272,33 @@
 #'
 #' One of the four interval verbs, and the dispatched tolerance interval. It
 #' classifies the fitted model and routes by random/fixed structure, the
-#' tolerance target (`over`), and the singular flag to
-#' the engine that is exact/validated for that case --- all transparently:
+#' tolerance target (`over`), the singular flag, and (random slope) whether the
+#' closed form's Satterthwaite df is available, to the engine that is
+#' exact/validated for that case --- all transparently:
 #'
 #' * **Random slope.** `over = "observation"` uses the REML closed-form MLS
-#'   interval when the fit is non-singular and the GPQ interval when singular;
-#'   `over = "group_mean"` always uses GPQ.
+#'   interval when the fit is non-singular and the GPQ interval when the fit is
+#'   singular or, at a given `t0`, when the Satterthwaite df of the closed form's
+#'   between-group or residual variance is unavailable (its containment fallback
+#'   fired); `over = "group_mean"` always uses GPQ. One-sided intervals
+#'   (`sides = "lower"` / `"upper"`, future-observation target) use Hoffman's
+#'   (2010) one-sided limit on the REML closed form on every fit, singular and
+#'   df-unavailable fits included (validated by simulation on all of them);
+#'   `method = "gpq"` remains available, but in the package's validation the
+#'   one-sided GPQ limit under-covered on near-boundary singular fits at the
+#'   edge of the observed time range (worst cell 0.928 for a nominal 0.95).
+#'   The reason is reported per row in `attr(., "diagnostics")$route_reason`
+#'   (`"none"`, `"singular"`, `"df_unavailable"`, `"group_mean_target"`, or
+#'   `"method"` when forced).
 #' * **Random intercept + fixed slope.** Clean balanced -> EMS engine; single-
 #'   observation / staggered / unbalanced -> the Montes ANOVA/MLS closed form.
-#' * **Random intercept, no fixed slope** -> EMS engine.
+#' * **Intercept-only one-way** (`y ~ 1 + (1 | g)`, one grouping factor, no
+#'   covariates), balanced or not -> the Hoffman & Kringle (2005) closed form
+#'   (`"anova-mls"`). `method = "ems-mls"` gives the Francq et
+#'   al. (2019) interval instead; the two coincide on balanced data with a
+#'   non-singular fit and differ on singular or unbalanced data.
+#' * **Any other random-intercept model, no fixed slope** (one-way with
+#'   covariates, nested, crossed) -> EMS engine.
 #'
 #' For slope models the between-group variance `V_G(t0)` is quadratic in the
 #' time covariate, so evaluating at a `t0` outside the observed time range is
@@ -212,8 +311,8 @@
 #' available for one-way, nested, and crossed-with-interaction random-intercept
 #' designs, the fixed-slope stability design, and random-slope models. For a
 #' design without such a decomposition (two crossed factors with no interaction
-#' term, or four or more grouping factors), ti_lmm() signals an error; ci_lmm(),
-#' pi_lmm(), and new_group_mean_lmm() remain available for those models.
+#' term, or four or more grouping factors), ti_lmm() and new_group_mean_lmm()
+#' signal an error; ci_lmm() and pi_lmm() remain available for those models.
 #'
 #' @param model A fitted `lmerMod`.
 #' @param newdata Row(s) giving the fixed-effect combination(s); the time column
@@ -226,17 +325,32 @@
 #'   tolerance interval).
 #' @param alpha,level The confidence, as a mutually-exclusive pair: give at most
 #'   one. `level` is `1 - alpha`; default `alpha = 0.05`.
-#' @param sides `"two.sided"` (default), `"lower"`, or `"upper"`.
+#' @param sides `"two.sided"` (default), `"lower"`, or `"upper"`. One-sided
+#'   tolerance limits: `anova-mls` uses Hoffman's (2010) one-sided limit;
+#'   `ems-mls` and random-slope models (`reml-mls`, the default on every fit)
+#'   use the package's extension of it, validated by simulation. See
+#'   [reintervals-models].
 #' @param method `"auto"` (default) chooses the algorithm by structure; one of
 #'   `"ems-mls"`, `"reml-mls"`, `"anova-mls"`, `"gpq"` forces it and errors if
-#'   incompatible with the model.
+#'   incompatible with the model. `"anova-mls"` is available for fixed-slope
+#'   models and for intercept-only one-way models (Hoffman-Kringle).
 #' @param control [lmm_interval_control()] tuning (GPQ seed / M).
 #'
 #' @inherit ci_lmm return
 #' @seealso [ci_lmm()], [pi_lmm()], [new_group_mean_lmm()], [lmm_predict()],
 #'   [reintervals-models].
+#' @references Hoffman D (2010). One-sided tolerance limits for balanced and
+#'   unbalanced random effects models. *Technometrics* 52(3):303-312.
+#'   \doi{10.1198/TECH.2010.09171}
+#'
+#'   Hoffman D, Kringle R (2005). Two-sided tolerance intervals for
+#'   balanced and unbalanced random effects models. *Journal of
+#'   Biopharmaceutical Statistics* 15(2):283-293. \doi{10.1081/BIP-200048826}
 #' @examples
-#' # random intercepts, no slope -> EMS engine
+#' # intercept-only one-way -> Hoffman-Kringle (anova-mls)
+#' fh <- lme4::lmer(conc ~ 1 + (1 | run), data = hk_assay)
+#' ti_lmm(fh, P = 0.95, level = 0.90)
+#' # random intercept + fixed slope (clean balanced) -> EMS engine
 #' fi <- lme4::lmer(Reaction ~ Days + (1 | Subject), data = lme4::sleepstudy)
 #' ti_lmm(fi, newdata = data.frame(Days = 0))
 #' # random slope, future-observation -> REML closed form
@@ -281,9 +395,7 @@ ti_lmm <- function(model, newdata = NULL, P = 0.95,
   }
 
   ## ---- random intercept only -------------------------------------------------
-  fe <- lme4::fixef(model)
-  covars <- setdiff(names(fe), "(Intercept)")
-  time_name <- if (length(covars) == 1L) covars else NA_character_
+  time_name <- .m1_time_name(model)
   is_m1 <- !is.na(time_name)
 
   ## batch-mean tolerance is GPQ-only (random slope); DNE for random intercept / fixed-slope
@@ -304,14 +416,25 @@ ti_lmm <- function(model, newdata = NULL, P = 0.95,
          "\"auto\", \"ems-mls\", or \"anova-mls\".", call. = FALSE)
   }
 
+  ## Intercept-only one-way -> Hoffman-Kringle (the slope-free branch of the
+  ## anova-mls core), unless method = "ems-mls" asks for Francq.
+  if (.is_oneway_intercept_only(model) && method %in% c("auto", "anova-mls")) {
+    ## one-sided: Hoffman's (2010) published limit (see .montes_core)
+    out <- .montes_core(as.numeric(lme4::getME(model, "y")), time = NULL,
+                        lot = lme4::getME(model, "flist")[[1]], t0 = NULL,
+                        content = P, conf = conf, sides = sides)
+    out$singular <- .is_singular(model)   # report the fit's flag, like the other verbs
+    return(.unify_intervals(out, model, kind = "ti", P_value = P))  # carries anova-mls
+  }
+
   ## Fixed-slope single-obs / staggered -> Montes ANOVA; else EMS. `method` can
-  ## force. Uses the shared .is_single_obs_m1() detector (identical to the inline
-  ## `is_m1 && !.m1_is_clean_balanced()` it replaces) so the routing here and the
-  ## coverage-verb warning can never diverge.
-  use_montes <- .is_single_obs_m1(model)
+  ## force. (.m1_not_clean_balanced is the routing predicate; the coverage-verb
+  ## warning uses the narrower .m1_has_single_obs_lot.)
+  use_montes <- .m1_not_clean_balanced(model)
   if (method == "anova-mls") {
     if (!is_m1) {
-      stop("method = \"anova-mls\" needs a fixed-slope (random intercept + fixed slope) model.", call. = FALSE)
+      stop("method = \"anova-mls\" needs a fixed-slope (random intercept + ",
+           "fixed slope) model or an intercept-only one-way model.", call. = FALSE)
     }
     use_montes <- TRUE
   }
@@ -323,10 +446,9 @@ ti_lmm <- function(model, newdata = NULL, P = 0.95,
     return(.unify_intervals(out, model, kind = "ti", P_value = P))  # carries anova-mls
   }
 
-  if (sides != "two.sided") {
-    stop("The EMS engine ships two-sided tolerance intervals only; one-sided ",
-         "applies to the slope path.", call. = FALSE)
-  }
-  out <- .ti_ems(model, newdata = newdata, level = P, conf = conf, target = target)
+  ## one-sided EMS TI: the package's extension of Hoffman (2010), validated by
+  ## simulation (see ti_francq)
+  out <- .ti_ems(model, newdata = newdata, level = P, conf = conf, target = target,
+                 sides = sides)
   .unify_intervals(out, model, kind = "ti", P_value = P, method_tag = "ems-mls")
 }

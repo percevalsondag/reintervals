@@ -22,7 +22,7 @@ test_that("ti_francq implements the documented Eq. 26 (matches re-derivation)", 
   expect_equal(ti$upper, unname(hand[["upper"]]))
 })
 
-test_that("ti_francq reproduces Francq Section 5.2: 95/90 TI ~ [0.845, 1.117]", {
+test_that("ti_francq reproduces Francq et al. (2019) Section 5.2: 95/90 TI ~ [0.845, 1.117]", {
   # "95% TI_90" denotes 95% content (beta) at 90% confidence
   # (gamma) -- the 95/90 pharma convention (maintainer-confirmed). With the
   # source-endorsed formula (a = 1 - conf, z_{(1+content)/2}, lower-tail qchisq)
@@ -99,10 +99,18 @@ test_that("ti_francq errors when no EMS decomposition is available", {
   expect_error(ti_francq(comp), "no expected-mean-square decomposition")
 })
 
-test_that("ti_francq rejects one-sided requests and bad levels", {
+test_that("ti_francq one-sided (provisional) is Hoffman's (2010) limit on the Francq bound; bad levels rejected", {
   comp <- fixture_52()
-  expect_error(ti_francq(comp, sides = "lower"), "two-sided")
-  expect_error(ti_francq(comp, sides = "upper"), "two-sided")
+  lo <- ti_francq(comp, content = 0.95, conf = 0.90, sides = "lower")
+  up <- ti_francq(comp, content = 0.95, conf = 0.90, sides = "upper")
+  e <- comp$ems
+  h <- e$df / qchisq(1 - 0.90, e$df) - 1
+  U <- sum(e$k * e$ms) + sqrt(sum(h^2 * e$k^2 * e$ms^2))        # Francq MLS bound on sigma2_T
+  hw <- qnorm(0.95) * sqrt(U) + qnorm(0.90) * sqrt(comp$var_mean)
+  expect_equal(lo$lower, comp$mean - hw, tolerance = 1e-12)
+  expect_equal(up$upper, comp$mean + hw, tolerance = 1e-12)
+  expect_identical(c(lo$upper, up$lower), c(Inf, -Inf))
+  expect_identical(c(lo$sides, up$sides), c("lower", "upper"))
   expect_error(ti_francq(comp, content = 1.0), "between 0 and 1")
   expect_error(ti_francq(comp, conf = 0), "between 0 and 1")
   expect_error(ti_francq(list(mean = 1)), "re_components")

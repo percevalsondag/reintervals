@@ -1,7 +1,7 @@
-# ti_lmm on a design with no closed-form EMS decomposition (crossed factors with
-# no interaction term; >= 4 grouping factors) must signal a clean error -- NOT
-# return NA bounds. The coverage verbs (CI / PI / new_group_mean), which do not
-# need the EMS decomposition, must stay available with finite bounds.
+# ti_lmm and new_group_mean_lmm on a design with no closed-form EMS
+# decomposition (crossed factors with no interaction term; >= 4 grouping
+# factors) must signal a clean error -- NOT return NA bounds. CI and PI, which
+# do not need the EMS decomposition, must stay available with finite bounds.
 
 lc <- lme4::lmerControl(check.conv.singular = "ignore", calc.derivs = FALSE)
 
@@ -19,9 +19,13 @@ test_that("ti_lmm errors (no NA bounds) on a crossed-no-interaction design", {
   expect_error(ti_lmm(fit), "not available")
 })
 
-test_that("CI / PI / new_group_mean stay available with finite bounds there", {
+test_that("new_group_mean_lmm errors (no NA bounds) on a crossed-no-interaction design", {
+  expect_error(new_group_mean_lmm(crossed_noint_fit()), "not available")
+})
+
+test_that("CI / PI stay available with finite bounds there", {
   fit <- crossed_noint_fit()
-  for (verb in list(ci_lmm, pi_lmm, new_group_mean_lmm)) {
+  for (verb in list(ci_lmm, pi_lmm)) {
     out <- verb(fit)
     expect_true(all(is.finite(out$lower)))
     expect_true(all(is.finite(out$upper)))

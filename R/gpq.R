@@ -231,7 +231,8 @@
 #' quantity tolerance interval for the random-intercept + random-slope stability
 #' model, from raw `(y, time, batch)` vectors without a fitted `lmer` model. The
 #' fit-based dispatcher [ti_lmm()] routes random-slope designs here automatically
-#' (singular fits, and the batch-mean target `over = "group_mean"`); use
+#' (singular fits, fits whose closed-form Satterthwaite df is unavailable at a
+#' given `t0`, and the batch-mean target `over = "group_mean"`); use
 #' `ti_gpq_raw()` directly when you have data but no model object.
 #'
 #' @param y Numeric response.

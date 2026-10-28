@@ -2,8 +2,9 @@
 #'
 #' Builds the expected-mean-square linear combination for
 #' `y ~ FE + (1|a) + (1|b) + (1|a:b)` (Francq 2019, Eq. 32-34), balanced data.
-#' Pure --- no `lme4`. The unbalanced crossed EMS coefficients are deferred to
-#' v2. 
+#' Pure --- no `lme4`. Unbalanced crossed data (all cells filled) are handled
+#' separately, by Hartley's method of synthesis on Type III sums of squares
+#' (`ems_synthesis()`, design-synthesis.R).
 #'
 #' @param desc A crossed design descriptor from `classify_design()` (uses
 #'   `grp_A`, `grp_B`, `grp_AB`, `A`, `B`, `n`).

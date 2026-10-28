@@ -2,26 +2,42 @@
 % Please edit documentation in R/intervals-api.R
 \name{lmm_interval_control}
 \alias{lmm_interval_control}
-\title{Tuning controls for interval Monte-Carlo (GPQ)}
+\title{Tuning controls for the interval engines}
 \usage{
-lmm_interval_control(seed = NULL, M = 10000L)
+lmm_interval_control(
+  seed = NULL,
+  M = 10000L,
+  ci_df = c("satterthwaite", "kenward-roger")
+)
 }
 \arguments{
 \item{seed}{Optional integer seed for the GPQ draws (reproducibility / GxP
 traceability). \code{NULL} uses the ambient RNG state.}
 
 \item{M}{Number of GPQ Monte-Carlo realizations. Default 10000.}
+
+\item{ci_df}{Denominator-df rule for the confidence interval (\code{\link[=ci_lmm]{ci_lmm()}}) on
+random-intercept models: \code{"satterthwaite"} (default; Satterthwaite with the
+observed-information covariance of the variance components, falling back to
+the SAS-style containment df --- e.g. \code{A - 1} for a one-way or nested
+design, \code{min(A, B) - 1} for a crossed one --- when it is unavailable, as on
+a singular fit) or \code{"kenward-roger"} (requires \pkg{pbkrtest} and errors if
+it is not installed; never a silent fallback). The df source is reported in
+\code{attr(., "diagnostics")$df_method}. Random-slope models use their own
+generalized Satterthwaite df and reject \code{"kenward-roger"}.}
 }
 \value{
 An \code{lmm_interval_control} list (passed to a verb's \code{control}
-argument); a list with elements \code{seed} and \code{M}.
+argument); a list with elements \code{seed}, \code{M}, and \code{ci_df}.
 }
 \description{
 Tuning knobs only --- the RNG seed and Monte-Carlo size used when the
-GPQ algorithm runs. Algorithm \emph{selection} is the \code{method} argument, not this.
+GPQ algorithm runs, and the denominator-df rule of the random-intercept
+confidence interval. Algorithm \emph{selection} is the \code{method} argument, not this.
 }
 \examples{
 lmm_interval_control(seed = 1, M = 5000)
+lmm_interval_control(ci_df = "kenward-roger")
 }
 \seealso{
 \code{\link[=ci_lmm]{ci_lmm()}}, \code{\link[=ti_lmm]{ti_lmm()}}, \code{\link[=ti_gpq_raw]{ti_gpq_raw()}}.

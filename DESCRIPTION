@@ -1,7 +1,7 @@
 Package: reintervals
 Title: Confidence, Prediction, Tolerance, and New-Group-Mean Intervals for
     Linear Mixed Models
-Version: 0.1.0
+Version: 0.2.0
 Authors@R:
     person("Perceval", "Sondag", email = "reintervals@gmail.com",
            role = c("aut", "cre", "cph"),
@@ -16,7 +16,9 @@ Description: Confidence, prediction, tolerance, and new-group-mean (also
     likelihood closed form for random-slope models; an unweighted lot-mean
     analysis-of-variance closed form for unbalanced single-observation
     fixed-slope stability designs (Montes, Burdick and Leblond (2019)
-    <doi:10.5731/pdajpst.2018.008839>); and a generalized-pivotal-quantity
+    <doi:10.5731/pdajpst.2018.008839>) and, without a covariate, for the
+    one-way random-effects model (Hoffman and Kringle (2005)
+    <doi:10.1081/BIP-200048826>); and a generalized-pivotal-quantity
     Monte Carlo engine (Oliva-Aviles and Hauser (2025)
     <doi:10.1080/00401706.2024.2407324>). General fixed effects are supported for random-intercept models;
     random-slope models are supported for a single continuous covariate (the

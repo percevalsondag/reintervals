@@ -95,9 +95,10 @@ The engine is chosen from the fitted model's structure (full mapping in
 | Model class | Engine (`method`) |
 |---|---|
 | random intercept (any fixed effects; one-way / nested / crossed) | expected-mean-square / MLS (`"ems-mls"`) |
+| random intercept, intercept-only one-way: tolerance interval | Hoffman & Kringle unweighted-means ANOVA (`"anova-mls"`) |
 | random intercept + fixed slope, clean balanced | `"ems-mls"` |
-| random intercept + fixed slope, single-observation / unbalanced | unweighted lot-mean ANOVA (`"anova-mls"`) |
-| random slope, future-observation | REML closed form (`"reml-mls"`); GPQ when singular |
+| random intercept + fixed slope, single-observation / unbalanced: tolerance interval | unweighted lot-mean ANOVA (`"anova-mls"`) |
+| random slope, future-observation | REML closed form (`"reml-mls"`); GPQ for the tolerance interval when the fit is singular or its Satterthwaite df is unavailable |
 | random slope, batch-mean | GPQ Monte Carlo (`"gpq"`) |
 
 **v1 scope:** general fixed effects are supported for random-intercept models;
@@ -113,11 +114,12 @@ on CI: the Francq, Lin & Hoyer (2019) worked numbers; the Montes-Burdick-Leblond
 arithmetic against committed reference values to ~`1e-9`; and the GPQ content
 variance against the Oliva-Aviles & Hauser (2025) closed form (`tau^2 = 8.439`).
 
-## Scope and roadmap
+## Scope
 
-v1 covers general-fixed-effect random-intercept models and single-time-covariate
-random-slope (stability) models. The planned v2 extension is multi-covariate
-random-slope intervals; see `NEWS.md` for the change log.
+The package covers general-fixed-effect random-intercept models and
+single-time-covariate random-slope (stability) models. Random-slope models with
+more than one fixed-effect covariate are not currently supported; see `NEWS.md`
+for the change log.
 
 ## License and citation
 

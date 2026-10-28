@@ -14,7 +14,7 @@
 #' @param level Prediction level (PI: `1 - psi`). `NA` if not used.
 #' @param content Content fraction (TI: `beta`). `NA` if not used.
 #' @param df Degrees of freedom used for the bound (`NA` for the normal-based TI).
-#' @param sides Character: `"two"` (two-sided intervals only).
+#' @param sides Character: `"two"`, `"lower"`, or `"upper"`.
 #' @param target Character target distribution (`"observable"` / `"true_value"`),
 #'   or `NA` for the CI (which concerns the mean, not a future value).
 #' @param design Character naming the random structure, or `""`.

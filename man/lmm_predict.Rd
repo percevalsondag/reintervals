@@ -33,11 +33,16 @@ supplies the evaluation point(s). \code{NULL} uses the first model-frame row.}
 \item{alpha, level}{The confidence, as a mutually-exclusive pair: give at most
 one. \code{level} is \code{1 - alpha}; default \code{alpha = 0.05}.}
 
-\item{sides}{\code{"two.sided"} (default), \code{"lower"}, or \code{"upper"}.}
+\item{sides}{\code{"two.sided"} (default), \code{"lower"}, or \code{"upper"}. One-sided
+tolerance limits: \code{anova-mls} uses Hoffman's (2010) one-sided limit;
+\code{ems-mls} and random-slope models (\code{reml-mls}, the default on every fit)
+use the package's extension of it, validated by simulation. See
+\link{reintervals-models}.}
 
 \item{method}{\code{"auto"} (default) chooses the algorithm by structure; one of
 \code{"ems-mls"}, \code{"reml-mls"}, \code{"anova-mls"}, \code{"gpq"} forces it and errors if
-incompatible with the model.}
+incompatible with the model. \code{"anova-mls"} is available for fixed-slope
+models and for intercept-only one-way models (Hoffman-Kringle).}
 
 \item{control}{\code{\link[=lmm_interval_control]{lmm_interval_control()}} tuning (GPQ seed / M).}
 }
@@ -57,7 +62,10 @@ the value for \code{ti}, \code{NA} for the coverage intervals); \code{sides};
 \item the per-row flags \code{singular}, \code{boundary}, \code{vg_floored}.
 }
 \code{attr(., "diagnostics")} is a list of engine-specific extras (degrees of
-freedom \code{df}, standard error \code{se}, and any GPQ / ANOVA intermediates);
+freedom \code{df}; for the random-intercept confidence interval its source
+\code{df_method} --- \code{"satterthwaite"}, \code{"containment"}, or \code{"kenward-roger"};
+for the random-slope tolerance interval the GPQ \code{route_reason}; standard
+error \code{se}; and any GPQ / ANOVA intermediates);
 \code{attr(., "grouping")} is the random-intercept topology (\code{"oneway"},
 \code{"nested"}, \code{"crossed"}, or \code{NA} for slope models).
 }

@@ -6,28 +6,42 @@
 # wrappers don't change them.
 # =============================================================================
 
-#' Tuning controls for interval Monte-Carlo (GPQ)
+#' Tuning controls for the interval engines
 #'
 #' Tuning knobs only --- the RNG seed and Monte-Carlo size used when the
-#' GPQ algorithm runs. Algorithm *selection* is the `method` argument, not this.
+#' GPQ algorithm runs, and the denominator-df rule of the random-intercept
+#' confidence interval. Algorithm *selection* is the `method` argument, not this.
 #'
 #' @param seed Optional integer seed for the GPQ draws (reproducibility / GxP
 #'   traceability). `NULL` uses the ambient RNG state.
 #' @param M Number of GPQ Monte-Carlo realizations. Default 10000.
+#' @param ci_df Denominator-df rule for the confidence interval ([ci_lmm()]) on
+#'   random-intercept models: `"satterthwaite"` (default; Satterthwaite with the
+#'   observed-information covariance of the variance components, falling back to
+#'   the SAS-style containment df --- e.g. `A - 1` for a one-way or nested
+#'   design, `min(A, B) - 1` for a crossed one --- when it is unavailable, as on
+#'   a singular fit) or `"kenward-roger"` (requires \pkg{pbkrtest} and errors if
+#'   it is not installed; never a silent fallback). The df source is reported in
+#'   `attr(., "diagnostics")$df_method`. Random-slope models use their own
+#'   generalized Satterthwaite df and reject `"kenward-roger"`.
 #' @return An `lmm_interval_control` list (passed to a verb's `control`
-#'   argument); a list with elements `seed` and `M`.
+#'   argument); a list with elements `seed`, `M`, and `ci_df`.
 #' @seealso [ci_lmm()], [ti_lmm()], [ti_gpq_raw()].
 #' @examples
 #' lmm_interval_control(seed = 1, M = 5000)
+#' lmm_interval_control(ci_df = "kenward-roger")
 #' @export
-lmm_interval_control <- function(seed = NULL, M = 10000L) {
+lmm_interval_control <- function(seed = NULL, M = 10000L,
+                                 ci_df = c("satterthwaite", "kenward-roger")) {
+  ci_df <- match.arg(ci_df)
   if (!is.null(seed) && (!is.numeric(seed) || length(seed) != 1L || is.na(seed))) {
     stop("`seed` must be NULL or a single number.", call. = FALSE)
   }
   if (!is.numeric(M) || length(M) != 1L || is.na(M) || M < 1) {
     stop("`M` must be a single positive integer.", call. = FALSE)
   }
-  structure(list(seed = seed, M = as.integer(M)), class = "lmm_interval_control")
+  structure(list(seed = seed, M = as.integer(M), ci_df = ci_df),
+            class = "lmm_interval_control")
 }
 
 ## alpha / level as a mutually-exclusive pair.
@@ -100,7 +114,8 @@ lmm_interval_control <- function(seed = NULL, M = 10000L) {
 .value_cols <- c("time", "type", "estimate", "lower", "upper", "level", "conf",
                  "content", "P", "sides", "df", "se", "method", "design",
                  "singular", "boundary", "vg_floored", "tau2_med", "s2e_med",
-                 "frac_boundary", "K", "df_resid", "phi1", "c_resid", "n_E")
+                 "frac_boundary", "K", "df_resid", "phi1", "c_resid", "n_E",
+                 "df_method", "route_reason", "df_rule", "W")
 
 ## The output unifier. Maps any engine's native frame to the single tidy
 ## contract; relabels only, never recomputes. Universal columns, in order:
@@ -142,11 +157,12 @@ lmm_interval_control <- function(seed = NULL, M = 10000L) {
 
   ## diagnostics -> attribute (off the core shape, still retrievable)
   diag <- list()
-  for (cn in c("df", "se", "tau2_med", "s2e_med", "frac_boundary", "K",
-               "df_resid", "phi1", "c_resid")) {
+  for (cn in c("df", "df_method", "df_rule", "W", "se", "tau2_med", "s2e_med",
+               "frac_boundary", "K", "df_resid", "phi1", "c_resid",
+               "route_reason")) {
     if (cn %in% names(native)) diag[[cn]] <- native[[cn]]
   }
-  for (a in c("beta_hat", "n_E", "U", "Vhat_Y")) {
+  for (a in c("beta_hat", "n_E", "U", "Vhat_Y", "C1", "C2")) {
     v <- attr(native, a); if (!is.null(v)) diag[[a]] <- v
   }
   attr(out, "diagnostics") <- diag
@@ -180,19 +196,23 @@ print.lmm_interval <- function(x, ...) {
 #' [new_group_mean_lmm()]). `ci_lmm()` gives a confidence interval for the mean
 #' response at `newdata`. It dispatches by random structure: random-intercept
 #' designs (including a fixed slope) use the expected-mean-square engine;
-#' random-slope designs use the REML closed form. See [reintervals-models] for
-#' the model-class to engine map and [lmm_predict()] for the unified entry point.
+#' random-slope designs use the REML closed form. See [reintervals] and
+#' `vignette("choosing-an-interval")` for the engine map, [reintervals-models]
+#' for the design tags, and [lmm_predict()] for the unified entry point.
 #'
 #' @param model A fitted `lmerMod` (from [lme4::lmer()]).
 #' @param newdata Row(s) giving the fixed-effect combination(s) to evaluate at.
 #'   `NULL` uses the first model-frame row.
 #' @param alpha,level The interval confidence, as a mutually-exclusive pair: give
 #'   at most one. `level` is `1 - alpha`; the default is `alpha = 0.05` (95%).
-#' @param sides `"two.sided"` (default), `"lower"`, or `"upper"`.
+#' @param sides `"two.sided"` (default), `"lower"`, or `"upper"`. A one-sided
+#'   interval keeps the two-sided interval's centre, variance, and df and uses
+#'   `t_{1 - alpha}` in place of `t_{1 - alpha/2}`.
 #' @param method `"auto"` (default) chooses the algorithm by structure; one of
 #'   `"ems-mls"`, `"reml-mls"`, `"anova-mls"`, `"gpq"` forces that engine and
 #'   errors if it is incompatible with the model.
-#' @param control An [lmm_interval_control()] object (the GPQ `seed` and `M`).
+#' @param control An [lmm_interval_control()] object (the GPQ `seed` and `M`,
+#'   and the confidence-interval df rule `ci_df`).
 #'
 #' @return An `lmm_interval` object (a data frame), one row per evaluation point,
 #'   with columns, in order:
@@ -209,20 +229,25 @@ print.lmm_interval <- function(x, ...) {
 #'     \item the per-row flags `singular`, `boundary`, `vg_floored`.
 #'   }
 #'   `attr(., "diagnostics")` is a list of engine-specific extras (degrees of
-#'   freedom `df`, standard error `se`, and any GPQ / ANOVA intermediates);
+#'   freedom `df`; for the random-intercept confidence interval its source
+#'   `df_method` --- `"satterthwaite"`, `"containment"`, or `"kenward-roger"`;
+#'   for the random-slope tolerance interval the GPQ `route_reason`; standard
+#'   error `se`; and any GPQ / ANOVA intermediates);
 #'   `attr(., "grouping")` is the random-intercept topology (`"oneway"`,
 #'   `"nested"`, `"crossed"`, or `NA` for slope models).
 #'
 #' @section Known limitation: 
-#' On a fixed-slope model fitted to single-observation / unbalanced lots (the
-#' release-only stability structure), the EMS confidence, prediction, and
-#' new-group-mean intervals can be anti-conservative (too narrow), because
-#' REML precision-weighting down-weights the single-observation lots.
-#' [ci_lmm()], [pi_lmm()], and [new_group_mean_lmm()] emit a warning when
-#' that structure is detected (the interval is still returned, unchanged). The
-#' *tolerance* interval ([ti_lmm()]) is instead routed to the validated Montes
-#' ANOVA closed form on this structure; a validated closed form for the
-#' confidence / prediction / new-group-mean case is planned for a future version.
+#' On a fixed-slope model with single-observation lots (the release-only
+#' stability structure), the EMS confidence and prediction intervals can be
+#' anti-conservative (too narrow), because REML precision-weighting
+#' down-weights the single-observation lots. [ci_lmm()] and [pi_lmm()] emit a
+#' warning when at least one lot has a single observation (the interval is
+#' still returned, unchanged); staggered designs whose lots all have two or more
+#' observations do not warn. The tolerance interval ([ti_lmm()]) and the
+#' new-group-mean interval ([new_group_mean_lmm()]) use the unweighted lot-mean
+#' (Montes) closed forms on single-observation and staggered fixed-slope
+#' designs and do not warn; no validated alternative is currently available for
+#' the confidence or prediction interval.
 #'
 #' @seealso [pi_lmm()], [ti_lmm()], [new_group_mean_lmm()], [lmm_predict()],
 #'   [reintervals-models].
@@ -250,6 +275,12 @@ ci_lmm <- function(model, newdata = NULL, alpha = NULL, level = NULL,
 #' @inheritParams ci_lmm
 #' @inherit ci_lmm return
 #' @inheritSection ci_lmm Known limitation
+#' @section Known limitation (few top-level groups):
+#' With few levels of the top random factor (five or fewer) and a dominant
+#' between-group variance (an intraclass correlation near 0.9), the Francq et
+#' al. (2019) prediction interval used for random-intercept models can
+#' under-cover: the worst coverage observed in the package's validation was
+#' about 0.93 for a nominal 0.95, consistent with Francq et al. (2019, Fig. 2).
 #' @seealso [ci_lmm()], [ti_lmm()], [new_group_mean_lmm()], [lmm_predict()],
 #'   [reintervals-models].
 #' @examples
@@ -269,16 +300,47 @@ pi_lmm <- function(model, newdata = NULL, alpha = NULL, level = NULL,
 
 #' New-group-mean (CInew / new-batch-mean) interval
 #'
-#' One of the four interval verbs: a prediction interval for the mean of one new,
-#' as-yet-unobserved group/batch: the CInew / new-batch-mean interval. It
-#' is the prediction interval with the residual component removed,
-#' \eqn{\mu(t_0) \pm t_{\nu_G}\sqrt{V_F + V_G}}; coverage is `level`/`alpha`, so
-#' it carries no content `P` (unlike [ti_lmm()]). Dispatch and arguments are
-#' as for [ci_lmm()].
+#' One of the four interval verbs: an interval for the mean of one new,
+#' as-yet-unobserved group/batch (the CInew / new-batch-mean interval). Its
+#' coverage is `level`/`alpha`, so it carries no content `P` (unlike
+#' [ti_lmm()]).
+#'
+#' @section Target:
+#' The target is the **true** mean of a new innermost cell: a new group in a
+#' one-way design, a new B-within-A cell in a nested design, a new (a, b) cell
+#' in a crossed design; for the fixed-slope and random-slope designs, the true
+#' mean of a new lot at `t0`.
+#'
+#' @section Constructions:
+#' The interval is `centre +/- t_df * sqrt(W)`, with `W`, `df` and the rule
+#' reported in `attr(., "diagnostics")` (`W`, `df`, `df_rule`):
+#' \itemize{
+#'   \item fixed slope (one grouping factor, any balance): the unweighted
+#'     lot-mean (Montes) centre `Yhat(t0)` with
+#'     `W = S2_L (1 + 1/I) + S2_E (t0 - tbar)^2 / S_tt` and a Satterthwaite df
+#'     on the two mean squares (`df_rule = "anova-satterthwaite"`, method
+#'     `"anova-mls"`);
+#'   \item intercept-only one-way: the unweighted mean of group means with
+#'     `W = S2_L (1 + 1/I)` and `df = I - 1` (`"anova-single"`,
+#'     `"anova-mls"`);
+#'   \item nested, and one-way with other fixed effects:
+#'     `W = V_F + sum_j k_j EMS_j` over the random terms (REML-implied expected
+#'     mean squares, synthesis coefficients when unbalanced) with the top
+#'     factor's df `A - 1` (`"top-factor"`, `"ems-mls"`);
+#'   \item crossed with interaction: the same `W`, with a Satterthwaite df in
+#'     which `V_F` is attached to the two main-effect terms
+#'     (`"satterthwaite-vf"`, `"ems-mls"`);
+#'   \item random slope: the REML closed form
+#'     \eqn{\mu(t_0) \pm t_{\nu_G}\sqrt{V_F + V_G}} (`"reml-mls"`).
+#' }
+#' A design without a closed-form variance decomposition (two crossed factors
+#' without their interaction term, or four or more grouping factors) is an
+#' error.
+#' One-sided intervals (`sides = "lower"` / `"upper"`) use the same centre, `W`,
+#' and df with `t_{1 - alpha}`.
 #'
 #' @inheritParams ci_lmm
 #' @inherit ci_lmm return
-#' @inheritSection ci_lmm Known limitation
 #' @seealso [ci_lmm()], [pi_lmm()], [ti_lmm()], [lmm_predict()],
 #'   [reintervals-models].
 #' @examples
@@ -303,7 +365,9 @@ new_group_mean_lmm <- function(model, newdata = NULL, alpha = NULL, level = NULL
 ## "reml-mls" (already on the row); EMS -> "ems-mls".
 .coverage_verb <- function(model, newdata, kind, level, sides, method, control) {
   if (!identical(method, "auto")) {
-    ok <- if (.has_random_slope(model)) "reml-mls" else "ems-mls"
+    ok <- if (.has_random_slope(model)) "reml-mls"
+          else if (kind == "new_group_mean" && .ngm_uses_anova(model)) "anova-mls"
+          else "ems-mls"
     if (!method %in% ok) {
       stop(sprintf(
         "method = \"%s\" is not available for a %s model on this interval; ",
@@ -311,26 +375,26 @@ new_group_mean_lmm <- function(model, newdata = NULL, alpha = NULL, level = NULL
         sprintf("use \"auto\" or \"%s\".", ok), call. = FALSE)
     }
   }
-  ## Anti-conservative-drift warning, scoped to EXACTLY the drifting cells:
-  ## fixed-slope model with single-observation / unbalanced lots. On that
-  ## structure the EMS CI / PI / new-group-mean drift narrow (the same REML
-  ## precision-weighting that pushes the EMS TI ~2.4% narrow vs the Montes
-  ## oracle). We make the drift VISIBLE -- we do NOT re-route (a Montes/GPQ
-  ## CI/PI/new-group-mean is possible new methodology, recorded as v2). Reuses
-  ## the same .is_single_obs_m1() detector ti_lmm uses to re-route the TI, so it
-  ## cannot fire on clean-balanced M1 (exact), plain random-intercept, or slope
-  ## models, and it does not touch ti_lmm (whose TI is already re-routed).
-  if (.is_single_obs_m1(model)) {
-    warning("This is a fixed-slope model with single-observation / unbalanced ",
-            "lots; the EMS ", kind, " interval may be anti-conservative (too ",
+  ## Anti-conservative-drift warning, scoped to the drifting cells: the EMS CI
+  ## and PI on a fixed-slope model with at least one single-observation lot
+  ## (.m1_has_single_obs_lot; REML precision-weighting down-weights those lots,
+  ## the same effect that pushes the EMS TI ~2.4% narrow vs the Montes oracle).
+  ## Staggered designs whose lots all have >= 2 observations showed no shortfall
+  ## in validation and do not warn. We make the drift VISIBLE -- we do NOT
+  ## re-route. The new-group-mean interval on this structure uses the unweighted
+  ## lot-mean construction (Fa, .ngm_ri) and does not warn.
+  if (kind %in% c("CI", "PI") && .m1_has_single_obs_lot(model)) {
+    warning("This is a fixed-slope model with single-observation lots; the ",
+            "EMS ", kind, " interval may be anti-conservative (too ",
             "narrow) on such data, because REML precision-weighting down-weights ",
-            "the single-observation lots. The tolerance interval (ti_lmm) is ",
-            "routed to the validated Montes ANOVA closed form on this structure; ",
-            "no validated closed form exists yet for the confidence / prediction ",
-            "/ new-group-mean interval here (planned v2).", call. = FALSE)
+            "the single-observation lots. The tolerance and new-group-mean ",
+            "intervals use the unweighted lot-mean (Montes) closed forms on this ",
+            "structure; no validated alternative is currently available for the ",
+            "confidence or prediction interval here.", call. = FALSE)
   }
   out <- .interval_lmm(model, newdata = newdata, kind = kind, level = level,
-                       sides = sides)
+                       sides = sides,
+                       ci_df = if (is.null(control$ci_df)) "satterthwaite" else control$ci_df)
   tag <- if (.has_random_slope(model)) NULL else "ems-mls"   # slope row already tagged
   .unify_intervals(out, model, kind = kind, method_tag = tag)
 }

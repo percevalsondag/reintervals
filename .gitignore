@@ -5,3 +5,6 @@
 
 # Word exports — the .md is the tracked source of truth
 *.docx
+
+# Rendered vignettes (built output, not source)
+vignettes/*.html

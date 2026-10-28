@@ -16,7 +16,7 @@ test_that("true_value target zeroes only the residual coef", {
   expect_equal(out$coefs[["run"]], 1)
 })
 
-test_that("ems_oneway feeds ti_francq to reproduce the Section 5.2 TI", {
+test_that("ems_oneway feeds ti_francq to reproduce the Francq et al. (2019) Section 5.2 TI", {
   desc <- list(type = "oneway", A = 6, N = 18, n0 = 3, grp = "run")
   out <- ems_oneway(desc, c(run = 0.000681, Residual = 0.001253), "observable")
   comp <- re_components(

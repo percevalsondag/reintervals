@@ -23,13 +23,16 @@ pi_lmm(
 \item{alpha, level}{The interval confidence, as a mutually-exclusive pair: give
 at most one. \code{level} is \code{1 - alpha}; the default is \code{alpha = 0.05} (95\%).}
 
-\item{sides}{\code{"two.sided"} (default), \code{"lower"}, or \code{"upper"}.}
+\item{sides}{\code{"two.sided"} (default), \code{"lower"}, or \code{"upper"}. A one-sided
+interval keeps the two-sided interval's centre, variance, and df and uses
+\verb{t_\{1 - alpha\}} in place of \verb{t_\{1 - alpha/2\}}.}
 
 \item{method}{\code{"auto"} (default) chooses the algorithm by structure; one of
 \code{"ems-mls"}, \code{"reml-mls"}, \code{"anova-mls"}, \code{"gpq"} forces that engine and
 errors if it is incompatible with the model.}
 
-\item{control}{An \code{\link[=lmm_interval_control]{lmm_interval_control()}} object (the GPQ \code{seed} and \code{M}).}
+\item{control}{An \code{\link[=lmm_interval_control]{lmm_interval_control()}} object (the GPQ \code{seed} and \code{M},
+and the confidence-interval df rule \code{ci_df}).}
 }
 \value{
 An \code{lmm_interval} object (a data frame), one row per evaluation point,
@@ -47,7 +50,10 @@ the value for \code{ti}, \code{NA} for the coverage intervals); \code{sides};
 \item the per-row flags \code{singular}, \code{boundary}, \code{vg_floored}.
 }
 \code{attr(., "diagnostics")} is a list of engine-specific extras (degrees of
-freedom \code{df}, standard error \code{se}, and any GPQ / ANOVA intermediates);
+freedom \code{df}; for the random-intercept confidence interval its source
+\code{df_method} --- \code{"satterthwaite"}, \code{"containment"}, or \code{"kenward-roger"};
+for the random-slope tolerance interval the GPQ \code{route_reason}; standard
+error \code{se}; and any GPQ / ANOVA intermediates);
 \code{attr(., "grouping")} is the random-intercept topology (\code{"oneway"},
 \code{"nested"}, \code{"crossed"}, or \code{NA} for slope models).
 }
@@ -56,17 +62,28 @@ One of the four interval verbs (\code{\link[=ci_lmm]{ci_lmm()}}, \code{\link[=pi
 \code{\link[=new_group_mean_lmm]{new_group_mean_lmm()}}). \code{pi_lmm()} gives a prediction interval for one future
 observation at \code{newdata}. Dispatch and arguments are as for \code{\link[=ci_lmm]{ci_lmm()}}.
 }
+\section{Known limitation (few top-level groups)}{
+
+With few levels of the top random factor (five or fewer) and a dominant
+between-group variance (an intraclass correlation near 0.9), the Francq et
+al. (2019) prediction interval used for random-intercept models can
+under-cover: the worst coverage observed in the package's validation was
+about 0.93 for a nominal 0.95, consistent with Francq et al. (2019, Fig. 2).
+}
+
 \section{Known limitation}{
 
-On a fixed-slope model fitted to single-observation / unbalanced lots (the
-release-only stability structure), the EMS confidence, prediction, and
-new-group-mean intervals can be anti-conservative (too narrow), because
-REML precision-weighting down-weights the single-observation lots.
-\code{\link[=ci_lmm]{ci_lmm()}}, \code{\link[=pi_lmm]{pi_lmm()}}, and \code{\link[=new_group_mean_lmm]{new_group_mean_lmm()}} emit a warning when
-that structure is detected (the interval is still returned, unchanged). The
-\emph{tolerance} interval (\code{\link[=ti_lmm]{ti_lmm()}}) is instead routed to the validated Montes
-ANOVA closed form on this structure; a validated closed form for the
-confidence / prediction / new-group-mean case is planned for a future version.
+On a fixed-slope model with single-observation lots (the release-only
+stability structure), the EMS confidence and prediction intervals can be
+anti-conservative (too narrow), because REML precision-weighting
+down-weights the single-observation lots. \code{\link[=ci_lmm]{ci_lmm()}} and \code{\link[=pi_lmm]{pi_lmm()}} emit a
+warning when at least one lot has a single observation (the interval is
+still returned, unchanged); staggered designs whose lots all have two or more
+observations do not warn. The tolerance interval (\code{\link[=ti_lmm]{ti_lmm()}}) and the
+new-group-mean interval (\code{\link[=new_group_mean_lmm]{new_group_mean_lmm()}}) use the unweighted lot-mean
+(Montes) closed forms on single-observation and staggered fixed-slope
+designs and do not warn; no validated alternative is currently available for
+the confidence or prediction interval.
 }
 
 \examples{

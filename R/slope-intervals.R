@@ -74,35 +74,114 @@
   )
 }
 
-## EMS-side new-group-mean (ENW for random intercept and fixed-slope): the Francq
-## prediction interval for the unobservable level "true value" -- pi_newobs on a
-## vc_extract(target = "true_value") container (between-level components only).
-## Reuses the existing, EMS-validated pi_newobs true_value path.
-.ngm_ems <- function(model, newdata = NULL, level = 0.95) {
-  ## Mirror intervals_lmm's per-row loop, but on the between-level "true value"
-  ## (target = "true_value") -> the EMS new-group-mean. Reuses the frozen EMS
-  ## building blocks (.theta_cov / .fixed / re_components / pi_newobs); numbers
-  ## are pi_newobs's. Returns a tidy native data.frame (NOT an re_interval),
-  ## fixing the recon S5 list-vs-data.frame inconsistency.
-  desc  <- classify_design(lme4::getME(model, "flist"),
-                           length(lme4::getME(model, "y")))
-  theta <- .theta_cov(model)
-  dc    <- .design_components(desc, theta$components, "true_value",
-                             .counts_if_unbalanced(model, desc))
-  fx    <- .fixed(model, newdata)
-  rows <- lapply(seq_len(nrow(fx$L)), function(i) {
-    comp <- re_components(
-      components = theta$components, dfs = c(ci = Inf, pi = theta$df_pi),
-      mean = fx$fit[i], var_mean = fx$var_fix[i], coefs = dc$coefs,
-      ems = dc$ems, target = "true_value", design = desc$type
-    )
-    it <- pi_newobs(comp, level = level)
-    data.frame(estimate = it$estimate, lower = it$lower, upper = it$upper,
-               level = level, df = it$df, sides = "two.sided",
-               stringsAsFactors = FALSE)
-  })
-  out <- cbind(fx$newdata, do.call(rbind, rows)); rownames(out) <- NULL
-  attr(out, "singular") <- isTRUE(theta$singular)
+## TRUE when the random-intercept new-group-mean interval uses the anova-mls
+## core (2a / 2b): one grouping factor, and either an intercept-only fixed part
+## or a single numeric (fixed-slope) covariate. Shared with the coverage verb's
+## `method` check so routing and validation cannot diverge.
+.ngm_uses_anova <- function(model) {
+  if (.has_random_slope(model)) return(FALSE)
+  length(lme4::getME(model, "cnms")) == 1L &&
+    (.is_oneway_intercept_only(model) || !is.na(.m1_time_name(model)))
+}
+
+## Random-intercept new-group-mean interval. Target: the TRUE mean of a new
+## innermost cell -- a new group (one-way), a new B-within-A cell (nested), a
+## new (a, b) cell (crossed) -- or, for the fixed-slope design, of a new lot at
+## t0.
+## Constructions (validated by simulation in the paper repo's defect study,
+## E5a / E5e / E6, except 2e):
+##   2a fixed slope, one grouping factor, any balance -> Fa (anova-mls core):
+##      W = S2_L (1 + 1/I) + S2_E (t0 - tbar*)^2 / S_tt, Satterthwaite df
+##   2b intercept-only one-way -> the slope-free branch: W = S2_L (1 + 1/I),
+##      df = I - 1 (== the classical Ca interval on balanced data)
+##   2c nested -> Gm: W = V_F + sum_{j != e} k_j EMS_j, df = A - 1 (top factor)
+##   2d crossed with interaction -> Gv: same W, V_F folded into the A and B
+##      coefficients in proportion to k_A EMS_A : k_B EMS_B, Satterthwaite df on
+##      all terms
+##   2e one-way with other fixed effects -> Gm with the one-way k, df = A - 1
+##   2f anything else (no closed-form EMS decomposition) -> error
+## EMS_j are the REML-implied expected mean squares (.design_components; the
+## synthesis k for unbalanced nested / crossed). Two-sided only.
+.ngm_ri <- function(model, newdata = NULL, level = 0.95,
+                   sides = c("two.sided", "lower", "upper")) {
+  sides <- match.arg(sides)
+  desc  <- .design_of(model)
+  ## two-sided: t_{1 - alpha/2}; one-sided: t_{1 - alpha} on the same pivot
+  tcrit <- function(df) if (sides == "two.sided") stats::qt(1 - (1 - level) / 2, df)
+                        else stats::qt(level, df)
+  value_rows <- function(est, W, df, rule, method) {
+    if (any(!is.finite(W) | W <= 0)) {
+      stop("The new-group-mean variance W is not positive for this fit (e.g. ",
+           "all group means are identical, so the between-group mean square is ",
+           "zero); the interval is not available.", call. = FALSE)
+    }
+    hw <- tcrit(df) * sqrt(W)
+    data.frame(type = "new_group_mean", estimate = est,
+               lower = if (sides == "upper") -Inf else est - hw,
+               upper = if (sides == "lower")  Inf else est + hw,
+               level = level, df = df, df_rule = rule, W = W,
+               sides = sides, method = method, stringsAsFactors = FALSE)
+  }
+
+  if (.ngm_uses_anova(model)) {
+    ## 2a / 2b: the unweighted lot-mean (anova-mls) core
+    time_name <- .m1_time_name(model)
+    has_time <- !is.na(time_name)
+    lot <- lme4::getME(model, "flist")[[1]]
+    time <- if (has_time) as.numeric(stats::model.frame(model)[[time_name]]) else NULL
+    t0 <- if (!has_time) NULL else if (is.null(newdata)) time[1] else {
+      .check_newdata(model, newdata); as.numeric(newdata[[time_name]])
+    }
+    core <- .montes_core(as.numeric(lme4::getME(model, "y")), time, lot, t0)
+    out <- value_rows(core$estimate, attr(core, "ngm_W"), attr(core, "ngm_df"),
+                      if (has_time) "anova-satterthwaite" else "anova-single",
+                      "anova-mls")
+    if (has_time) out <- cbind(time = t0, out)
+    attr(out, "singular") <- .is_singular(model)
+    return(out)
+  }
+  if (!desc$type %in% c("oneway", "nested", "crossed")) {
+    stop(sprintf(paste0("The new-group-mean interval is not available for a '%s' ",
+                        "design: it has no closed-form variance decomposition. ",
+                        "Supported: one-way, two-fold nested, and two crossed ",
+                        "factors with their interaction."), desc$type),
+         call. = FALSE)
+  }
+  ## 2c / 2d / 2e: EMS route. Covariates beyond the intercept enter through V_F
+  ## only. UNVALIDATED: the one-way design with other fixed effects (2e), and
+  ## nested / crossed designs with covariates, were not part of the validation
+  ## simulations (which used intercept-only nested / crossed fits); 2e is
+  ## checked by simulation separately.
+  dc <- .design_components_fit(model, desc, .var_components(model), "observable")
+  if (is.null(dc$ems)) {
+    stop("The new-group-mean interval is not available: no closed-form ",
+         "variance decomposition for this design.", call. = FALSE)
+  }
+  ms <- dc$ems$ms; k <- dc$ems$k; dfj <- dc$ems$df
+  j <- seq_len(length(ms) - 1L)            # every term but the residual (last)
+  S <- sum(k[j] * ms[j])
+  fx <- .fixed(model, newdata)
+  VF <- fx$var_fix
+  W  <- VF + S
+  if (desc$type == "crossed") {
+    ## Gv: V_F attached to the A and B terms (positions 1, 2) in proportion to
+    ## k_A EMS_A : k_B EMS_B; W = sum_j c_j EMS_j is unchanged.
+    pA <- k[1] * ms[1] / (k[1] * ms[1] + k[2] * ms[2])
+    df <- vapply(VF, function(v) {
+      co <- k[j]
+      co[1] <- co[1] + pA * v / ms[1]
+      co[2] <- co[2] + (1 - pA) * v / ms[2]
+      sum(co * ms[j])^2 / sum((co * ms[j])^2 / dfj[j])
+    }, numeric(1))
+    rule <- "satterthwaite-vf"
+  } else {
+    df <- rep(dfj[[1]], length(VF))        # Gm: top-factor stratum df (A - 1,
+                                           # less any between-group fixed columns)
+    rule <- "top-factor"
+  }
+  out <- cbind(fx$newdata, value_rows(fx$fit, W, df, rule, "ems-mls"))
+  rownames(out) <- NULL
+  attr(out, "singular") <- .is_singular(model)
   out
 }
 
@@ -112,19 +191,26 @@
 ## intervals_lmm, new_group_mean via .ngm_ems); random-slope -> the slope ports.
 .interval_lmm <- function(model, newdata = NULL,
                           kind = c("CI", "PI", "new_group_mean"),
-                          level = 0.95, sides = c("two.sided", "lower", "upper")) {
+                          level = 0.95, sides = c("two.sided", "lower", "upper"),
+                          ci_df = c("satterthwaite", "kenward-roger")) {
   if (!inherits(model, "lmerMod")) {
     stop("`model` must be a fitted `lmerMod` (an lmer fit).", call. = FALSE)
   }
   kind  <- match.arg(kind)
   sides <- match.arg(sides)
+  ci_df <- match.arg(ci_df)
 
   if (.has_random_slope(model)) {
+    if (kind == "CI" && ci_df == "kenward-roger") {
+      stop("ci_df = \"kenward-roger\" applies to random-intercept models; the ",
+           "random-slope confidence interval uses its own generalized ",
+           "Satterthwaite df.", call. = FALSE)
+    }
     fe <- lme4::fixef(model)
     time_var <- setdiff(names(fe), "(Intercept)")
     if (length(time_var) != 1L) {
       stop("random-slope intervals require a single continuous covariate (e.g. ~ 1 + time); ",
-         "multiple fixed effects with a random slope are a planned v2 extension.",
+         "multiple fixed effects with a random slope are not currently supported.",
          call. = FALSE)
     }
     t0s <- if (is.null(newdata)) stats::model.frame(model)[[time_var]][1] else
@@ -139,16 +225,25 @@
 
   ## random intercept (incl. fixed-slope): EMS engine.
   if (kind == "new_group_mean") {
-    if (sides != "two.sided") {
-      stop("The EMS new-group-mean interval is two-sided only in this stage.",
-           call. = FALSE)
-    }
-    return(.ngm_ems(model, newdata = newdata, level = level))
+    return(.ngm_ri(model, newdata = newdata, level = level, sides = sides))
   }
-  if (sides != "two.sided") {
-    stop("The EMS CI/PI are two-sided only; one-sided applies to the slope path.",
-         call. = FALSE)
+  out <- intervals_lmm(model, newdata = newdata, level = level, conf = level,
+                       which = kind, ci_method = ci_df)
+  .one_sided_t(out, level = level, sides = sides)
+}
+
+## One-sided EMS CI / PI: t_{1 - alpha} on the existing symmetric t pivot (same
+## centre, same df, same standard error, recovered from the two-sided
+## half-width as hw / t_{1 - alpha/2}). Two-sided input passes through, tagged.
+.one_sided_t <- function(out, level, sides) {
+  out$sides <- sides
+  if (sides == "two.sided") return(out)
+  se <- (out$upper - out$lower) / 2 / stats::qt(1 - (1 - level) / 2, out$df)
+  q1 <- stats::qt(level, out$df)
+  if (sides == "lower") {
+    out$lower <- out$estimate - q1 * se; out$upper <- Inf
+  } else {
+    out$upper <- out$estimate + q1 * se; out$lower <- -Inf
   }
-  intervals_lmm(model, newdata = newdata, level = level, conf = level,
-                which = kind)
+  out
 }

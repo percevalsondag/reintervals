@@ -29,8 +29,9 @@
 #' @param content Content fraction `beta` (proportion of the population covered).
 #'   Default 0.95.
 #' @param conf Confidence level `gamma`. Default 0.95.
-#' @param sides Character: `"two"` (the default and only option in v1). One-sided
-#'   tolerance limits are not implemented.
+#' @param sides Character: `"two"` (default), `"lower"`, or `"upper"`. One-sided
+#'   limits are the package's extension of Hoffman's (2010) one-sided limit to
+#'   this construction, validated by simulation.
 #'
 #' @return An [re_interval] of `type = "TI"`.
 #'
@@ -61,10 +62,6 @@ ti_francq <- function(comp, content = 0.95, conf = 0.95,
          call. = FALSE)
   }
   sides <- match.arg(sides)
-  if (sides != "two") {
-    stop("Only two-sided tolerance intervals are implemented in v1 ",
-         "(`sides = \"two\"`).", call. = FALSE)
-  }
   for (nm in c("content", "conf")) {
     v <- get(nm)
     if (!is.numeric(v) || length(v) != 1L || is.na(v) || v <= 0 || v >= 1) {
@@ -74,7 +71,7 @@ ti_francq <- function(comp, content = 0.95, conf = 0.95,
   }
   if (identical(comp$target, "true_value")) {
     stop("The true_value (between-level only) tolerance interval is not ",
-         "supported for the fixed-slope design; only `target = \"observable\"` is implemented. ",
+         "supported for any design; only `target = \"observable\"` is implemented. ",
          "(`pi_newobs()` does support true_value.) The true_value TI requires ",
          "the difference-of-EMS / sign-unrestricted MLS variant and is deferred ",
          "to a focused follow-up with its own derivation review and validation.",
@@ -98,18 +95,28 @@ ti_francq <- function(comp, content = 0.95, conf = 0.95,
   a <- 1 - conf                                   # chi-square lower-tail prob
   h <- ems$df / stats::qchisq(a, df = ems$df) - 1
   inner <- sum(h^2 * ems$k^2 * ems$ms^2)
-  z <- stats::qnorm((1 + content) / 2)
-  hw <- z * sqrt(comp$var_mean + sigma2_t) * sqrt(1 + sqrt(inner) / sigma2_t)
+  ## One-sided: the package's extension of Hoffman's (2010) one-sided limit to
+  ## the Francq construction (validated by simulation):
+  ##   mean -/+ ( z_P sqrt(U) + z_{1-alpha} sqrt(V_F) ),
+  ## with U = sigma2_T + sqrt(sum H_j^2 k_j^2 EMS_j^2), Francq's MLS upper bound
+  ## on sigma2_T. Hoffman D (2010), Technometrics 52(3):303-312.
+  hw <- if (sides == "two") {
+    stats::qnorm((1 + content) / 2) * sqrt(comp$var_mean + sigma2_t) *
+      sqrt(1 + sqrt(inner) / sigma2_t)
+  } else {
+    stats::qnorm(content) * sqrt(sigma2_t + sqrt(inner)) +
+      stats::qnorm(conf) * sqrt(comp$var_mean)
+  }
 
   new_re_interval(
     estimate = comp$mean,
-    lower    = comp$mean - hw,
-    upper    = comp$mean + hw,
+    lower    = if (sides == "upper") -Inf else comp$mean - hw,
+    upper    = if (sides == "lower")  Inf else comp$mean + hw,
     type     = "TI",
     content  = content,
     conf     = conf,
     df       = NA_real_,                          # normal-based; no t df
-    sides    = "two",
+    sides    = sides,
     target   = comp$target,
     design   = comp$design,
     call     = match.call()

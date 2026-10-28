@@ -16,7 +16,11 @@
 #' with the Graybill--Wang content-variance bound
 #' `U = V_T + sqrt((H_G V_G)^2 + (H_e s2e)^2)`, chi-square tail factors
 #' `H_j = nu_j / qchisq(1 - gamma, nu_j) - 1`, and effective sample size
-#' `n_E = V_T / V_F` (carried on the container).
+#' `n_E = V_T / V_F` (carried on the container). One-sided limits use Hoffman's
+#' (2010) form `mu -/+ (z_P sqrt(U) + z_{1-gamma'} sqrt(V_F))` with
+#' `z_{1-gamma'} = qnorm(gamma)` --- the package's extension of Hoffman (2010)
+#' to the REML closed-form bound, validated by simulation; it is the
+#' dispatcher's one-sided default for random slopes on every fit.
 #'
 #' @param comp A `vfun_components` object (from `vfun_extract()`). Uses `mean`,
 #'   `var_mean`, `V_G`, `V_T`, `n_E`, `phi[["s2e"]]`, and `dfs[c("G","e")]`.
@@ -73,8 +77,16 @@ ti_vfun <- function(comp, content = 0.99, conf = 0.95,
   H_G <- nu_G / stats::qchisq(1 - conf, nu_G) - 1
   H_e <- nu_e / stats::qchisq(1 - conf, nu_e) - 1
   U   <- V_T + sqrt((H_G * V_G)^2 + (H_e * s2e)^2)
-  zc  <- if (sides == "two.sided") stats::qnorm((1 + content) / 2) else stats::qnorm(content)
-  hw  <- zc * sqrt(1 + 1 / nE) * sqrt(U)
+  ## One-sided: Hoffman's (2010) limit with this U and V_F --
+  ## mu -/+ ( z_P sqrt(U) + z_{1-alpha} sqrt(V_F) ): the package's extension of
+  ## Hoffman (2010) to this bound, validated by simulation; the random-slope
+  ## one-sided default on every fit. Hoffman D (2010), Technometrics
+  ## 52(3):303-312.
+  hw  <- if (sides == "two.sided") {
+    stats::qnorm((1 + content) / 2) * sqrt(1 + 1 / nE) * sqrt(U)
+  } else {
+    stats::qnorm(content) * sqrt(U) + stats::qnorm(conf) * sqrt(V_F)
+  }
 
   data.frame(
     time = comp$t0, type = "TI", estimate = mu,

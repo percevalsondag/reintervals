@@ -101,10 +101,10 @@ test_that(".interval_lmm routes random-intercept CI/PI to the EMS engine", {
   expect_equal(pi$upper, ems_pi$upper)
 })
 
-test_that("EMS new_group_mean (true_value path) drops the residual vs the observable PI", {
+test_that("random-intercept new_group_mean (true mean of a new group) is narrower than the PI", {
   skip_if_not_installed("lme4")
   m   <- fit_52()
-  ngm <- .ngm_ems(m, level = 0.95)               # native value-frame (no list)
+  ngm <- .ngm_ri(m, level = 0.95)                # native value-frame (no list)
   pi  <- suppressWarnings(intervals_lmm(m, which = "PI", level = 0.95))
   expect_s3_class(ngm, "data.frame")             # S5: not an re_interval list
   # between-level-only content -> strictly narrower than the future-observation PI

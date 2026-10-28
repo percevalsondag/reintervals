@@ -201,29 +201,24 @@
 }
 
 ## ---- Cov(phi) via inverse observed information  ---------
-## SAFEGUARD (2): isSingular + near-boundary detection. cov is NULL when the
-## Hessian fails or is not PD; `boundary` flags a small-but-positive component.
+## SAFEGUARD (2): cov is NULL when the Hessian fails, cannot be inverted, or its
+## inverse is not a valid covariance (.is_pd_cov: symmetric positive definite,
+## every eigenvalue > 1e-8 * the largest |eigenvalue|). An indefinite inverse
+## Hessian makes the Satterthwaite df arbitrarily large (anti-conservative), so
+## a NULL cov sends every df to the containment fallback and the random-slope
+## TI to GPQ. `boundary` flags a small-but-positive component.
 .vfun_vc_cov <- function(parsed, boundary_tol = 1e-4) {
   phi <- parsed$phi
   boundary <- .vfun_is_boundary(phi, boundary_tol)  # variances-only (see helper)
 
   H <- tryCatch(numDeriv::hessian(parsed$reml_nll, phi), error = function(e) NULL)
-  ok <- !is.null(H) && all(is.finite(H))
-  cov <- NULL; singular <- TRUE
-  if (ok) {
+  cov <- NULL
+  if (!is.null(H) && all(is.finite(H))) {
     cov <- tryCatch(solve(H), error = function(e) NULL)
-    if (!is.null(cov) && all(is.finite(cov))) {
-      ev <- tryCatch(eigen(cov, symmetric = TRUE, only.values = TRUE)$values,
-                     error = function(e) NA_real_)
-      singular <- any(!is.finite(ev)) || any(ev <= 0)
-    } else {
-      cov <- NULL
-    }
+    if (!.is_pd_cov(cov)) cov <- NULL
   }
-  if (is.null(cov)) singular <- TRUE
 
-  list(cov = cov, phi = phi, boundary = boundary, singular = singular,
-       ok = !is.null(cov))
+  list(cov = cov, phi = phi, boundary = boundary, ok = !is.null(cov))
 }
 
 #' Build a `vfun_components` from a fitted slope (or fixed-slope) lmer model
@@ -231,8 +226,9 @@
 #' The slope-engine extraction path: it parses a fitted `merMod` stability model
 #' (random intercept + fixed slope, correlated random slope, or independent
 #' random slope; see [reintervals-models]), reconstructs `Cov(phi)` from the
-#' observed information (the numerical Hessian of the profiled REML negative
-#' log-likelihood), evaluates the time-quadratic between-batch variance
+#' observed information (the numerical Hessian of the REML negative
+#' log-likelihood on the variance-component scale, with beta at its GLS value),
+#' evaluates the time-quadratic between-batch variance
 #' `V_G(t0) = z0' Sigma z0` and the Satterthwaite/containment degrees of freedom
 #' at a single time point `t0`, and returns a populated, validated
 #' `vfun_components`.
@@ -257,7 +253,10 @@
 #' @param boundary_tol A component is flagged near-boundary if below this
 #'   fraction of total variance. Default `1e-4`.
 #'
-#' @return A `vfun_components` object at `t0`, with `attr(., "target")` set.
+#' @return A `vfun_components` object at `t0`, with `attr(., "target")` set and
+#'   `attr(., "df_fallback")`, a logical vector over `F`, `T`, `G`, `e` that is
+#'   `TRUE` where the Satterthwaite df was unavailable and the containment df was
+#'   used (`NA` when `df_method = "containment"`).
 #' @seealso `vfun_components()`, `vc_extract()` (the EMS path).
 #' @examples
 #' fm <- lme4::lmer(Reaction ~ Days + (1 + Days | Subject),
@@ -309,16 +308,19 @@ vfun_extract <- function(model, t0,
   gVe <- stats::setNames(as.numeric(names(phi) == "s2e"), names(phi))
   grad_vF <- numDeriv::grad(function(p) parsed$vF_fun(p, x0), phi)
 
+  ## Each returns c(df, fell_back): fell_back = 1 when the Satterthwaite df was
+  ## unavailable and the containment df was used (NA when containment is forced).
   resolve_df <- function(value, grad_vec, w_between) {
-    if (df_method == "containment") return(.vfun_df_containment(parsed, w_between))
+    if (df_method == "containment") return(c(.vfun_df_containment(parsed, w_between), NA))
     d <- .vfun_df_satterthwaite(value, grad_vec, cov)
-    if (is.finite(d) && d > 0) return(d)
-    .vfun_df_containment(parsed, w_between)        # fallback on degenerate df
+    if (is.finite(d) && d > 0) return(c(d, 0))
+    c(.vfun_df_containment(parsed, w_between), 1)  # fallback on degenerate df
   }
-  nu_F <- resolve_df(V_F, grad_vF, w_between = 1)
-  nu_T <- resolve_df(V_T, gVT, w_between = if (V_T > 0) V_G / V_T else 0)
-  nu_G <- resolve_df(V_G, gVG, w_between = 1)
-  nu_e <- resolve_df(s2e, gVe, w_between = 0)
+  rF <- resolve_df(V_F, grad_vF, w_between = 1)
+  rT <- resolve_df(V_T, gVT, w_between = if (V_T > 0) V_G / V_T else 0)
+  rG <- resolve_df(V_G, gVG, w_between = 1)
+  re <- resolve_df(s2e, gVe, w_between = 0)
+  nu_F <- rF[1]; nu_T <- rT[1]; nu_G <- rG[1]; nu_e <- re[1]
 
   out <- vfun_components(
     type = type, phi = phi, cov = cov,
@@ -329,6 +331,8 @@ vfun_extract <- function(model, t0,
   )
   attr(out, "target") <- target
   attr(out, "vg_floored") <- vg$floored
+  attr(out, "df_fallback") <- c(F = rF[2] == 1, T = rT[2] == 1, G = rG[2] == 1,
+                                e = re[2] == 1)
   out
 }
 

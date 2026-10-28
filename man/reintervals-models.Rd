@@ -4,11 +4,14 @@
 \alias{reintervals-models}
 \title{Mixed-model classes reintervals computes intervals for}
 \description{
-\code{reintervals} covers four linear-mixed-model classes for a single grouping
-factor with fixed part \code{~ 1 + time}. The interval verbs (\code{\link[=ci_lmm]{ci_lmm()}},
-\code{\link[=pi_lmm]{pi_lmm()}}, \code{\link[=ti_lmm]{ti_lmm()}}, \code{\link[=new_group_mean_lmm]{new_group_mean_lmm()}}) detect the class from the
-fitted model and route to the engine that is exact/validated for it; the class
-is reported back, route-independently, in the \code{design} column of the result.
+\code{reintervals} covers four linear-mixed-model classes: random intercepts
+(one-way, nested, or crossed; general fixed effects), a random intercept with
+a fixed slope, and a random intercept with a correlated or independent random
+slope (single grouping factor, fixed part \code{~ 1 + time}). The interval verbs
+(\code{\link[=ci_lmm]{ci_lmm()}}, \code{\link[=pi_lmm]{pi_lmm()}}, \code{\link[=ti_lmm]{ti_lmm()}}, \code{\link[=new_group_mean_lmm]{new_group_mean_lmm()}}) detect the class
+from the fitted model and route to the engine that is exact/validated for it
+(engine map: \link{reintervals}, \code{vignette("choosing-an-interval")}); the class is
+reported back, route-independently, in the \code{design} column of the result.
 This page records the mapping from each model definition to its \code{design} tag.
 }
 \section{Model classes}{
@@ -53,13 +56,31 @@ here under both names so it is discoverable as "CInew" or "new batch mean".
 
 \section{One-sided intervals}{
 
-One-sided intervals (sides = "lower" or "upper") are currently available only
-for the Montes single-observation tolerance interval and the random-slope
-engines. The expected-mean-square (EMS) engine used for random-intercept and
-balanced fixed-slope designs produces two-sided intervals only; one-sided EMS
-intervals are planned for a future release.
+Every verb accepts \code{sides = "lower"} or \code{"upper"}.
+\itemize{
+\item Confidence, prediction, and new-group-mean intervals: the same centre,
+variance, and df as the two-sided interval, with \verb{t_\{1 - alpha\}} in place
+of \verb{t_\{1 - alpha/2\}} (all engines).
+\item Tolerance intervals, \code{anova-mls} (Hoffman-Kringle one-way and Montes
+fixed slope): Hoffman's (2010) one-sided limit
+\verb{Yhat -/+ (z_P sqrt(U) + z_\{1-alpha\} sqrt(Vhat(Yhat)))}, with the same MLS
+bound \code{U} as the two-sided interval (Montes et al. 2019, Eqs. 2-3, 6-7).
+\item Tolerance intervals, \code{ems-mls} (Francq): the same structure with
+Francq's MLS bound on the total variance and \code{Vhat = V_F} --- the
+package's extension of Hoffman (2010), validated by simulation.
+\item Tolerance intervals, random slope: Hoffman's structure with the
+REML closed form's bound and \code{Vhat = V_F} (\code{reml-mls}), on every fit
+including singular ones --- the package's extension of Hoffman (2010),
+validated by simulation. \code{method = "gpq"} is available but under-covered
+near the variance-component boundary in validation.
+}
 }
 
+\references{
+Hoffman D (2010). One-sided tolerance limits for balanced and
+unbalanced random effects models. \emph{Technometrics} 52(3):303-312.
+\doi{10.1198/TECH.2010.09171}
+}
 \seealso{
 \code{\link[=ci_lmm]{ci_lmm()}}, \code{\link[=pi_lmm]{pi_lmm()}}, \code{\link[=ti_lmm]{ti_lmm()}}, \code{\link[=new_group_mean_lmm]{new_group_mean_lmm()}},
 \code{\link[=lmm_predict]{lmm_predict()}}, \code{\link[=ti_anova_raw]{ti_anova_raw()}}, \code{\link[=ti_gpq_raw]{ti_gpq_raw()}}.

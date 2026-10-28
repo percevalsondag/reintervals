@@ -25,13 +25,13 @@ test_that("intervals_lmm preserves the data.frame columns and attributes (GxP co
   expect_equal(out$df[out$type == "PI"], 12.486, tolerance = 1e-3)
 })
 
-test_that("which = 'CI' computes no Hessian and sets no PI attributes", {
+test_that("which = 'CI' sets no PI attributes, but reports singular", {
   skip_if_not_installed("lme4")
   out <- intervals_lmm(fit_52(), which = "CI")
   expect_setequal(out$type, "CI")
   expect_null(attr(out, "components"))
   expect_null(attr(out, "pi_df_fallback"))
-  expect_null(attr(out, "singular"))
+  expect_identical(attr(out, "singular"), lme4::isSingular(fit_52()))  # set without theta
 })
 
 test_that("intervals_lmm handles multiple newdata rows and keeps predictor columns", {
