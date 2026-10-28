@@ -93,7 +93,8 @@ which \code{V_F} is attached to the two main-effect terms
 \eqn{\mu(t_0) \pm t_{\nu_G}\sqrt{V_F + V_G}} (\code{"reml-mls"}).
 }
 A design without a closed-form variance decomposition (two crossed factors
-without their interaction, three or more grouping factors) is an error.
+without their interaction term, or four or more grouping factors) is an
+error.
 Random-intercept new-group-mean intervals are two-sided only.
 }
 

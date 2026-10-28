@@ -136,7 +136,7 @@ the verbs (full mapping in `vignette("choosing-an-interval")` and
 | random intercept, intercept-only one-way (`y ~ 1 + (1 | g)`) | `ems-mls` | `anova-mls` | `anova-mls` (Hoffman & Kringle 2005) |
 | random intercept, nested, crossed (with interaction), or one-way with covariates | `ems-mls` | `ems-mls` | `ems-mls` |
 | random intercept + fixed slope, clean balanced | `ems-mls` | `anova-mls` | `ems-mls` |
-| random intercept + fixed slope, single-observation / unbalanced | `ems-mls` (warns: may be anti-conservative) | `anova-mls` | `anova-mls` |
+| random intercept + fixed slope, single-observation / unbalanced | `ems-mls` (warns if any lot has a single observation) | `anova-mls` | `anova-mls` |
 | random slope, non-singular, future-observation | `reml-mls` | `reml-mls` | `reml-mls` |
 | random slope, future-observation, singular fit or TI df unavailable | `reml-mls` (flagged `singular`) | `reml-mls` (flagged `singular`) | `gpq` |
 | random slope, batch-mean (`over = "group_mean"`, TI only) | --- | --- | `gpq` |
@@ -151,7 +151,8 @@ moves to `gpq` while CI, PI, and new-group-mean stay on `reml-mls` (flagged
 `singular`), and it also moves to `gpq` at any `t0` where the closed form's
 Satterthwaite df for the between-group or residual variance is unavailable; on a
 single-observation / unbalanced fixed-slope design the TI moves to `anova-mls`
-while CI and PI stay on `ems-mls` and warn (see below). The
+while CI and PI stay on `ems-mls` (and warn when a lot has a single observation;
+see below). The
 intercept-only one-way TI uses `anova-mls`, the Hoffman & Kringle (2005)
 interval, balanced or not.
 
@@ -179,11 +180,11 @@ continuous covariate** for random-slope models (the stability design).
 
 ### A warning you should understand
 
-On a fixed-slope model fitted to single-observation / unbalanced lots, the EMS
-confidence/prediction/new-group-mean intervals can be **anti-conservative (too
-narrow)**, because REML precision-weighting down-weights the single-observation
-lots. The coverage verbs **warn** on this structure (the interval is still
-returned). Here the warning fires on the MBL data:
+On a fixed-slope model with single-observation lots, the EMS confidence and
+prediction intervals can be **anti-conservative (too narrow)**, because REML
+precision-weighting down-weights the single-observation lots. `ci_lmm()` and
+`pi_lmm()` **warn** when at least one lot has a single observation (the interval
+is still returned). Here the warning fires on the MBL data:
 
 ```{r c1-warning}
 ci_lmm(fm_mbl, newdata = data.frame(Month = 12))

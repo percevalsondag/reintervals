@@ -11,29 +11,61 @@
 #'   \item{[pi_lmm()]}{prediction interval for a future observation.}
 #'   \item{[ti_lmm()]}{tolerance interval (content `P`); `over = "group_mean"`
 #'     gives the batch-mean tolerance interval.}
-#'   \item{[new_group_mean_lmm()]}{the CInew / new-batch-mean interval (a
-#'     prediction interval for one new group's mean).}
+#'   \item{[new_group_mean_lmm()]}{the CInew / new-batch-mean interval (an
+#'     interval for the true mean of one new group: a new innermost cell, or a
+#'     new lot at `t0`).}
 #' }
 #' [lmm_predict()] is a `predict()`-style wrapper over the four, selected by
-#' `interval =`. [lmm_interval_control()] supplies the GPQ tuning (seed, `M`).
+#' `interval =`. [lmm_interval_control()] supplies the GPQ tuning (seed, `M`)
+#' and the confidence-interval df rule (`ci_df`).
 #' Every verb returns the same `lmm_interval` data frame (see [ci_lmm()] for the
 #' column/attribute contract).
 #'
 #' @section Engine and scope map:
-#' The engine is chosen from the fitted model's structure (see
-#' [reintervals-models] for the full mapping):
-#' \tabular{ll}{
-#'   **model class** \tab **engine (`method`)** \cr
-#'   random intercept (any fixed effects; one-way / nested / crossed) \tab
-#'     expected-mean-square / modified large-sample (`"ems-mls"`) \cr
-#'   random intercept + fixed slope, clean balanced \tab `"ems-mls"` \cr
-#'   random intercept + fixed slope, single-observation / unbalanced \tab
-#'     unweighted lot-mean ANOVA closed form (`"anova-mls"`) \cr
-#'   random slope, future-observation \tab REML closed form (`"reml-mls"`);
-#'     GPQ (`"gpq"`) when the fit is singular \cr
-#'   random slope, batch-mean \tab GPQ Monte Carlo (`"gpq"`) \cr
+#' The engine is chosen from the fitted model's structure and can differ
+#' between the verbs (full mapping in `vignette("choosing-an-interval")`;
+#' design tags in [reintervals-models]). Engines: `"ems-mls"`
+#' (expected-mean-square / modified large-sample), `"anova-mls"` (unweighted
+#' lot-mean ANOVA: Montes et al. with a fixed slope, Hoffman & Kringle without
+#' one), `"reml-mls"` (REML closed form), `"gpq"` (generalized pivotal quantity,
+#' Monte Carlo).
+#' \tabular{lllll}{
+#'   **model / situation** \tab **CI** \tab **PI** \tab **TI** \tab
+#'     **new-group mean** \cr
+#'   random intercept, one-way, intercept only (`y ~ 1 + (1 | g)`) \tab
+#'     `ems-mls` \tab `ems-mls` \tab `anova-mls` (Hoffman & Kringle) \tab
+#'     `anova-mls` \cr
+#'   random intercept, one-way with covariates \tab `ems-mls` \tab `ems-mls`
+#'     \tab `ems-mls` \tab `ems-mls` (Gm) \cr
+#'   random intercept, nested \tab `ems-mls` \tab `ems-mls` \tab `ems-mls`
+#'     \tab `ems-mls` (Gm) \cr
+#'   random intercept, crossed with interaction \tab `ems-mls` \tab `ems-mls`
+#'     \tab `ems-mls` \tab `ems-mls` (Gv) \cr
+#'   random intercept, crossed without interaction or 4+ grouping factors \tab
+#'     `ems-mls` \tab `ems-mls` \tab error \tab error \cr
+#'   random intercept + fixed slope, clean balanced \tab `ems-mls` \tab
+#'     `ems-mls` \tab `ems-mls` \tab `anova-mls` \cr
+#'   random intercept + fixed slope, single-observation / staggered \tab
+#'     `ems-mls` (warns with single-observation lots) \tab `ems-mls` (warns
+#'     likewise) \tab `anova-mls` \tab `anova-mls` \cr
+#'   random slope, future-observation, non-singular \tab `reml-mls` \tab
+#'     `reml-mls` \tab `reml-mls` \tab `reml-mls` \cr
+#'   random slope, singular fit or TI Satterthwaite df unavailable \tab
+#'     `reml-mls` \tab `reml-mls` \tab `gpq` \tab `reml-mls` \cr
+#'   random slope, batch-mean (`over = "group_mean"`, TI only) \tab --- \tab
+#'     --- \tab `gpq` \tab --- \cr
 #' }
-#' **v1 scope.** General fixed effects are supported for random-intercept
+#' The random-slope tolerance interval switches to GPQ when the fit is
+#' singular or, at a given `t0`, when the closed form's Satterthwaite df for the
+#' between-group or residual variance is unavailable (including when the
+#' variance-component covariance is not positive definite); the reason is in
+#' `attr(., "diagnostics")$route_reason`. The random-intercept confidence
+#' interval uses a Satterthwaite df, falling back to the SAS-style containment
+#' df (`A - 1` one-way or nested, `min(A, B) - 1` crossed) when that df is
+#' unavailable; Kenward-Roger df only on request
+#' (`lmm_interval_control(ci_df = "kenward-roger")`).
+#'
+#' **Scope.** General fixed effects are supported for random-intercept
 #' models; random-slope models are supported for a single continuous covariate (the
 #' stability design). The two tier-2 direct engines [ti_anova_raw()] and
 #' [ti_gpq_raw()] compute from raw `(y, time, group)` vectors without a fit.

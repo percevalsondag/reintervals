@@ -85,7 +85,8 @@ classify_design <- function(flist, N) {
 
 ## Dispatch to the per-design EMS adapter. Returns list(ems, coefs, note);
 ## ems is NULL (with an explanatory note) outside the closed-form catalog:
-## off-catalog designs (crossed without interaction, 3+ factors), or an
+## off-catalog designs (crossed without interaction, or four or more grouping
+## factors), or an
 ## unbalanced nested / crossed design called without its cell-count table
 ## (balanced designs use the closed forms; unbalanced ones the EMS synthesis).
 .design_components <- function(desc, components, target, counts = NULL) {

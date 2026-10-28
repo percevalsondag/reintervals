@@ -4,11 +4,14 @@
 \alias{reintervals-models}
 \title{Mixed-model classes reintervals computes intervals for}
 \description{
-\code{reintervals} covers four linear-mixed-model classes for a single grouping
-factor with fixed part \code{~ 1 + time}. The interval verbs (\code{\link[=ci_lmm]{ci_lmm()}},
-\code{\link[=pi_lmm]{pi_lmm()}}, \code{\link[=ti_lmm]{ti_lmm()}}, \code{\link[=new_group_mean_lmm]{new_group_mean_lmm()}}) detect the class from the
-fitted model and route to the engine that is exact/validated for it; the class
-is reported back, route-independently, in the \code{design} column of the result.
+\code{reintervals} covers four linear-mixed-model classes: random intercepts
+(one-way, nested, or crossed; general fixed effects), a random intercept with
+a fixed slope, and a random intercept with a correlated or independent random
+slope (single grouping factor, fixed part \code{~ 1 + time}). The interval verbs
+(\code{\link[=ci_lmm]{ci_lmm()}}, \code{\link[=pi_lmm]{pi_lmm()}}, \code{\link[=ti_lmm]{ti_lmm()}}, \code{\link[=new_group_mean_lmm]{new_group_mean_lmm()}}) detect the class
+from the fitted model and route to the engine that is exact/validated for it
+(engine map: \link{reintervals}, \code{vignette("choosing-an-interval")}); the class is
+reported back, route-independently, in the \code{design} column of the result.
 This page records the mapping from each model definition to its \code{design} tag.
 }
 \section{Model classes}{

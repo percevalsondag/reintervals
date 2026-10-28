@@ -196,8 +196,9 @@ print.lmm_interval <- function(x, ...) {
 #' [new_group_mean_lmm()]). `ci_lmm()` gives a confidence interval for the mean
 #' response at `newdata`. It dispatches by random structure: random-intercept
 #' designs (including a fixed slope) use the expected-mean-square engine;
-#' random-slope designs use the REML closed form. See [reintervals-models] for
-#' the model-class to engine map and [lmm_predict()] for the unified entry point.
+#' random-slope designs use the REML closed form. See [reintervals] and
+#' `vignette("choosing-an-interval")` for the engine map, [reintervals-models]
+#' for the design tags, and [lmm_predict()] for the unified entry point.
 #'
 #' @param model A fitted `lmerMod` (from [lme4::lmer()]).
 #' @param newdata Row(s) giving the fixed-effect combination(s) to evaluate at.
@@ -234,15 +235,17 @@ print.lmm_interval <- function(x, ...) {
 #'   `"nested"`, `"crossed"`, or `NA` for slope models).
 #'
 #' @section Known limitation: 
-#' On a fixed-slope model fitted to single-observation / unbalanced lots (the
-#' release-only stability structure), the EMS confidence and prediction
-#' intervals can be anti-conservative (too narrow), because REML
-#' precision-weighting down-weights the single-observation lots. [ci_lmm()] and
-#' [pi_lmm()] emit a warning when that structure is detected (the interval is
-#' still returned, unchanged). The tolerance interval ([ti_lmm()]) and the
+#' On a fixed-slope model with single-observation lots (the release-only
+#' stability structure), the EMS confidence and prediction intervals can be
+#' anti-conservative (too narrow), because REML precision-weighting
+#' down-weights the single-observation lots. [ci_lmm()] and [pi_lmm()] emit a
+#' warning when at least one lot has a single observation (the interval is
+#' still returned, unchanged); staggered designs whose lots all have two or more
+#' observations do not warn. The tolerance interval ([ti_lmm()]) and the
 #' new-group-mean interval ([new_group_mean_lmm()]) use the unweighted lot-mean
-#' (Montes) closed forms on this structure and do not warn; no validated
-#' alternative is currently available for the confidence or prediction interval.
+#' (Montes) closed forms on single-observation and staggered fixed-slope
+#' designs and do not warn; no validated alternative is currently available for
+#' the confidence or prediction interval.
 #'
 #' @seealso [pi_lmm()], [ti_lmm()], [new_group_mean_lmm()], [lmm_predict()],
 #'   [reintervals-models].
@@ -323,7 +326,8 @@ pi_lmm <- function(model, newdata = NULL, alpha = NULL, level = NULL,
 #'     \eqn{\mu(t_0) \pm t_{\nu_G}\sqrt{V_F + V_G}} (`"reml-mls"`).
 #' }
 #' A design without a closed-form variance decomposition (two crossed factors
-#' without their interaction, three or more grouping factors) is an error.
+#' without their interaction term, or four or more grouping factors) is an
+#' error.
 #' Random-intercept new-group-mean intervals are two-sided only.
 #'
 #' @inheritParams ci_lmm
@@ -362,17 +366,17 @@ new_group_mean_lmm <- function(model, newdata = NULL, alpha = NULL, level = NULL
         sprintf("use \"auto\" or \"%s\".", ok), call. = FALSE)
     }
   }
-  ## Anti-conservative-drift warning, scoped to EXACTLY the drifting cells:
-  ## the EMS CI and PI on a fixed-slope model with single-observation /
-  ## unbalanced lots (the same REML precision-weighting that pushes the EMS TI
-  ## ~2.4% narrow vs the Montes oracle). We make the drift VISIBLE -- we do NOT
+  ## Anti-conservative-drift warning, scoped to the drifting cells: the EMS CI
+  ## and PI on a fixed-slope model with at least one single-observation lot
+  ## (.m1_has_single_obs_lot; REML precision-weighting down-weights those lots,
+  ## the same effect that pushes the EMS TI ~2.4% narrow vs the Montes oracle).
+  ## Staggered designs whose lots all have >= 2 observations showed no shortfall
+  ## in validation and do not warn. We make the drift VISIBLE -- we do NOT
   ## re-route. The new-group-mean interval on this structure uses the unweighted
-  ## lot-mean construction (Fa, .ngm_ri) and does not warn. Reuses the same
-  ## .is_single_obs_m1() detector ti_lmm uses to re-route the TI, so it cannot
-  ## fire on clean-balanced M1 (exact), plain random-intercept, or slope models.
-  if (kind %in% c("CI", "PI") && .is_single_obs_m1(model)) {
-    warning("This is a fixed-slope model with single-observation / unbalanced ",
-            "lots; the EMS ", kind, " interval may be anti-conservative (too ",
+  ## lot-mean construction (Fa, .ngm_ri) and does not warn.
+  if (kind %in% c("CI", "PI") && .m1_has_single_obs_lot(model)) {
+    warning("This is a fixed-slope model with single-observation lots; the ",
+            "EMS ", kind, " interval may be anti-conservative (too ",
             "narrow) on such data, because REML precision-weighting down-weights ",
             "the single-observation lots. The tolerance and new-group-mean ",
             "intervals use the unweighted lot-mean (Montes) closed forms on this ",

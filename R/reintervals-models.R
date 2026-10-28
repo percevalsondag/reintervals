@@ -1,10 +1,13 @@
 #' Mixed-model classes reintervals computes intervals for
 #'
-#' `reintervals` covers four linear-mixed-model classes for a single grouping
-#' factor with fixed part `~ 1 + time`. The interval verbs ([ci_lmm()],
-#' [pi_lmm()], [ti_lmm()], [new_group_mean_lmm()]) detect the class from the
-#' fitted model and route to the engine that is exact/validated for it; the class
-#' is reported back, route-independently, in the `design` column of the result.
+#' `reintervals` covers four linear-mixed-model classes: random intercepts
+#' (one-way, nested, or crossed; general fixed effects), a random intercept with
+#' a fixed slope, and a random intercept with a correlated or independent random
+#' slope (single grouping factor, fixed part `~ 1 + time`). The interval verbs
+#' ([ci_lmm()], [pi_lmm()], [ti_lmm()], [new_group_mean_lmm()]) detect the class
+#' from the fitted model and route to the engine that is exact/validated for it
+#' (engine map: [reintervals], `vignette("choosing-an-interval")`); the class is
+#' reported back, route-independently, in the `design` column of the result.
 #' This page records the mapping from each model definition to its `design` tag.
 #'
 #' @section Model classes:

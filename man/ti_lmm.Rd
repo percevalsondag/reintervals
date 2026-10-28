@@ -68,8 +68,9 @@ error \code{se}; and any GPQ / ANOVA intermediates);
 \description{
 One of the four interval verbs, and the dispatched tolerance interval. It
 classifies the fitted model and routes by random/fixed structure, the
-tolerance target (\code{over}), and the singular flag to
-the engine that is exact/validated for that case --- all transparently:
+tolerance target (\code{over}), the singular flag, and (random slope) whether the
+closed form's Satterthwaite df is available, to the engine that is
+exact/validated for that case --- all transparently:
 }
 \details{
 \itemize{

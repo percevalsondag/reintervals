@@ -44,6 +44,17 @@
   signal an error. On single-observation fixed-slope designs the
   new-group-mean interval no longer warns (the warning remains for the
   confidence and prediction intervals).
+* A model whose single numeric covariate is constant within every group (a
+  between-group covariate, e.g. `y ~ z + (1 | g)`) was misclassified as the
+  fixed-slope stability design: `new_group_mean_lmm()` and `ti_lmm()` failed
+  ("no within-lot time variation") and `ci_lmm()` / `pi_lmm()` warned. A
+  covariate is now treated as the fixed-slope time only if it varies within
+  at least one group; otherwise all four verbs follow the `ems-mls` path.
+* The anti-conservative warning of `ci_lmm()` and `pi_lmm()` on fixed-slope
+  designs now fires only when at least one lot has a single observation.
+  Staggered designs whose lots all have two or more observations showed no
+  shortfall in validation and no longer warn. The tolerance interval still
+  uses `anova-mls` on every fixed-slope design that is not clean balanced.
 * A variance-component covariance matrix (the inverse observed information)
   that is not positive definite is now treated as unavailable: the
   containment df is used and the random-slope tolerance interval routes to

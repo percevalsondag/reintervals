@@ -68,9 +68,11 @@ B-within-A cell (nested), a new (a, b) cell (crossed), or a new lot at `t0`
 ^a^ These designs have no closed-form variance decomposition, so `ti_lmm()`
 and `new_group_mean_lmm()` signal a clear error. CI and PI remain available.
 
-^b^ On single-observation / unbalanced fixed-slope data the EMS confidence and
+^b^ On fixed-slope data with single-observation lots the EMS confidence and
 prediction intervals can be anti-conservative (too narrow); `ci_lmm()` and
-`pi_lmm()` emit a warning. The interval is returned unchanged.
+`pi_lmm()` emit a warning when at least one lot has a single observation. The
+interval is returned unchanged. Staggered designs whose lots all have two or
+more observations do not warn.
 
 ^c^ `ti_lmm()` re-routes to the Montes ANOVA closed form (`anova-mls`), which is
 validated for this structure.

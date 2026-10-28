@@ -92,7 +92,10 @@
 ## a factor / logical is e.g. "grpB" / "flagTRUE" and names no column), and
 ## requires that column to be numeric. A 2-level factor or a logical covariate
 ## also yields one non-intercept coefficient but is NOT a time design -> NA,
-## and the model follows the EMS path.
+## and the model follows the EMS path. The column must also VARY WITHIN at
+## least one level of a grouping factor: a covariate constant within every
+## level (a between-group covariate, e.g. y ~ z + (1 | g)) carries no
+## within-lot slope information, is not a time design -> NA, EMS path.
 .m1_time_name <- function(model) {
   covars <- setdiff(names(lme4::fixef(model)), "(Intercept)")
   if (length(covars) != 1L) return(NA_character_)
@@ -100,21 +103,33 @@
   if (length(labs) != 1L) return(NA_character_)
   col <- stats::model.frame(model)[[labs]]
   if (is.null(col) || !is.numeric(col) || NCOL(col) != 1L) return(NA_character_)
+  varies_within <- any(vapply(lme4::getME(model, "flist"), function(g)
+    any(tapply(col, g, function(v) length(unique(v)) > 1L), na.rm = TRUE), logical(1)))
+  if (!varies_within) return(NA_character_)
   labs
 }
 
-## The detector for "fixed-slope model with single-observation /
-## unbalanced lots": the structure on which (a) ti_lmm re-routes the TOLERANCE
-## interval to the Montes ANOVA closed form, and (b) the EMS CI/PI/new-group-mean
-## drift anti-conservative (REML precision-weighting). TRUE iff: no random slope,
-## exactly one numeric fixed covariate (a fixed-slope model; see
-## .m1_time_name), and NOT clean balanced. Shared by ti_lmm (routing) and the
-## coverage verbs (warning) so the two can never diverge.
-.is_single_obs_m1 <- function(model) {
+## TI ROUTING predicate: a fixed-slope model (no random slope, one numeric
+## covariate varying within lots; see .m1_time_name) that is NOT clean balanced
+## (single-observation lots, or staggered / unequal time grids). ti_lmm routes
+## its tolerance interval to the Montes ANOVA closed form (anova-mls).
+.m1_not_clean_balanced <- function(model) {
   if (.has_random_slope(model)) return(FALSE)
   time_name <- .m1_time_name(model)
   if (is.na(time_name)) return(FALSE)
   !.m1_is_clean_balanced(model, time_name)
+}
+
+## CI / PI WARNING predicate: a fixed-slope model with AT LEAST ONE
+## single-observation lot. Narrower than the routing predicate: the validation
+## study found the EMS CI / PI mildly anti-conservative on single-observation
+## designs (E4) but not on staggered designs whose lots all have >= 2
+## observations (V2, worst cell 0.943). Separate from the routing predicate on
+## purpose: the TI stays on anova-mls for every non-clean-balanced design.
+.m1_has_single_obs_lot <- function(model) {
+  if (.has_random_slope(model)) return(FALSE)
+  if (is.na(.m1_time_name(model))) return(FALSE)
+  any(table(lme4::getME(model, "flist")[[1]]) < 2L)
 }
 
 ## The Hoffman-Kringle one-way detector: no random slope, an intercept-only
@@ -244,8 +259,9 @@
 #'
 #' One of the four interval verbs, and the dispatched tolerance interval. It
 #' classifies the fitted model and routes by random/fixed structure, the
-#' tolerance target (`over`), and the singular flag to
-#' the engine that is exact/validated for that case --- all transparently:
+#' tolerance target (`over`), the singular flag, and (random slope) whether the
+#' closed form's Satterthwaite df is available, to the engine that is
+#' exact/validated for that case --- all transparently:
 #'
 #' * **Random slope.** `over = "observation"` uses the REML closed-form MLS
 #'   interval when the fit is non-singular and the GPQ interval when the fit is
@@ -388,10 +404,9 @@ ti_lmm <- function(model, newdata = NULL, P = 0.95,
   }
 
   ## Fixed-slope single-obs / staggered -> Montes ANOVA; else EMS. `method` can
-  ## force. Uses the shared .is_single_obs_m1() detector (identical to the inline
-  ## `is_m1 && !.m1_is_clean_balanced()` it replaces) so the routing here and the
-  ## coverage-verb warning can never diverge.
-  use_montes <- .is_single_obs_m1(model)
+  ## force. (.m1_not_clean_balanced is the routing predicate; the coverage-verb
+  ## warning uses the narrower .m1_has_single_obs_lot.)
+  use_montes <- .m1_not_clean_balanced(model)
   if (method == "anova-mls") {
     if (!is_m1) {
       stop("method = \"anova-mls\" needs a fixed-slope (random intercept + ",

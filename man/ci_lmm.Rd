@@ -60,20 +60,23 @@ One of the four interval verbs (\code{\link[=ci_lmm]{ci_lmm()}}, \code{\link[=pi
 \code{\link[=new_group_mean_lmm]{new_group_mean_lmm()}}). \code{ci_lmm()} gives a confidence interval for the mean
 response at \code{newdata}. It dispatches by random structure: random-intercept
 designs (including a fixed slope) use the expected-mean-square engine;
-random-slope designs use the REML closed form. See \link{reintervals-models} for
-the model-class to engine map and \code{\link[=lmm_predict]{lmm_predict()}} for the unified entry point.
+random-slope designs use the REML closed form. See \link{reintervals} and
+\code{vignette("choosing-an-interval")} for the engine map, \link{reintervals-models}
+for the design tags, and \code{\link[=lmm_predict]{lmm_predict()}} for the unified entry point.
 }
 \section{Known limitation}{
 
-On a fixed-slope model fitted to single-observation / unbalanced lots (the
-release-only stability structure), the EMS confidence and prediction
-intervals can be anti-conservative (too narrow), because REML
-precision-weighting down-weights the single-observation lots. \code{\link[=ci_lmm]{ci_lmm()}} and
-\code{\link[=pi_lmm]{pi_lmm()}} emit a warning when that structure is detected (the interval is
-still returned, unchanged). The tolerance interval (\code{\link[=ti_lmm]{ti_lmm()}}) and the
+On a fixed-slope model with single-observation lots (the release-only
+stability structure), the EMS confidence and prediction intervals can be
+anti-conservative (too narrow), because REML precision-weighting
+down-weights the single-observation lots. \code{\link[=ci_lmm]{ci_lmm()}} and \code{\link[=pi_lmm]{pi_lmm()}} emit a
+warning when at least one lot has a single observation (the interval is
+still returned, unchanged); staggered designs whose lots all have two or more
+observations do not warn. The tolerance interval (\code{\link[=ti_lmm]{ti_lmm()}}) and the
 new-group-mean interval (\code{\link[=new_group_mean_lmm]{new_group_mean_lmm()}}) use the unweighted lot-mean
-(Montes) closed forms on this structure and do not warn; no validated
-alternative is currently available for the confidence or prediction interval.
+(Montes) closed forms on single-observation and staggered fixed-slope
+designs and do not warn; no validated alternative is currently available for
+the confidence or prediction interval.
 }
 
 \examples{

@@ -48,7 +48,8 @@ The Oliva-Aviles & Hauser (2025) generalized-pivotal-
 quantity tolerance interval for the random-intercept + random-slope stability
 model, from raw \verb{(y, time, batch)} vectors without a fitted \code{lmer} model. The
 fit-based dispatcher \code{\link[=ti_lmm]{ti_lmm()}} routes random-slope designs here automatically
-(singular fits, and the batch-mean target \code{over = "group_mean"}); use
+(singular fits, fits whose closed-form Satterthwaite df is unavailable at a
+given \code{t0}, and the batch-mean target \code{over = "group_mean"}); use
 \code{ti_gpq_raw()} directly when you have data but no model object.
 }
 \examples{
