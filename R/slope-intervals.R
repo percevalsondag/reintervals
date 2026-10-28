@@ -233,7 +233,7 @@
 }
 
 ## One-sided EMS CI / PI: t_{1 - alpha} on the existing symmetric t pivot (same
-## centre, same df, same standard error, recovered from the two-sided
+## center, same df, same standard error, recovered from the two-sided
 ## half-width as hw / t_{1 - alpha/2}). Two-sided input passes through, tagged.
 .one_sided_t <- function(out, level, sides) {
   out$sides <- sides

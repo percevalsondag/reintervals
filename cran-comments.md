@@ -1,31 +1,17 @@
-## Resubmission
+## Resubmission / submission history
 
-This is a resubmission of 0.1.0, addressing Konstanze Lauseker's feedback:
-
-- The vignette now restores the user's `options()`: the setup chunk saves the
-  previous value (`old <- options(width = 90)`) and a final chunk restores it
-  (`options(old)`).
-- The package no longer modifies `.GlobalEnv`. The seeded generalized-pivotal-
-  quantity Monte Carlo previously saved and restored `.Random.seed` in the global
-  environment by hand; it now uses `withr::with_seed()` (`withr` added to
-  Imports) to preserve the user's RNG state. Numerical results are unchanged.
-
-## Submission type
-
-New submission (first release of `reintervals`).
-
-## Test environments
-
-- Local: macOS (aarch64-apple-darwin20), R 4.5.3.
-- GitHub Actions: ubuntu-latest (R devel, R release, R oldrel-1),
-  macOS-latest (R release), windows-latest (R release) --- dependencies installed
-  from current CRAN.
+Version 0.1.0 was submitted and then withdrawn by the maintainer on 2026-10-27
+(email to CRAN-submissions) before acceptance, because post-submission
+validation found coverage defects in two interval functions. 0.2.0 corrects
+them (the new-group-mean interval; a confidence-interval df that no longer
+depends on which packages are installed), adds the Hoffman & Kringle (2005)
+one-way engine and one-sided intervals, and is validated by simulation and
+against published worked examples. The earlier CRAN feedback on 0.1.0
+(restoring `options()`, not modifying `.GlobalEnv`) remains addressed.
 
 ## R CMD check results
 
-`R CMD check --as-cran`: 0 errors | 0 warnings | 1 note.
-
-The single NOTE is the expected one for a first submission:
+Local `R CMD check --as-cran`: 0 errors | 0 warnings | 3 notes.
 
 ```
 * checking CRAN incoming feasibility ... NOTE
@@ -34,16 +20,21 @@ Maintainer: 'Perceval Sondag <reintervals@gmail.com>'
 New submission
 ```
 
-## Reverse dependencies
+The other two local NOTEs come from the local machine, not the package:
+"checking for future file timestamps ... unable to verify current time" (no
+time-server access) and "checking HTML version of manual ... Skipping checking
+HTML validation" (local HTML Tidy too old).
 
-None --- this is a new submission.
+- win-builder devel: <pending>
+- win-builder release: <pending>
+- mac-builder: <pending>
 
-## Notes
+## Test environments
 
-The package's interval arithmetic is validated against published and
-external-source references in the test suite. The suite has exactly one skipped
-test, on every platform: a documented placeholder in `test-vc-extract.R` for
-reproducing one published degrees-of-freedom value (Francq, Lin and Hoyer 2019,
-Section 5.3) exactly, which needs the original Hoffman-Kringle raw assay
-values rather than the constructed data used in the suite. The same code path
-is exercised by a range check in the preceding test.
+- Local: macOS 27.0 (aarch64-apple-darwin20), R 4.5.3.
+- win-builder: R-devel and R-release.
+- mac-builder: R-release.
+
+## Downstream dependencies
+
+None (new package).

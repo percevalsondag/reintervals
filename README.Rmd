@@ -85,26 +85,43 @@ prediction, tolerance, and new-group-mean results all share one column contract
 | `ci_lmm()` | confidence interval for the mean |
 | `pi_lmm()` | prediction interval for a future observation |
 | `ti_lmm()` | tolerance interval (content `P`); `over = "group_mean"` for the batch-mean target |
-| `new_group_mean_lmm()` | the CInew / new-batch-mean interval (prediction for one new group's mean) |
+| `new_group_mean_lmm()` | the CInew / new-batch-mean interval: the true mean of a new group (a new innermost cell, or a new lot at `t0`) |
 
 `lmm_predict(model, interval = ...)` is a `predict()`-style wrapper over the
-four; `lmm_interval_control()` supplies the GPQ tuning (`seed`, `M`).
+four. `lmm_interval_control()` supplies the GPQ tuning (`seed`, `M`) and the
+confidence-interval df rule (`ci_df`: Satterthwaite by default, falling back to
+the SAS-style containment df; Kenward-Roger on request).
 
 ## Engine and scope map
 
-The engine is chosen from the fitted model's structure (full mapping in
-`?reintervals-models`):
+The engine is chosen from the fitted model's structure and can differ between
+the verbs (full mapping in `?reintervals` and `vignette("choosing-an-interval")`).
+Engines: `"ems-mls"` (expected-mean-square / modified large-sample),
+`"anova-mls"` (unweighted lot-mean ANOVA: Montes et al. with a fixed slope,
+Hoffman & Kringle without one), `"reml-mls"` (REML closed form), `"gpq"`
+(generalized pivotal quantity, Monte Carlo).
 
-| Model class | Engine (`method`) |
-|---|---|
-| random intercept (any fixed effects; one-way / nested / crossed) | expected-mean-square / MLS (`"ems-mls"`) |
-| random intercept, intercept-only one-way: tolerance interval | Hoffman & Kringle unweighted-means ANOVA (`"anova-mls"`) |
-| random intercept + fixed slope, clean balanced | `"ems-mls"` |
-| random intercept + fixed slope, single-observation / unbalanced: tolerance interval | unweighted lot-mean ANOVA (`"anova-mls"`) |
-| random slope, future-observation | REML closed form (`"reml-mls"`); GPQ for the tolerance interval when the fit is singular or its Satterthwaite df is unavailable |
-| random slope, batch-mean | GPQ Monte Carlo (`"gpq"`) |
+| Model / situation | CI | PI | TI | New-group mean |
+|---|---|---|---|---|
+| random intercept, one-way, intercept only (`y ~ 1 + (1 \| g)`) | `ems-mls` | `ems-mls` | `anova-mls` (Hoffman & Kringle) | `anova-mls` |
+| random intercept, one-way with covariates | `ems-mls` | `ems-mls` | `ems-mls` | `ems-mls` (Gm) |
+| random intercept, nested | `ems-mls` | `ems-mls` | `ems-mls` | `ems-mls` (Gm) |
+| random intercept, crossed with interaction | `ems-mls` | `ems-mls` | `ems-mls` | `ems-mls` (Gv) |
+| random intercept, crossed without interaction or 4+ grouping factors | `ems-mls` | `ems-mls` | error | error |
+| random intercept + fixed slope, clean balanced | `ems-mls` | `ems-mls` | `ems-mls` | `anova-mls` |
+| random intercept + fixed slope, single-observation / staggered | `ems-mls` (warns with single-observation lots) | `ems-mls` (warns likewise) | `anova-mls` | `anova-mls` |
+| random slope, future-observation, non-singular | `reml-mls` | `reml-mls` | `reml-mls` | `reml-mls` |
+| random slope, singular fit or TI Satterthwaite df unavailable | `reml-mls` | `reml-mls` | `gpq` (two-sided TI; one-sided stays `reml-mls`) | `reml-mls` |
+| random slope, batch-mean (`over = "group_mean"`, TI only) | --- | --- | `gpq` | --- |
 
-**v1 scope:** general fixed effects are supported for random-intercept models;
+GPQ is used for the two-sided random-slope TI when the fit is singular or the
+closed form's Satterthwaite df is unavailable. One-sided intervals
+(`sides = "lower"` / `"upper"`) are available from every verb; one-sided
+tolerance limits use Hoffman's (2010) limit for `anova-mls` and the package's
+validated extension of it for `ems-mls` and random slopes, where `reml-mls` is
+used on every fit.
+
+**Scope:** general fixed effects are supported for random-intercept models;
 random-slope models are supported for a **single continuous covariate** (the stability
 design). The tier-2 engines `ti_anova_raw()` and `ti_gpq_raw()` compute from raw
 `(y, time, group)` vectors without a fitted model.
@@ -112,10 +129,13 @@ design). The tier-2 engines `ti_anova_raw()` and `ti_gpq_raw()` compute from raw
 ## Validation
 
 Every shipped interval is checked against a published or external-source oracle
-on CI: the Francq, Lin & Hoyer (2019) worked numbers; the Montes-Burdick-Leblond
-(2019) Appendix A tolerance interval `(57.25, 75.41)`; the random-slope interval
-arithmetic against committed reference values to ~`1e-9`; and the GPQ content
-variance against the Oliva-Aviles & Hauser (2025) closed form (`tau^2 = 8.439`).
+on CI: the Francq, Lin & Hoyer (2019) worked numbers (Sections 5.2-5.3); the
+Hoffman & Kringle (2005, 2007) worked examples; the Montes-Burdick-Leblond (2019)
+Appendix A tolerance interval `(57.25, 75.41)` and their one-sided limits; the
+random-slope interval arithmetic against committed reference values to ~`1e-9`;
+and the GPQ content variance against the Oliva-Aviles & Hauser (2025) closed form
+(`tau^2 = 8.439`). Coverage of the intervals was additionally validated by
+simulation.
 
 ## Scope
 

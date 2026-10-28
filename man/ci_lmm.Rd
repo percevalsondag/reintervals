@@ -24,7 +24,7 @@ ci_lmm(
 at most one. \code{level} is \code{1 - alpha}; the default is \code{alpha = 0.05} (95\%).}
 
 \item{sides}{\code{"two.sided"} (default), \code{"lower"}, or \code{"upper"}. A one-sided
-interval keeps the two-sided interval's centre, variance, and df and uses
+interval keeps the two-sided interval's center, variance, and df and uses
 \verb{t_\{1 - alpha\}} in place of \verb{t_\{1 - alpha/2\}}.}
 
 \item{method}{\code{"auto"} (default) chooses the algorithm by structure; one of

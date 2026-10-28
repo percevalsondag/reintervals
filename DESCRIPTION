@@ -20,12 +20,14 @@ Description: Confidence, prediction, tolerance, and new-group-mean (also
     one-way random-effects model (Hoffman and Kringle (2005)
     <doi:10.1081/BIP-200048826>); and a generalized-pivotal-quantity
     Monte Carlo engine (Oliva-Aviles and Hauser (2025)
-    <doi:10.1080/00401706.2024.2407324>). General fixed effects are supported for random-intercept models;
-    random-slope models are supported for a single continuous covariate (the
-    stability design). The methods serve general linear-mixed-model interval
-    estimation, with particular support for pharmaceutical stability and
-    shelf-life work and for bioassay applications through the tolerance and
-    new-group-mean intervals.
+    <doi:10.1080/00401706.2024.2407324>). Intervals are two-sided or
+    one-sided; one-sided tolerance limits follow Hoffman (2010)
+    <doi:10.1198/TECH.2010.09171>. General fixed effects are supported for
+    random-intercept models; random-slope models are supported for a single
+    continuous covariate (the stability design). The methods serve general
+    linear-mixed-model interval estimation, with particular support for
+    pharmaceutical stability and shelf-life work and for bioassay
+    applications through the tolerance and new-group-mean intervals.
 License: MIT + file LICENSE
 Encoding: UTF-8
 Language: en-US

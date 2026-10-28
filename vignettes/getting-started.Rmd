@@ -138,7 +138,7 @@ the verbs (full mapping in `vignette("choosing-an-interval")` and
 | random intercept + fixed slope, clean balanced | `ems-mls` | `anova-mls` | `ems-mls` |
 | random intercept + fixed slope, single-observation / unbalanced | `ems-mls` (warns if any lot has a single observation) | `anova-mls` | `anova-mls` |
 | random slope, non-singular, future-observation | `reml-mls` | `reml-mls` | `reml-mls` |
-| random slope, future-observation, singular fit or TI df unavailable | `reml-mls` (flagged `singular`) | `reml-mls` (flagged `singular`) | `gpq` |
+| random slope, future-observation, singular fit or TI df unavailable | `reml-mls` (flagged `singular`) | `reml-mls` (flagged `singular`) | `gpq` (two-sided TI only; one-sided tolerance intervals stay on `reml-mls`) |
 | random slope, batch-mean (`over = "group_mean"`, TI only) | --- | --- | `gpq` |
 
 The new-group-mean interval targets the true mean of a new innermost cell (a new

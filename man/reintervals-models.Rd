@@ -58,7 +58,7 @@ here under both names so it is discoverable as "CInew" or "new batch mean".
 
 Every verb accepts \code{sides = "lower"} or \code{"upper"}.
 \itemize{
-\item Confidence, prediction, and new-group-mean intervals: the same centre,
+\item Confidence, prediction, and new-group-mean intervals: the same center,
 variance, and df as the two-sided interval, with \verb{t_\{1 - alpha\}} in place
 of \verb{t_\{1 - alpha/2\}} (all engines).
 \item Tolerance intervals, \code{anova-mls} (Hoffman-Kringle one-way and Montes

@@ -75,7 +75,7 @@ unavailable; Kenward-Roger df only on request
 (\code{lmm_interval_control(ci_df = "kenward-roger")}).
 
 \strong{One-sided intervals} (\code{sides = "lower"} / \code{"upper"}) are available from
-every verb. CI, PI, and new-group mean keep the two-sided centre, variance,
+every verb. CI, PI, and new-group mean keep the two-sided center, variance,
 and df with \verb{t_\{1 - alpha\}}. One-sided tolerance limits: \code{anova-mls} uses
 Hoffman's (2010) one-sided limit; \code{ems-mls} and random-slope models
 (\code{reml-mls}, the default on every fit) use the package's extension of

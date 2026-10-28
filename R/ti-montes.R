@@ -10,7 +10,7 @@
 ## restated in Hoffman & Kringle 2007, Eqs. 1-2) one-way random-effects
 ## two-sided tolerance interval. It is the same estimator with the fixed slope
 ## removed: beta_hat is dropped, the residual df is N - I (not N - I - 1), the
-## centre is the unweighted mean of the group means, and VhatYh = S2_L / I.
+## center is the unweighted mean of the group means, and VhatYh = S2_L / I.
 ## Everything else is unchanged, with the identities (HK notation on the right)
 ##   S2_L = MSBU / J_H,   Vhat_Y = sTOT2,   n_E = N_e,   C1 = H1,   C2 = H2,
 ## where MSBU = J_H * sum((ybar_i - ybar_star)^2) / (I - 1) is HK's
@@ -112,7 +112,7 @@
   ## Two-sided: z_{(1+P)/2} sqrt(1 + 1/n_E) sqrt(U) (HK 2005; Montes et al. 2019).
   ## One-sided: Hoffman's (2010) limit "H" (Montes et al. 2019, Eqs. 2-3, 6-7),
   ##   Yhat -/+ ( z_P sqrt(U) + z_{1-alpha} sqrt(Vhat(Yhat)) ),
-  ## with the same MLS bound U and Vhat(Yhat) the variance of the centre. NOT the
+  ## with the same MLS bound U and Vhat(Yhat) the variance of the center. NOT the
   ## two-sided formula with z_P ("HK1"), which Montes et al. (2019, Figs. 2-4)
   ## show falls well below the nominal confidence for P < 0.99.
   ## Hoffman D (2010). Technometrics 52(3):303-312. doi:10.1198/TECH.2010.09171
@@ -174,14 +174,14 @@
 #' * **Without one** (`time = NULL`, `t0 = NULL`): the Hoffman & Kringle (2005)
 #'   two-sided interval for the one-way random-effects model, balanced or
 #'   unbalanced (restated in Hoffman & Kringle 2007, Eqs. 1-2). It is the same
-#'   computation with the slope removed (residual df `N - I`, centre = the
+#'   computation with the slope removed (residual df `N - I`, center = the
 #'   unweighted mean of the group means). [ti_lmm()] uses it by default for an
 #'   intercept-only model with one random-intercept factor.
 #'
 #' One-sided limits (both cases) are Hoffman's (2010) limit
 #' `Yhat -/+ (z_P sqrt(U) + z_{1-alpha} sqrt(Vhat(Yhat)))`, with the same MLS
 #' bound `U` as the two-sided interval and `Vhat(Yhat)` the variance of the
-#' centre (Montes et al. 2019, Eqs. 2-3 and 6-7).
+#' center (Montes et al. 2019, Eqs. 2-3 and 6-7).
 #'
 #' Method-pure (never touches `lme4`). The between- and within-lot mean squares
 #' are sums of squares over their degrees of freedom and so are non-negative by

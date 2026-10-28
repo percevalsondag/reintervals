@@ -15,14 +15,15 @@
   used the misprinted value.
 * `lmm_interval_control()` gains `ci_df`, the confidence-interval df rule for
   random-intercept models: `"satterthwaite"` (default) or `"kenward-roger"`
-  (requires pbkrtest and errors if it is not installed). The df source is
-  reported in `attr(., "diagnostics")$df_method`.
-* Random-slope `ti_lmm()` reports why GPQ was used, per row, in
-  `attr(., "diagnostics")$route_reason`.
-
+  (requires pbkrtest and errors if it is not installed; random-slope models
+  keep their own df and reject `"kenward-roger"`). The df source is reported
+  in `attr(., "diagnostics")$df_method`.
+* Random-slope `ti_lmm()` reports its routing reason per row in
+  `attr(., "diagnostics")$route_reason` (`"none"`, `"singular"`,
+  `"df_unavailable"`, `"group_mean_target"`, or `"method"`).
 * One-sided intervals (`sides = "lower"` / `"upper"`) for `ci_lmm()`,
   `pi_lmm()`, and `new_group_mean_lmm()` on every engine: the two-sided
-  interval's centre, variance, and df with `t_{1 - alpha}`.
+  interval's center, variance, and df with `t_{1 - alpha}`.
 * One-sided tolerance limits: `anova-mls` (Hoffman-Kringle one-way and
   Montes fixed slope) uses Hoffman's (2010) one-sided limit; `ems-mls` and
   random-slope models use the package's extension of Hoffman's limit to the
@@ -77,7 +78,8 @@
   a Satterthwaite df with `V_F` attached to the main effects (crossed)
   (`ems-mls`). `W`, `df`, and `df_rule` are reported in
   `attr(., "diagnostics")`. Designs without a closed-form decomposition now
-  signal an error. On single-observation fixed-slope designs the
+  signal an error, and `method =` accepts only the design's own engine for this
+  interval. On single-observation fixed-slope designs the
   new-group-mean interval no longer warns (the warning remains for the
   confidence and prediction intervals).
 * A model whose single numeric covariate is constant within every group (a
@@ -93,15 +95,15 @@
   uses `anova-mls` on every fixed-slope design that is not clean balanced.
 * A variance-component covariance matrix (the inverse observed information)
   that is not positive definite is now treated as unavailable: the
-  containment df is used and the random-slope tolerance interval routes to
-  GPQ. Previously an indefinite matrix could yield arbitrarily large
+  containment df is used and the random-slope two-sided tolerance interval
+  routes to GPQ. Previously an indefinite matrix could yield arbitrarily large
   Satterthwaite df (anti-conservative), and the routing could differ between
   evaluation times of the same fit.
-* Random-slope tolerance intervals switch to GPQ not only on a singular fit
-  but also, at a given `t0`, when the Satterthwaite df of the closed form's
-  between-group or residual variance is unavailable (its containment fallback
-  fired). Such fits are non-singular but sit near the variance-component
-  boundary.
+* Two-sided random-slope tolerance intervals switch to GPQ not only on a
+  singular fit but also, at a given `t0`, when the Satterthwaite df of the
+  closed form's between-group or residual variance is unavailable (its
+  containment fallback fired). Such fits are non-singular but sit near the
+  variance-component boundary.
 * A model whose single non-intercept fixed term is a factor or logical
   covariate (e.g. `y ~ grp + (1 | lot)` with a 2-level `grp`) was misdetected as
   the fixed-slope stability design. When every lot had at least two

@@ -115,8 +115,9 @@ Tolerance intervals require a closed-form variance decomposition. They are
 available for one-way, nested, and crossed-with-interaction random-intercept
 designs, the fixed-slope stability design, and random-slope models. For a
 design without such a decomposition (two crossed factors with no interaction
-term, or four or more grouping factors), ti_lmm() and new_group_mean_lmm()
-signal an error; ci_lmm() and pi_lmm() remain available for those models.
+term, or four or more grouping factors), \code{\link[=ti_lmm]{ti_lmm()}} and
+\code{\link[=new_group_mean_lmm]{new_group_mean_lmm()}} signal an error; \code{\link[=ci_lmm]{ci_lmm()}} and \code{\link[=pi_lmm]{pi_lmm()}} remain
+available for those models.
 }
 
 \examples{

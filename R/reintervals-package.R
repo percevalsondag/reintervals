@@ -66,7 +66,7 @@
 #' (`lmm_interval_control(ci_df = "kenward-roger")`).
 #'
 #' **One-sided intervals** (`sides = "lower"` / `"upper"`) are available from
-#' every verb. CI, PI, and new-group mean keep the two-sided centre, variance,
+#' every verb. CI, PI, and new-group mean keep the two-sided center, variance,
 #' and df with `t_{1 - alpha}`. One-sided tolerance limits: `anova-mls` uses
 #' Hoffman's (2010) one-sided limit; `ems-mls` and random-slope models
 #' (`reml-mls`, the default on every fit) use the package's extension of

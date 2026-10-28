@@ -24,7 +24,7 @@ new_group_mean_lmm(
 at most one. \code{level} is \code{1 - alpha}; the default is \code{alpha = 0.05} (95\%).}
 
 \item{sides}{\code{"two.sided"} (default), \code{"lower"}, or \code{"upper"}. A one-sided
-interval keeps the two-sided interval's centre, variance, and df and uses
+interval keeps the two-sided interval's center, variance, and df and uses
 \verb{t_\{1 - alpha\}} in place of \verb{t_\{1 - alpha/2\}}.}
 
 \item{method}{\code{"auto"} (default) chooses the algorithm by structure; one of
@@ -73,11 +73,11 @@ mean of a new lot at \code{t0}.
 
 \section{Constructions}{
 
-The interval is \verb{centre +/- t_df * sqrt(W)}, with \code{W}, \code{df} and the rule
+The interval is \verb{center +/- t_df * sqrt(W)}, with \code{W}, \code{df} and the rule
 reported in \code{attr(., "diagnostics")} (\code{W}, \code{df}, \code{df_rule}):
 \itemize{
 \item fixed slope (one grouping factor, any balance): the unweighted
-lot-mean (Montes) centre \code{Yhat(t0)} with
+lot-mean (Montes) center \code{Yhat(t0)} with
 \code{W = S2_L (1 + 1/I) + S2_E (t0 - tbar)^2 / S_tt} and a Satterthwaite df
 on the two mean squares (\code{df_rule = "anova-satterthwaite"}, method
 \code{"anova-mls"});
@@ -97,7 +97,7 @@ which \code{V_F} is attached to the two main-effect terms
 A design without a closed-form variance decomposition (two crossed factors
 without their interaction term, or four or more grouping factors) is an
 error.
-One-sided intervals (\code{sides = "lower"} / \code{"upper"}) use the same centre, \code{W},
+One-sided intervals (\code{sides = "lower"} / \code{"upper"}) use the same center, \code{W},
 and df with \verb{t_\{1 - alpha\}}.
 }
 

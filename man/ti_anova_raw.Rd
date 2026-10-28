@@ -58,7 +58,7 @@ fixed-slope designs here automatically.
 \item \strong{Without one} (\code{time = NULL}, \code{t0 = NULL}): the Hoffman & Kringle (2005)
 two-sided interval for the one-way random-effects model, balanced or
 unbalanced (restated in Hoffman & Kringle 2007, Eqs. 1-2). It is the same
-computation with the slope removed (residual df \code{N - I}, centre = the
+computation with the slope removed (residual df \code{N - I}, center = the
 unweighted mean of the group means). \code{\link[=ti_lmm]{ti_lmm()}} uses it by default for an
 intercept-only model with one random-intercept factor.
 }
@@ -66,7 +66,7 @@ intercept-only model with one random-intercept factor.
 One-sided limits (both cases) are Hoffman's (2010) limit
 \verb{Yhat -/+ (z_P sqrt(U) + z_\{1-alpha\} sqrt(Vhat(Yhat)))}, with the same MLS
 bound \code{U} as the two-sided interval and \code{Vhat(Yhat)} the variance of the
-centre (Montes et al. 2019, Eqs. 2-3 and 6-7).
+center (Montes et al. 2019, Eqs. 2-3 and 6-7).
 
 Method-pure (never touches \code{lme4}). The between- and within-lot mean squares
 are sums of squares over their degrees of freedom and so are non-negative by

@@ -101,8 +101,8 @@ the one-way case of the unweighted-means ANOVA interval.
 coincide on balanced data with a non-singular fit and differ on singular or
 unbalanced data.
 
-^h^ The new-group-mean interval is `centre ± t_df · sqrt(W)`. On fixed-slope and
-intercept-only one-way designs (`anova-mls`) the centre is the unweighted mean of
+^h^ The new-group-mean interval is `center ± t_df · sqrt(W)`. On fixed-slope and
+intercept-only one-way designs (`anova-mls`) the center is the unweighted mean of
 the lot means (at `t0` for a fixed slope) and `W = S2_L (1 + 1/I)` plus, with a
 slope, `S2_E (t0 - tbar)^2 / S_tt`, with a Satterthwaite df (`I - 1` without a
 slope). On nested and one-way-with-covariates designs (`ems-mls`)
@@ -132,7 +132,7 @@ Every verb accepts `sides = "lower"` or `"upper"`.
 
 | Interval | One-sided construction | Status |
 |---|---|---|
-| CI, PI, new-group mean (all engines) | same centre, variance, and df as the two-sided interval, with `t_{1-alpha}` | available |
+| CI, PI, new-group mean (all engines) | same center, variance, and df as the two-sided interval, with `t_{1-alpha}` | available |
 | TI, `anova-mls` (Hoffman-Kringle one-way; Montes fixed slope) | Hoffman's (2010) one-sided limit: `Yhat ∓ (z_P sqrt(U) + z_{1-alpha} sqrt(Vhat(Yhat)))` with the two-sided MLS bound `U` | available (published: Hoffman 2010; Montes et al. 2019) |
 | TI, `ems-mls` (Francq) | the same structure with Francq's MLS bound on the total variance and `Vhat = V_F` | available (the package's extension of Hoffman 2010, validated by simulation) |
 | TI, random slope | the same structure with the REML closed form's bound and `Vhat = V_F` (`reml-mls`), on every fit including singular ones | available (the package's extension of Hoffman 2010, validated by simulation); `method = "gpq"` can be forced but under-covered near the variance-component boundary in validation |

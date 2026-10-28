@@ -45,7 +45,7 @@
 #' @section One-sided intervals:
 #' Every verb accepts `sides = "lower"` or `"upper"`.
 #' \itemize{
-#'   \item Confidence, prediction, and new-group-mean intervals: the same centre,
+#'   \item Confidence, prediction, and new-group-mean intervals: the same center,
 #'     variance, and df as the two-sided interval, with `t_{1 - alpha}` in place
 #'     of `t_{1 - alpha/2}` (all engines).
 #'   \item Tolerance intervals, `anova-mls` (Hoffman-Kringle one-way and Montes
