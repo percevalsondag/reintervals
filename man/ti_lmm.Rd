@@ -35,9 +35,9 @@ one. \code{level} is \code{1 - alpha}; default \code{alpha = 0.05}.}
 
 \item{sides}{\code{"two.sided"} (default), \code{"lower"}, or \code{"upper"}. One-sided
 tolerance limits: \code{anova-mls} uses Hoffman's (2010) one-sided limit;
-\code{ems-mls} and a forced \code{reml-mls} use the package's extension of it
-(provisional, pending validation); random-slope models use GPQ by default.
-See \link{reintervals-models}.}
+\code{ems-mls} and random-slope models (\code{reml-mls}, the default on every fit)
+use the package's extension of it, validated by simulation. See
+\link{reintervals-models}.}
 
 \item{method}{\code{"auto"} (default) chooses the algorithm by structure; one of
 \code{"ems-mls"}, \code{"reml-mls"}, \code{"anova-mls"}, \code{"gpq"} forces it and errors if
@@ -82,10 +82,15 @@ exact/validated for that case --- all transparently:
 interval when the fit is non-singular and the GPQ interval when the fit is
 singular or, at a given \code{t0}, when the Satterthwaite df of the closed form's
 between-group or residual variance is unavailable (its containment fallback
-fired); \code{over = "group_mean"} always uses GPQ, and so do one-sided
-intervals (\code{sides = "lower"} / \code{"upper"}) by default. The reason is
-reported per row in \code{attr(., "diagnostics")$route_reason} (\code{"none"},
-\code{"singular"}, \code{"df_unavailable"}, \code{"group_mean_target"}, \code{"one_sided"}, or
+fired); \code{over = "group_mean"} always uses GPQ. One-sided intervals
+(\code{sides = "lower"} / \code{"upper"}, future-observation target) use Hoffman's
+(2010) one-sided limit on the REML closed form on every fit, singular and
+df-unavailable fits included (validated by simulation on all of them);
+\code{method = "gpq"} remains available, but in the package's validation the
+one-sided GPQ limit under-covered on near-boundary singular fits at the
+edge of the observed time range (worst cell 0.928 for a nominal 0.95).
+The reason is reported per row in \code{attr(., "diagnostics")$route_reason}
+(\code{"none"}, \code{"singular"}, \code{"df_unavailable"}, \code{"group_mean_target"}, or
 \code{"method"} when forced).
 \item \strong{Random intercept + fixed slope.} Clean balanced -> EMS engine; single-
 observation / staggered / unbalanced -> the Montes ANOVA/MLS closed form.

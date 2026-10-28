@@ -66,60 +66,6 @@
 
 .is_singular <- function(model) isTRUE(lme4::isSingular(model))
 
-## ---- bounded Satterthwaite df for sigma_T^2 (singular/boundary fallback) -----
-## Bounded generalized-Satterthwaite df for the total variance. Used only when
-## the observed-information route is unreliable; keeps df_PI finite as a component -> 0.
-.satterthwaite_df <- function(model, sigmaT2) {
-  des <- tryCatch(
-    classify_design(lme4::getME(model, "flist"), length(lme4::getME(model, "y"))),
-    error = function(e) list(type = "unknown")
-  )
-  vc <- as.data.frame(lme4::VarCorr(model))
-  s2e <- vc$vcov[vc$grp == "Residual"]
-  comp_df <- function(ms, df) if (df > 0 && ms > 0) ms^2 / df else 0
-
-  ## stratum df adjusted for the fixed effects (.stratum_df), same order as
-  ## the EMS terms below (top factor first, residual last)
-  sdf <- function(grp) .stratum_df(model)[c(grp, "Residual")]
-  terms <- NULL
-  if (des$type == "oneway") {
-    n0 <- des$n0; df <- sdf(des$grp)
-    s2a <- vc$vcov[vc$grp == des$grp]
-    emsa <- s2e + n0 * s2a
-    terms <- c(comp_df((1 / n0) * emsa, df[[1]]),
-               comp_df((1 - 1 / n0) * s2e, df[[2]]))
-  } else if (des$type == "nested" && isTRUE(des$balanced)) {
-    B <- des$B; n <- des$n; df <- sdf(c(des$grp_alpha, des$grp_beta))
-    s2a <- vc$vcov[vc$grp == des$grp_alpha]
-    s2b <- vc$vcov[vc$grp == des$grp_beta]
-    emsb <- s2e + n * s2b
-    emsa <- s2e + n * s2b + n * B * s2a
-    terms <- c(comp_df((1 / (n * B)) * emsa, df[[1]]),
-               comp_df((1 / n - 1 / (n * B)) * emsb, df[[2]]),
-               comp_df((1 - 1 / n) * s2e, df[[3]]))
-  } else if (des$type == "crossed" && isTRUE(des$balanced)) {
-    A <- des$A; B <- des$B; n <- des$n; df <- sdf(c(des$grp_A, des$grp_B, des$grp_AB))
-    v1 <- vc$vcov[vc$grp == des$grp_A]
-    v2 <- vc$vcov[vc$grp == des$grp_B]
-    s2ab <- vc$vcov[vc$grp == des$grp_AB]
-    emsab <- s2e + n * s2ab
-    emsa <- s2e + n * s2ab + n * B * v1
-    emsb <- s2e + n * s2ab + n * A * v2
-    terms <- c(comp_df((1 / (n * B)) * emsa, df[[1]]),
-               comp_df((1 / (n * A)) * emsb, df[[2]]),
-               comp_df((1 / n - 1 / (n * A) - 1 / (n * B)) * emsab, df[[3]]),
-               comp_df((1 - 1 / n) * s2e, df[[4]]))
-  } else {
-    N <- length(lme4::getME(model, "y"))
-    p <- length(lme4::fixef(model))
-    q <- sum(vc$grp != "Residual")
-    return(max(1, N - p - q))
-  }
-  denom <- sum(terms)
-  if (!is.finite(denom) || denom <= 0) return(Inf)
-  sigmaT2^2 / denom
-}
-
 ## ---- total variance, its variance, df_PI (observed Fisher information) -------
 ## Cov(theta_hat) from the observed information: a numerical Hessian of the
 ## REML log-likelihood on the variance scale (theta = the variance components),
@@ -156,7 +102,13 @@
   if (!.is_pd_cov(cov_theta)) cov_theta <- NULL   # not a covariance -> fallbacks
   vS <- if (is.null(cov_theta)) NA_real_ else sum(cov_theta)
   use_hessian <- isTRUE(is.finite(vS) && vS > 0) && !singular
-  df_pi <- if (use_hessian) 2 * sigmaT2^2 / vS else .satterthwaite_df(model, sigmaT2)
+  ## PI df: observed-information Satterthwaite when the Hessian route is usable;
+  ## otherwise (singular fit, non-PD covariance, non-positive vS) the stratum
+  ## containment df (.ddf_containment), the df of the coarsest random stratum.
+  ## The former bounded-Satterthwaite fallback on REML-implied mean squares
+  ## gave df of 8-70 on singular fits whose stratum df is 1-4, and the PI then
+  ## under-covered; the containment df restores coverage (validation W5).
+  df_pi <- if (use_hessian) 2 * sigmaT2^2 / vS else .ddf_containment(model)
   list(sigmaT2 = sigmaT2,
        df_pi = df_pi,
        pi_df_fallback = !use_hessian,
@@ -327,8 +279,8 @@ requireNamespace <- NULL
 ## classical df; the EMS terms are ordered top factor first, residual last
 ## (balanced adapters name them by grouping factor, the unbalanced synthesis
 ## A / B / AB / Residual), so they are matched positionally to the grouping
-## factors of the descriptor. Used by the EMS TI, the bounded-Satterthwaite PI
-## fallback's design, vc_extract(), and the new-group mean (Gm / Gv).
+## factors of the descriptor. Used by the EMS TI, vc_extract(), and the
+## new-group mean (Gm / Gv); the PI df fallback uses .ddf_containment().
 .design_components_fit <- function(model, desc, components, target) {
   dc <- .design_components(desc, components, target, .counts_if_unbalanced(model, desc))
   if (is.null(dc$ems)) return(dc)
@@ -358,9 +310,9 @@ requireNamespace <- NULL
 #'
 #' The returned object carries two attributes: `singular`
 #' (`lme4::isSingular()`) and `pi_df_fallback` (`TRUE` when the prediction df
-#' came from the bounded-Satterthwaite guard rather than the Hessian --- the
+#' is the stratum containment df rather than the Hessian-based df --- the
 #' singular-fit width-explosion fix). When the design has no closed-form EMS
-#' decomposition (unbalanced nested/crossed in v1, or off-catalog), `ems` is
+#' decomposition (off-catalog designs), `ems` is
 #' `NULL` and a `note` attribute explains why; the CI and PI are still returned.
 #'
 #' @param model A fitted `lmerMod` (random intercepts only).

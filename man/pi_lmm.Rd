@@ -62,6 +62,15 @@ One of the four interval verbs (\code{\link[=ci_lmm]{ci_lmm()}}, \code{\link[=pi
 \code{\link[=new_group_mean_lmm]{new_group_mean_lmm()}}). \code{pi_lmm()} gives a prediction interval for one future
 observation at \code{newdata}. Dispatch and arguments are as for \code{\link[=ci_lmm]{ci_lmm()}}.
 }
+\section{Known limitation (few top-level groups)}{
+
+With few levels of the top random factor (five or fewer) and a dominant
+between-group variance (an intraclass correlation near 0.9), the Francq et
+al. (2019) prediction interval used for random-intercept models can
+under-cover: the worst coverage observed in the package's validation was
+about 0.93 for a nominal 0.95, consistent with Francq et al. (2019, Fig. 2).
+}
+
 \section{Known limitation}{
 
 On a fixed-slope model with single-observation lots (the release-only

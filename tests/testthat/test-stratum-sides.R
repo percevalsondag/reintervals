@@ -91,20 +91,70 @@ test_that("one-sided 0.95 bound == two-sided 0.90 bound for CI / PI / new-group 
   }
 })
 
-test_that("one-sided TI routing: random slope -> gpq (route_reason one_sided); reml-mls when forced", {
+test_that("one-sided TI routing: random slope -> reml-mls (Hoffman H) on every fit; gpq when forced", {
   skip_if_not_installed("lme4")
   fs <- fit_q(Reaction ~ Days + (Days | Subject), lme4::sleepstudy)
   nd <- data.frame(Days = c(2, 5)); ctl <- lmm_interval_control(seed = 1, M = 2000)
   for (s in c("lower", "upper")) {
-    g <- ti_lmm(fs, nd, P = 0.95, sides = s, control = ctl)
-    expect_identical(g$method, c("gpq", "gpq"))
-    expect_identical(dg(g)$route_reason, c("one_sided", "one_sided"))
-    expect_true(all(g$lower < g$estimate & g$estimate < g$upper))
-    r <- ti_lmm(fs, nd, P = 0.95, sides = s, method = "reml-mls")
+    r <- ti_lmm(fs, nd, P = 0.95, sides = s)
     expect_identical(r$method, c("reml-mls", "reml-mls"))
-    expect_identical(dg(r)$route_reason, c("method", "method"))
+    expect_identical(dg(r)$route_reason, c("none", "none"))
+    expect_true(all(r$lower < r$estimate & r$estimate < r$upper))
+    g <- ti_lmm(fs, nd, P = 0.95, sides = s, method = "gpq", control = ctl)
+    expect_identical(g$method, c("gpq", "gpq"))
+    expect_identical(dg(g)$route_reason, c("method", "method"))
+    expect_true(all(g$lower < g$estimate & g$estimate < g$upper))
   }
   expect_identical(dg(ti_lmm(fs, nd, P = 0.95))$route_reason, c("none", "none"))   # two-sided unchanged
+  ## a singular random-slope fit: two-sided -> gpq ("singular"); one-sided stays reml-mls H
+  set.seed(11)
+  d <- expand.grid(time = c(0, 3, 6, 9, 12), batch = factor(1:6))
+  d$y <- 100 - 2 * d$time + rnorm(nrow(d))
+  fz <- fit_q(y ~ time + (time | batch), d)
+  skip_if_not(lme4::isSingular(fz))
+  expect_identical(ti_lmm(fz, data.frame(time = 6), control = ctl)$method, "gpq")
+  z <- ti_lmm(fz, data.frame(time = 6), sides = "lower")
+  expect_identical(z$method, "reml-mls")
+  expect_identical(dg(z)$route_reason, "none")
+  expect_true(z$lower < z$estimate)
+})
+
+test_that("PI df on singular fits is the stratum containment df (A - 1; min(A, B) - 1)", {
+  skip_if_not_installed("lme4")
+  set.seed(4); g <- factor(rep(1:5, each = 3))                      # singular one-way, A = 5
+  f1 <- fit_q(y ~ 1 + (1 | g), data.frame(g = g, y = 10 + rnorm(15)))
+  expect_true(lme4::isSingular(f1))
+  th <- .theta_cov(f1)
+  expect_true(th$pi_df_fallback)
+  expect_equal(th$df_pi, .ddf_containment(f1))
+  expect_equal(th$df_pi, 4)
+  expect_equal(attr(pi_lmm(f1), "diagnostics")$df, 4)
+  set.seed(1); A <- 3; B <- 4                                       # singular unbalanced crossed
+  cells <- matrix(c(1, 2, 3, 2, 1, 2, 3, 1, 2, 1, 2, 3), A, B)
+  ci <- rep(seq_len(A * B), as.vector(cells))
+  dc <- data.frame(a = factor((ci - 1) %% A + 1), b = factor((ci - 1) %/% A + 1), ab = factor(ci))
+  dc$y <- 10 + rnorm(nrow(dc))
+  f2 <- fit_q(y ~ 1 + (1 | a) + (1 | b) + (1 | ab), dc)
+  expect_true(lme4::isSingular(f2))
+  th2 <- .theta_cov(f2)
+  expect_true(th2$pi_df_fallback)
+  expect_equal(th2$df_pi, min(A, B) - 1)
+})
+
+test_that("ems_synthesis reproduces Francq et al. (2019) Sec. 4.4 unbalanced crossed coefficients", {
+  ## alpha 4 levels x beta 5 levels; the published count vectors are by beta level
+  ## (the columns). The transposed layout swaps the A and B rows and does not match.
+  cnt <- cbind(c(1, 2, 1, 9), c(2, 9, 8, 1), c(1, 1, 1, 3), c(7, 1, 6, 2), c(1, 3, 1, 1))
+  s <- ems_synthesis(cnt, "crossed")
+  expect_equal(round(s$E["A", c("A", "AB")], c(2, 3)), c(A = 7.84, AB = 1.568))
+  expect_equal(round(s$E["B", c("B", "AB")], 4), c(B = 6.6206, AB = 1.6552))
+  expect_equal(round(s$E["AB", "AB"], 4), 2.0754)
+  expect_equal(unname(s$E[, "Residual"]), rep(1, 4))
+  ## k = (0.128, 0.151, 0.265, k_e). The paper prints k_e = 0.464, but the k sum to
+  ## 1 by construction (E'k = 1), so k_e = 1 - 0.128 - 0.151 - 0.265 = 0.456:
+  ## the printed 0.464 is inconsistent with the other three.
+  expect_equal(unname(round(s$k, 3)), c(0.128, 0.151, 0.265, 0.456))
+  expect_equal(sum(s$k), 1)
 })
 
 test_that("one-sided TI on the ems-mls route (provisional): Hoffman's limit on the Francq bound", {

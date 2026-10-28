@@ -54,12 +54,12 @@
 #'     bound `U` as the two-sided interval (Montes et al. 2019, Eqs. 2-3, 6-7).
 #'   \item Tolerance intervals, `ems-mls` (Francq): the same structure with
 #'     Francq's MLS bound on the total variance and `Vhat = V_F` --- the
-#'     package's extension of Hoffman (2010), **provisional, pending
-#'     validation**.
-#'   \item Tolerance intervals, random slope: GPQ by default
-#'     (`route_reason = "one_sided"`); `method = "reml-mls"` gives Hoffman's
-#'     limit with the REML closed form's bound (**provisional, pending
-#'     validation**).
+#'     package's extension of Hoffman (2010), validated by simulation.
+#'   \item Tolerance intervals, random slope: Hoffman's structure with the
+#'     REML closed form's bound and `Vhat = V_F` (`reml-mls`), on every fit
+#'     including singular ones --- the package's extension of Hoffman (2010),
+#'     validated by simulation. `method = "gpq"` is available but under-covered
+#'     near the variance-component boundary in validation.
 #' }
 #' @references Hoffman D (2010). One-sided tolerance limits for balanced and
 #'   unbalanced random effects models. *Technometrics* 52(3):303-312.

@@ -1,4 +1,4 @@
-# Without the bounded-Satterthwaite guard, a singular fit sends df_PI -> 0 and the PI
+# Without the containment-df guard, a singular fit sends df_PI -> 0 and the PI
 # width -> ~10^244. The guard must keep the width finite and flag the event.
 
 test_that("singular fit: PI width stays finite and the fallback attributes are set", {

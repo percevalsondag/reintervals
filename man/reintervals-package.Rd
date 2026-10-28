@@ -77,9 +77,10 @@ unavailable; Kenward-Roger df only on request
 \strong{One-sided intervals} (\code{sides = "lower"} / \code{"upper"}) are available from
 every verb. CI, PI, and new-group mean keep the two-sided centre, variance,
 and df with \verb{t_\{1 - alpha\}}. One-sided tolerance limits: \code{anova-mls} uses
-Hoffman's (2010) one-sided limit; random-slope models use GPQ by default;
-\code{ems-mls} and a forced \code{reml-mls} use the package's extension of Hoffman's
-limit, provisional pending validation. See \link{reintervals-models}.
+Hoffman's (2010) one-sided limit; \code{ems-mls} and random-slope models
+(\code{reml-mls}, the default on every fit) use the package's extension of
+Hoffman's limit to the Francq and REML closed-form bounds, validated by
+simulation. See \link{reintervals-models}.
 
 \strong{Scope.} General fixed effects are supported for random-intercept
 models; random-slope models are supported for a single continuous covariate (the

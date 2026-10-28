@@ -31,7 +31,7 @@
 #' @param conf Confidence level `gamma`. Default 0.95.
 #' @param sides Character: `"two"` (default), `"lower"`, or `"upper"`. One-sided
 #'   limits are the package's extension of Hoffman's (2010) one-sided limit to
-#'   this construction (provisional, pending validation).
+#'   this construction, validated by simulation.
 #'
 #' @return An [re_interval] of `type = "TI"`.
 #'
@@ -96,7 +96,7 @@ ti_francq <- function(comp, content = 0.95, conf = 0.95,
   h <- ems$df / stats::qchisq(a, df = ems$df) - 1
   inner <- sum(h^2 * ems$k^2 * ems$ms^2)
   ## One-sided: the package's extension of Hoffman's (2010) one-sided limit to
-  ## the Francq construction -- PROVISIONAL, pending validation:
+  ## the Francq construction (validated by simulation):
   ##   mean -/+ ( z_P sqrt(U) + z_{1-alpha} sqrt(V_F) ),
   ## with U = sigma2_T + sqrt(sum H_j^2 k_j^2 EMS_j^2), Francq's MLS upper bound
   ## on sigma2_T. Hoffman D (2010), Technometrics 52(3):303-312.

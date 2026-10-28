@@ -134,8 +134,8 @@ Every verb accepts `sides = "lower"` or `"upper"`.
 |---|---|---|
 | CI, PI, new-group mean (all engines) | same centre, variance, and df as the two-sided interval, with `t_{1-alpha}` | available |
 | TI, `anova-mls` (Hoffman-Kringle one-way; Montes fixed slope) | Hoffman's (2010) one-sided limit: `Yhat ∓ (z_P sqrt(U) + z_{1-alpha} sqrt(Vhat(Yhat)))` with the two-sided MLS bound `U` | available (published: Hoffman 2010; Montes et al. 2019) |
-| TI, `ems-mls` (Francq) | the same structure with Francq's MLS bound on the total variance and `Vhat = V_F` | provisional, pending validation |
-| TI, random slope | GPQ by default (`route_reason = "one_sided"`); a forced `reml-mls` uses Hoffman's structure | GPQ available; `reml-mls` provisional |
+| TI, `ems-mls` (Francq) | the same structure with Francq's MLS bound on the total variance and `Vhat = V_F` | available (the package's extension of Hoffman 2010, validated by simulation) |
+| TI, random slope | the same structure with the REML closed form's bound and `Vhat = V_F` (`reml-mls`), on every fit including singular ones | available (the package's extension of Hoffman 2010, validated by simulation); `method = "gpq"` can be forced but under-covered near the variance-component boundary in validation |
 
 ## Choosing the method by hand
 
@@ -188,8 +188,12 @@ ti_lmm(fs, newdata = data.frame(Days = 5), P = 0.99,
 
 ## Limitations in this version
 
-- **One-sided tolerance limits** on the `ems-mls` engine and on a forced
-  `reml-mls` are provisional, pending validation (see "One-sided intervals").
+- **Prediction intervals with few top-level groups.** With five or fewer levels
+  of the top random factor and a dominant between-group variance (intraclass
+  correlation near 0.9), the Francq et al. (2019) prediction interval for
+  random-intercept models can under-cover: the worst coverage observed in the
+  package's validation was about 0.93 for a nominal 0.95, consistent with Francq
+  et al. (2019, Fig. 2).
 - **Tolerance and new-group-mean intervals** require a closed-form variance
   decomposition; for crossed-no-interaction and ≥4-factor designs, `ti_lmm()` and
   `new_group_mean_lmm()` error (CI and PI remain available).

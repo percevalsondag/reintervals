@@ -152,9 +152,9 @@ test_that("batch-mean tolerance (over = group_mean) is DNE for M1; error names t
 
 # ---- (5) the two df fallbacks are NOT unified ---------------------------------
 test_that("EMS and slope df fallbacks are distinct functions (not shared)", {
-  expect_true(is.function(.satterthwaite_df))        # EMS fallback
+  expect_true(is.function(.ddf_containment))         # EMS fallback
   expect_true(is.function(.vfun_df_containment))     # slope fallback
-  expect_false(identical(.satterthwaite_df, .vfun_df_containment))
+  expect_false(identical(.ddf_containment, .vfun_df_containment))
   parsed <- list(B = 11, k_re = 1, n = 26, p = 2)
   expect_identical(.vfun_df_containment(parsed, w_between = 1),   max(1, 11 - 1))
   expect_identical(.vfun_df_containment(parsed, w_between = 0), max(1, 26 - 2 - 11))

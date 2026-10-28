@@ -23,20 +23,37 @@
 * One-sided intervals (`sides = "lower"` / `"upper"`) for `ci_lmm()`,
   `pi_lmm()`, and `new_group_mean_lmm()` on every engine: the two-sided
   interval's centre, variance, and df with `t_{1 - alpha}`.
-* One-sided tolerance limits: random-slope models route to GPQ by default
-  (`route_reason = "one_sided"`); `anova-mls` (Hoffman-Kringle one-way and
-  Montes fixed slope) uses Hoffman's (2010) one-sided limit; `ems-mls` and a
-  forced `reml-mls` use the package's extension of Hoffman's limit,
-  provisional pending validation. `lmm_predict()` passes `sides` through.
+* One-sided tolerance limits: `anova-mls` (Hoffman-Kringle one-way and
+  Montes fixed slope) uses Hoffman's (2010) one-sided limit; `ems-mls` and
+  random-slope models use the package's extension of Hoffman's limit to the
+  Francq and REML closed-form bounds, validated by simulation. For random
+  slopes the one-sided default is `reml-mls` on every fit, singular ones
+  included; `method = "gpq"` remains available but under-covered near the
+  variance-component boundary in validation. `lmm_predict()` passes `sides`
+  through.
+
+## Known limitations
+* With five or fewer levels of the top random factor and a dominant
+  between-group variance (intraclass correlation near 0.9), the Francq et al.
+  (2019) prediction interval for random-intercept models can under-cover (worst
+  coverage observed in validation about 0.93 for a nominal 0.95), consistent
+  with Francq et al. (2019, Fig. 2).
 
 ## Bug fixes
 * EMS stratum degrees of freedom now account for the fixed effects: each
   stratum loses one df per fixed-effect column estimated in it (a column
   belongs to the coarsest random factor within whose levels it is constant,
   otherwise to the residual), so the residual df is N - rank([X Z]). This
-  affects the EMS tolerance interval, the bounded-Satterthwaite prediction df
-  fallback, and the new-group mean (e.g. a between-group covariate gives a
-  one-way top df of A - 2, not A - 1). Intercept-only designs are unchanged.
+  affects the EMS tolerance interval, the containment df, and the new-group
+  mean (e.g. a between-group covariate gives a one-way top df of A - 2, not
+  A - 1). Intercept-only designs are unchanged.
+* When the observed-information prediction-interval df is not usable
+  (singular fit, a covariance that is not positive definite, or a
+  non-positive variance of the total variance), the random-intercept
+  prediction interval now uses the stratum containment df (e.g. A - 1, or
+  min(A, B) - 1 for crossed designs). The former bounded-Satterthwaite
+  fallback gave df far above the stratum df on singular fits (8 to 70 against
+  1 to 4) and under-covered; the N - p - q fallback is removed as well.
 * The one-sided `anova-mls` tolerance limit used the two-sided formula with
   z_P, which is anti-conservative for P < 0.99 (Montes et al. 2019). It now
   uses Hoffman's (2010) one-sided limit.

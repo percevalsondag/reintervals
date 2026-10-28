@@ -67,12 +67,12 @@ fixed slope): Hoffman's (2010) one-sided limit
 bound \code{U} as the two-sided interval (Montes et al. 2019, Eqs. 2-3, 6-7).
 \item Tolerance intervals, \code{ems-mls} (Francq): the same structure with
 Francq's MLS bound on the total variance and \code{Vhat = V_F} --- the
-package's extension of Hoffman (2010), \strong{provisional, pending
-validation}.
-\item Tolerance intervals, random slope: GPQ by default
-(\code{route_reason = "one_sided"}); \code{method = "reml-mls"} gives Hoffman's
-limit with the REML closed form's bound (\strong{provisional, pending
-validation}).
+package's extension of Hoffman (2010), validated by simulation.
+\item Tolerance intervals, random slope: Hoffman's structure with the
+REML closed form's bound and \code{Vhat = V_F} (\code{reml-mls}), on every fit
+including singular ones --- the package's extension of Hoffman (2010),
+validated by simulation. \code{method = "gpq"} is available but under-covered
+near the variance-component boundary in validation.
 }
 }
 

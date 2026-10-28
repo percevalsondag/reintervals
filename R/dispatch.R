@@ -30,15 +30,15 @@
 #     nested / crossed) -> EMS engine.
 #
 # Each engine keeps its own singular guard (they do different jobs; not unified):
-#   * EMS path  -> reintervals' Hessian -> bounded-Satterthwaite guard (the
+#   * EMS path  -> reintervals' Hessian -> stratum containment df guard (the
 #     PI-width guard pinned by test-singular-guard.R).
 #   * slope path -> the guard carried by vfun_extract (its own
 #     Satterthwaite -> containment df fallback + singular/boundary flags) plus
 #     the singular -> GPQ engine switch in .choose_slope_engine().
 #
-# The Satterthwaite df fallback is also not shared: the EMS fallback
-# (.satterthwaite_df, vc-extract.R) and the slope fallback (.vfun_df_containment,
-# vfun-extract.R) are distinct functions validated against distinct oracles.
+# The df fallback is also not shared: the EMS fallback (.ddf_containment,
+# vc-extract.R) and the slope fallback (.vfun_df_containment, vfun-extract.R)
+# are distinct functions validated against distinct oracles.
 #
 # The EMS random-slope stop() in vc-extract.R (.assert_random_intercepts) is the
 # guard for anyone calling vc_extract / the EMS engine directly on a random-slope
@@ -201,11 +201,17 @@
   singular <- isTRUE(tryCatch(lme4::isSingular(model), error = function(e) NA))
   chosen   <- .choose_slope_engine(target, singular, engine)
   design   <- .slope_design(model)
-  ## One-sided TIs route to GPQ by default: its one-sided construction is the
-  ## pivot quantile of the beta-quantile (.gpq_core lower / upper branches).
-  ## method = "reml-mls" (engine "closed") is still honored when forced.
-  one_sided <- sides != "two.sided"
-  if (engine == "auto" && one_sided) chosen <- "gpq"
+  ## One-sided TIs (future-observation target): Hoffman's (2010) limit on the
+  ## REML closed form, on EVERY fit -- singular and df-unavailable fits
+  ## included. The validation study (W3) validated it on all fits (worst cell
+  ## 0.962), whereas the one-sided GPQ limit under-covered on near-boundary
+  ## singular fits at the edge of the time range (worst 0.928); so the
+  ## singular / df-unavailable re-routing below applies to two-sided TIs only.
+  ## method = "gpq" stays available when forced. The batch-mean target keeps
+  ## GPQ (the closed form does not serve it).
+  one_sided_closed <- engine == "auto" && sides != "two.sided" &&
+    target == "observable"
+  if (one_sided_closed) chosen <- "closed"
 
   ## Per-t0 route. Under the default (engine = "auto", future-observation target,
   ## non-singular fit) the closed form is also abandoned for GPQ at any t0 where
@@ -215,13 +221,14 @@
   if (chosen == "closed") {
     comps <- lapply(t0s, function(t0) vfun_extract(model, t0 = t0, target = target))
   }
-  df_bad <- if (is.null(comps) || engine != "auto") rep(FALSE, length(t0s)) else
+  df_bad <- if (is.null(comps) || engine != "auto" || one_sided_closed)
+    rep(FALSE, length(t0s)) else
     vapply(comps, function(cp) any(attr(cp, "df_fallback")[c("G", "e")] %in% TRUE),
            logical(1))
   use_gpq <- chosen == "gpq" | df_bad
   reason <- if (engine != "auto") rep("method", length(t0s))
             else if (target == "true_value") rep("group_mean_target", length(t0s))
-            else if (one_sided) rep("one_sided", length(t0s))
+            else if (one_sided_closed) rep("none", length(t0s))
             else if (singular) rep("singular", length(t0s))
             else ifelse(df_bad, "df_unavailable", "none")
 
@@ -273,10 +280,15 @@
 #'   interval when the fit is non-singular and the GPQ interval when the fit is
 #'   singular or, at a given `t0`, when the Satterthwaite df of the closed form's
 #'   between-group or residual variance is unavailable (its containment fallback
-#'   fired); `over = "group_mean"` always uses GPQ, and so do one-sided
-#'   intervals (`sides = "lower"` / `"upper"`) by default. The reason is
-#'   reported per row in `attr(., "diagnostics")$route_reason` (`"none"`,
-#'   `"singular"`, `"df_unavailable"`, `"group_mean_target"`, `"one_sided"`, or
+#'   fired); `over = "group_mean"` always uses GPQ. One-sided intervals
+#'   (`sides = "lower"` / `"upper"`, future-observation target) use Hoffman's
+#'   (2010) one-sided limit on the REML closed form on every fit, singular and
+#'   df-unavailable fits included (validated by simulation on all of them);
+#'   `method = "gpq"` remains available, but in the package's validation the
+#'   one-sided GPQ limit under-covered on near-boundary singular fits at the
+#'   edge of the observed time range (worst cell 0.928 for a nominal 0.95).
+#'   The reason is reported per row in `attr(., "diagnostics")$route_reason`
+#'   (`"none"`, `"singular"`, `"df_unavailable"`, `"group_mean_target"`, or
 #'   `"method"` when forced).
 #' * **Random intercept + fixed slope.** Clean balanced -> EMS engine; single-
 #'   observation / staggered / unbalanced -> the Montes ANOVA/MLS closed form.
@@ -315,9 +327,9 @@
 #'   one. `level` is `1 - alpha`; default `alpha = 0.05`.
 #' @param sides `"two.sided"` (default), `"lower"`, or `"upper"`. One-sided
 #'   tolerance limits: `anova-mls` uses Hoffman's (2010) one-sided limit;
-#'   `ems-mls` and a forced `reml-mls` use the package's extension of it
-#'   (provisional, pending validation); random-slope models use GPQ by default.
-#'   See [reintervals-models].
+#'   `ems-mls` and random-slope models (`reml-mls`, the default on every fit)
+#'   use the package's extension of it, validated by simulation. See
+#'   [reintervals-models].
 #' @param method `"auto"` (default) chooses the algorithm by structure; one of
 #'   `"ems-mls"`, `"reml-mls"`, `"anova-mls"`, `"gpq"` forces it and errors if
 #'   incompatible with the model. `"anova-mls"` is available for fixed-slope
@@ -434,7 +446,8 @@ ti_lmm <- function(model, newdata = NULL, P = 0.95,
     return(.unify_intervals(out, model, kind = "ti", P_value = P))  # carries anova-mls
   }
 
-  ## one-sided EMS TI: PROVISIONAL, pending validation (see ti_francq)
+  ## one-sided EMS TI: the package's extension of Hoffman (2010), validated by
+  ## simulation (see ti_francq)
   out <- .ti_ems(model, newdata = newdata, level = P, conf = conf, target = target,
                  sides = sides)
   .unify_intervals(out, model, kind = "ti", P_value = P, method_tag = "ems-mls")

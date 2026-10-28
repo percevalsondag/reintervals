@@ -275,6 +275,12 @@ ci_lmm <- function(model, newdata = NULL, alpha = NULL, level = NULL,
 #' @inheritParams ci_lmm
 #' @inherit ci_lmm return
 #' @inheritSection ci_lmm Known limitation
+#' @section Known limitation (few top-level groups):
+#' With few levels of the top random factor (five or fewer) and a dominant
+#' between-group variance (an intraclass correlation near 0.9), the Francq et
+#' al. (2019) prediction interval used for random-intercept models can
+#' under-cover: the worst coverage observed in the package's validation was
+#' about 0.93 for a nominal 0.95, consistent with Francq et al. (2019, Fig. 2).
 #' @seealso [ci_lmm()], [ti_lmm()], [new_group_mean_lmm()], [lmm_predict()],
 #'   [reintervals-models].
 #' @examples

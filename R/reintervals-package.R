@@ -68,9 +68,10 @@
 #' **One-sided intervals** (`sides = "lower"` / `"upper"`) are available from
 #' every verb. CI, PI, and new-group mean keep the two-sided centre, variance,
 #' and df with `t_{1 - alpha}`. One-sided tolerance limits: `anova-mls` uses
-#' Hoffman's (2010) one-sided limit; random-slope models use GPQ by default;
-#' `ems-mls` and a forced `reml-mls` use the package's extension of Hoffman's
-#' limit, provisional pending validation. See [reintervals-models].
+#' Hoffman's (2010) one-sided limit; `ems-mls` and random-slope models
+#' (`reml-mls`, the default on every fit) use the package's extension of
+#' Hoffman's limit to the Francq and REML closed-form bounds, validated by
+#' simulation. See [reintervals-models].
 #'
 #' **Scope.** General fixed effects are supported for random-intercept
 #' models; random-slope models are supported for a single continuous covariate (the
