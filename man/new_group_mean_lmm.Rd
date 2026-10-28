@@ -23,7 +23,9 @@ new_group_mean_lmm(
 \item{alpha, level}{The interval confidence, as a mutually-exclusive pair: give
 at most one. \code{level} is \code{1 - alpha}; the default is \code{alpha = 0.05} (95\%).}
 
-\item{sides}{\code{"two.sided"} (default), \code{"lower"}, or \code{"upper"}.}
+\item{sides}{\code{"two.sided"} (default), \code{"lower"}, or \code{"upper"}. A one-sided
+interval keeps the two-sided interval's centre, variance, and df and uses
+\verb{t_\{1 - alpha\}} in place of \verb{t_\{1 - alpha/2\}}.}
 
 \item{method}{\code{"auto"} (default) chooses the algorithm by structure; one of
 \code{"ems-mls"}, \code{"reml-mls"}, \code{"anova-mls"}, \code{"gpq"} forces that engine and
@@ -95,7 +97,8 @@ which \code{V_F} is attached to the two main-effect terms
 A design without a closed-form variance decomposition (two crossed factors
 without their interaction term, or four or more grouping factors) is an
 error.
-Random-intercept new-group-mean intervals are two-sided only.
+One-sided intervals (\code{sides = "lower"} / \code{"upper"}) use the same centre, \code{W},
+and df with \verb{t_\{1 - alpha\}}.
 }
 
 \examples{

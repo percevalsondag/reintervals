@@ -95,8 +95,8 @@ boundary). `attr(., "diagnostics")$route_reason` reports `"singular"` or
 ^f^ Random-slope support is limited to a single continuous covariate (`~ 1 + x`)
 in this version — time in the stability use case, but any continuous predictor works.
 
-^g^ `ti_lmm()` uses the Hoffman & Kringle (2005) closed form (`anova-mls`,
-two-sided only), the one-way case of the unweighted-means ANOVA interval.
+^g^ `ti_lmm()` uses the Hoffman & Kringle (2005) closed form (`anova-mls`),
+the one-way case of the unweighted-means ANOVA interval.
 `method = "ems-mls"` gives the Francq et al. (2019) interval instead; the two
 coincide on balanced data with a non-singular fit and differ on singular or
 unbalanced data.
@@ -125,6 +125,17 @@ crossed designs. Kenward-Roger df are used only on request,
 on which packages happen to be installed. The df source is reported in
 `attr(., "diagnostics")$df_method`. Random-slope models use their own
 generalized Satterthwaite df.
+
+## One-sided intervals
+
+Every verb accepts `sides = "lower"` or `"upper"`.
+
+| Interval | One-sided construction | Status |
+|---|---|---|
+| CI, PI, new-group mean (all engines) | same centre, variance, and df as the two-sided interval, with `t_{1-alpha}` | available |
+| TI, `anova-mls` (Hoffman-Kringle one-way; Montes fixed slope) | Hoffman's (2010) one-sided limit: `Yhat ∓ (z_P sqrt(U) + z_{1-alpha} sqrt(Vhat(Yhat)))` with the two-sided MLS bound `U` | available (published: Hoffman 2010; Montes et al. 2019) |
+| TI, `ems-mls` (Francq) | the same structure with Francq's MLS bound on the total variance and `Vhat = V_F` | provisional, pending validation |
+| TI, random slope | GPQ by default (`route_reason = "one_sided"`); a forced `reml-mls` uses Hoffman's structure | GPQ available; `reml-mls` provisional |
 
 ## Choosing the method by hand
 
@@ -177,14 +188,11 @@ ti_lmm(fs, newdata = data.frame(Days = 5), P = 0.99,
 
 ## Limitations in this version
 
-- **One-sided intervals** (`sides = "lower"` / `"upper"`) are available only for
-  the Montes single-observation tolerance interval and the random-slope engines.
-  The EMS engine (random-intercept and balanced fixed-slope) and the
-  Hoffman-Kringle one-way tolerance interval are two-sided only.
+- **One-sided tolerance limits** on the `ems-mls` engine and on a forced
+  `reml-mls` are provisional, pending validation (see "One-sided intervals").
 - **Tolerance and new-group-mean intervals** require a closed-form variance
   decomposition; for crossed-no-interaction and ≥4-factor designs, `ti_lmm()` and
-  `new_group_mean_lmm()` error (CI and PI remain available). Random-intercept
-  new-group-mean intervals are two-sided only.
+  `new_group_mean_lmm()` error (CI and PI remain available).
 - **Batch-mean tolerance intervals** (`over = "group_mean"`) are currently
   available only for random-slope models; a random-intercept batch-mean tolerance
   interval is not currently available.
@@ -206,6 +214,9 @@ ti_lmm(fs, newdata = data.frame(Days = 5), P = 0.99,
 - Hoffman, D., & Kringle, R. (2007). A total error approach for the validation
   of quantitative analytical methods. *Pharmaceutical Research*, 24(6),
   1157–1164. <doi:10.1007/s11095-007-9242-3>
+- Hoffman, D. (2010). One-sided tolerance limits for balanced and unbalanced
+  random effects models. *Technometrics*, 52(3), 303–312.
+  <doi:10.1198/TECH.2010.09171>
 - Graybill, F. A., & Wang, C.-M. (1980). Confidence intervals on nonnegative
   linear combinations of variances. *Journal of the American Statistical
   Association*, 75(372), 869–873.

@@ -102,9 +102,13 @@
 ##   2f anything else (no closed-form EMS decomposition) -> error
 ## EMS_j are the REML-implied expected mean squares (.design_components; the
 ## synthesis k for unbalanced nested / crossed). Two-sided only.
-.ngm_ri <- function(model, newdata = NULL, level = 0.95) {
+.ngm_ri <- function(model, newdata = NULL, level = 0.95,
+                   sides = c("two.sided", "lower", "upper")) {
+  sides <- match.arg(sides)
   desc  <- .design_of(model)
-  tcrit <- function(df) stats::qt(1 - (1 - level) / 2, df)
+  ## two-sided: t_{1 - alpha/2}; one-sided: t_{1 - alpha} on the same pivot
+  tcrit <- function(df) if (sides == "two.sided") stats::qt(1 - (1 - level) / 2, df)
+                        else stats::qt(level, df)
   value_rows <- function(est, W, df, rule, method) {
     if (any(!is.finite(W) | W <= 0)) {
       stop("The new-group-mean variance W is not positive for this fit (e.g. ",
@@ -112,9 +116,11 @@
            "zero); the interval is not available.", call. = FALSE)
     }
     hw <- tcrit(df) * sqrt(W)
-    data.frame(type = "new_group_mean", estimate = est, lower = est - hw,
-               upper = est + hw, level = level, df = df, df_rule = rule, W = W,
-               sides = "two.sided", method = method, stringsAsFactors = FALSE)
+    data.frame(type = "new_group_mean", estimate = est,
+               lower = if (sides == "upper") -Inf else est - hw,
+               upper = if (sides == "lower")  Inf else est + hw,
+               level = level, df = df, df_rule = rule, W = W,
+               sides = sides, method = method, stringsAsFactors = FALSE)
   }
 
   if (.ngm_uses_anova(model)) {
@@ -146,8 +152,7 @@
   ## nested / crossed designs with covariates, were not part of the validation
   ## simulations (which used intercept-only nested / crossed fits); 2e is
   ## checked by simulation separately.
-  dc <- .design_components(desc, .var_components(model), "observable",
-                           .counts_if_unbalanced(model, desc))
+  dc <- .design_components_fit(model, desc, .var_components(model), "observable")
   if (is.null(dc$ems)) {
     stop("The new-group-mean interval is not available: no closed-form ",
          "variance decomposition for this design.", call. = FALSE)
@@ -170,7 +175,8 @@
     }, numeric(1))
     rule <- "satterthwaite-vf"
   } else {
-    df <- rep(dfj[[1]], length(VF))        # Gm: top-factor df (A - 1)
+    df <- rep(dfj[[1]], length(VF))        # Gm: top-factor stratum df (A - 1,
+                                           # less any between-group fixed columns)
     rule <- "top-factor"
   }
   out <- cbind(fx$newdata, value_rows(fx$fit, W, df, rule, "ems-mls"))
@@ -219,16 +225,25 @@
 
   ## random intercept (incl. fixed-slope): EMS engine.
   if (kind == "new_group_mean") {
-    if (sides != "two.sided") {
-      stop("The random-intercept new-group-mean interval is two-sided only.",
-           call. = FALSE)
-    }
-    return(.ngm_ri(model, newdata = newdata, level = level))
+    return(.ngm_ri(model, newdata = newdata, level = level, sides = sides))
   }
-  if (sides != "two.sided") {
-    stop("The EMS CI/PI are two-sided only; one-sided applies to the slope path.",
-         call. = FALSE)
+  out <- intervals_lmm(model, newdata = newdata, level = level, conf = level,
+                       which = kind, ci_method = ci_df)
+  .one_sided_t(out, level = level, sides = sides)
+}
+
+## One-sided EMS CI / PI: t_{1 - alpha} on the existing symmetric t pivot (same
+## centre, same df, same standard error, recovered from the two-sided
+## half-width as hw / t_{1 - alpha/2}). Two-sided input passes through, tagged.
+.one_sided_t <- function(out, level, sides) {
+  out$sides <- sides
+  if (sides == "two.sided") return(out)
+  se <- (out$upper - out$lower) / 2 / stats::qt(1 - (1 - level) / 2, out$df)
+  q1 <- stats::qt(level, out$df)
+  if (sides == "lower") {
+    out$lower <- out$estimate - q1 * se; out$upper <- Inf
+  } else {
+    out$upper <- out$estimate + q1 * se; out$lower <- -Inf
   }
-  intervals_lmm(model, newdata = newdata, level = level, conf = level,
-                which = kind, ci_method = ci_df)
+  out
 }

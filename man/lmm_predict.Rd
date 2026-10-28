@@ -33,7 +33,11 @@ supplies the evaluation point(s). \code{NULL} uses the first model-frame row.}
 \item{alpha, level}{The confidence, as a mutually-exclusive pair: give at most
 one. \code{level} is \code{1 - alpha}; default \code{alpha = 0.05}.}
 
-\item{sides}{\code{"two.sided"} (default), \code{"lower"}, or \code{"upper"}.}
+\item{sides}{\code{"two.sided"} (default), \code{"lower"}, or \code{"upper"}. One-sided
+tolerance limits: \code{anova-mls} uses Hoffman's (2010) one-sided limit;
+\code{ems-mls} and a forced \code{reml-mls} use the package's extension of it
+(provisional, pending validation); random-slope models use GPQ by default.
+See \link{reintervals-models}.}
 
 \item{method}{\code{"auto"} (default) chooses the algorithm by structure; one of
 \code{"ems-mls"}, \code{"reml-mls"}, \code{"anova-mls"}, \code{"gpq"} forces it and errors if

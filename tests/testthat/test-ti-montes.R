@@ -67,3 +67,29 @@ test_that("input guards: P/level in (0,1), finite t0, >= 2 lots, within-lot time
     "within-lot time variation"
   )
 })
+
+test_that("one-sided limits are Hoffman's (2010) H: Montes et al. (2019) Tables I-II on mbl_appendix_a", {
+  d <- mbl_appendix_a; r2 <- function(x) round(x, 2)
+  ## intercept-only (the slope-free / Hoffman-Kringle branch), P = 0.99, conf 0.95
+  two <- ti_anova_raw(d$Y, time = NULL, lot = d$Lot, P = 0.99, level = 0.95)
+  lo  <- ti_anova_raw(d$Y, time = NULL, lot = d$Lot, P = 0.99, level = 0.95, sides = "lower")
+  up  <- ti_anova_raw(d$Y, time = NULL, lot = d$Lot, P = 0.99, level = 0.95, sides = "upper")
+  expect_equal(r2(c(two$lower, two$upper)), c(60.44, 81.97))
+  expect_equal(r2(c(lo$lower, up$upper)), c(60.63, 81.78))
+  g <- attr(two, "diagnostics")
+  yb <- tapply(d$Y, d$Lot, mean)
+  expect_equal(round(sum((yb - mean(yb))^2) / 10, 3), 5.917)                     # S2_L
+  expect_equal(round(sum((d$Y - yb[d$Lot])^2) / (nrow(d) - 11), 3), 3.636)       # S2_E
+  expect_equal(round(g$n_E, 3), 13.110)
+  expect_equal(round(g$U, 3), 16.232)
+  expect_equal(round(g$C1, 3), 1.538)                                            # H1
+  expect_equal(round(g$C2, 3), 1.066)                                            # H2
+  ## fixed slope at t0 = 12
+  lo12 <- ti_anova_raw(d$Y, d$Month, d$Lot, t0 = 12, P = 0.99, level = 0.95, sides = "lower")
+  up12 <- ti_anova_raw(d$Y, d$Month, d$Lot, t0 = 12, P = 0.99, level = 0.95, sides = "upper")
+  expect_equal(r2(c(lo12$lower, up12$upper)), c(57.36, 75.31))
+  ## not the superseded "HK1" form (two-sided formula with z_P): 61.48 / 80.92, 58.13 / 74.53
+  expect_false(isTRUE(all.equal(c(lo$lower, up$upper), c(61.48, 80.92), tolerance = 1e-3)))
+  expect_false(isTRUE(all.equal(c(lo12$lower, up12$upper), c(58.13, 74.53), tolerance = 1e-3)))
+  expect_gt(abs(lo$lower - 61.48), 0.5); expect_gt(abs(lo12$lower - 58.13), 0.5)
+})

@@ -99,10 +99,18 @@ test_that("ti_francq errors when no EMS decomposition is available", {
   expect_error(ti_francq(comp), "no expected-mean-square decomposition")
 })
 
-test_that("ti_francq rejects one-sided requests and bad levels", {
+test_that("ti_francq one-sided (provisional) is Hoffman's (2010) limit on the Francq bound; bad levels rejected", {
   comp <- fixture_52()
-  expect_error(ti_francq(comp, sides = "lower"), "two-sided")
-  expect_error(ti_francq(comp, sides = "upper"), "two-sided")
+  lo <- ti_francq(comp, content = 0.95, conf = 0.90, sides = "lower")
+  up <- ti_francq(comp, content = 0.95, conf = 0.90, sides = "upper")
+  e <- comp$ems
+  h <- e$df / qchisq(1 - 0.90, e$df) - 1
+  U <- sum(e$k * e$ms) + sqrt(sum(h^2 * e$k^2 * e$ms^2))        # Francq MLS bound on sigma2_T
+  hw <- qnorm(0.95) * sqrt(U) + qnorm(0.90) * sqrt(comp$var_mean)
+  expect_equal(lo$lower, comp$mean - hw, tolerance = 1e-12)
+  expect_equal(up$upper, comp$mean + hw, tolerance = 1e-12)
+  expect_identical(c(lo$upper, up$lower), c(Inf, -Inf))
+  expect_identical(c(lo$sides, up$sides), c("lower", "upper"))
   expect_error(ti_francq(comp, content = 1.0), "between 0 and 1")
   expect_error(ti_francq(comp, conf = 0), "between 0 and 1")
   expect_error(ti_francq(list(mean = 1)), "re_components")

@@ -205,7 +205,9 @@ print.lmm_interval <- function(x, ...) {
 #'   `NULL` uses the first model-frame row.
 #' @param alpha,level The interval confidence, as a mutually-exclusive pair: give
 #'   at most one. `level` is `1 - alpha`; the default is `alpha = 0.05` (95%).
-#' @param sides `"two.sided"` (default), `"lower"`, or `"upper"`.
+#' @param sides `"two.sided"` (default), `"lower"`, or `"upper"`. A one-sided
+#'   interval keeps the two-sided interval's centre, variance, and df and uses
+#'   `t_{1 - alpha}` in place of `t_{1 - alpha/2}`.
 #' @param method `"auto"` (default) chooses the algorithm by structure; one of
 #'   `"ems-mls"`, `"reml-mls"`, `"anova-mls"`, `"gpq"` forces that engine and
 #'   errors if it is incompatible with the model.
@@ -328,7 +330,8 @@ pi_lmm <- function(model, newdata = NULL, alpha = NULL, level = NULL,
 #' A design without a closed-form variance decomposition (two crossed factors
 #' without their interaction term, or four or more grouping factors) is an
 #' error.
-#' Random-intercept new-group-mean intervals are two-sided only.
+#' One-sided intervals (`sides = "lower"` / `"upper"`) use the same centre, `W`,
+#' and df with `t_{1 - alpha}`.
 #'
 #' @inheritParams ci_lmm
 #' @inherit ci_lmm return

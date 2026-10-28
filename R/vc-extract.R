@@ -78,34 +78,37 @@
   s2e <- vc$vcov[vc$grp == "Residual"]
   comp_df <- function(ms, df) if (df > 0 && ms > 0) ms^2 / df else 0
 
+  ## stratum df adjusted for the fixed effects (.stratum_df), same order as
+  ## the EMS terms below (top factor first, residual last)
+  sdf <- function(grp) .stratum_df(model)[c(grp, "Residual")]
   terms <- NULL
   if (des$type == "oneway") {
-    A <- des$A; N <- des$N; n0 <- des$n0
+    n0 <- des$n0; df <- sdf(des$grp)
     s2a <- vc$vcov[vc$grp == des$grp]
     emsa <- s2e + n0 * s2a
-    terms <- c(comp_df((1 / n0) * emsa, A - 1),
-               comp_df((1 - 1 / n0) * s2e, N - A))
+    terms <- c(comp_df((1 / n0) * emsa, df[[1]]),
+               comp_df((1 - 1 / n0) * s2e, df[[2]]))
   } else if (des$type == "nested" && isTRUE(des$balanced)) {
-    A <- des$A; B <- des$B; n <- des$n
+    B <- des$B; n <- des$n; df <- sdf(c(des$grp_alpha, des$grp_beta))
     s2a <- vc$vcov[vc$grp == des$grp_alpha]
     s2b <- vc$vcov[vc$grp == des$grp_beta]
     emsb <- s2e + n * s2b
     emsa <- s2e + n * s2b + n * B * s2a
-    terms <- c(comp_df((1 / (n * B)) * emsa, A - 1),
-               comp_df((1 / n - 1 / (n * B)) * emsb, A * (B - 1)),
-               comp_df((1 - 1 / n) * s2e, A * B * (n - 1)))
+    terms <- c(comp_df((1 / (n * B)) * emsa, df[[1]]),
+               comp_df((1 / n - 1 / (n * B)) * emsb, df[[2]]),
+               comp_df((1 - 1 / n) * s2e, df[[3]]))
   } else if (des$type == "crossed" && isTRUE(des$balanced)) {
-    A <- des$A; B <- des$B; n <- des$n
+    A <- des$A; B <- des$B; n <- des$n; df <- sdf(c(des$grp_A, des$grp_B, des$grp_AB))
     v1 <- vc$vcov[vc$grp == des$grp_A]
     v2 <- vc$vcov[vc$grp == des$grp_B]
     s2ab <- vc$vcov[vc$grp == des$grp_AB]
     emsab <- s2e + n * s2ab
     emsa <- s2e + n * s2ab + n * B * v1
     emsb <- s2e + n * s2ab + n * A * v2
-    terms <- c(comp_df((1 / (n * B)) * emsa, A - 1),
-               comp_df((1 / (n * A)) * emsb, B - 1),
-               comp_df((1 / n - 1 / (n * A) - 1 / (n * B)) * emsab, (A - 1) * (B - 1)),
-               comp_df((1 - 1 / n) * s2e, A * B * (n - 1)))
+    terms <- c(comp_df((1 / (n * B)) * emsa, df[[1]]),
+               comp_df((1 / (n * A)) * emsb, df[[2]]),
+               comp_df((1 / n - 1 / (n * A) - 1 / (n * B)) * emsab, df[[3]]),
+               comp_df((1 - 1 / n) * s2e, df[[4]]))
   } else {
     N <- length(lme4::getME(model, "y"))
     p <- length(lme4::fixef(model))
@@ -279,17 +282,27 @@ requireNamespace <- NULL
   2 * cvar(th)^2 / var_c
 }
 
-## SAS-style containment df (the DDFM=CONTAIN rank rule). Every random-intercept
-## term contains the intercept; with the terms ordered coarsest first (fewest
-## levels, i.e. main effects before the nested / interaction terms that contain
-## them -- the order SAS's RANDOM statement uses; lme4's own term order puts the
-## finest term first and would give a rank contribution of 0 to the coarse
-## term), r_k = rank[X Z_1..Z_k] - rank[X Z_1..Z_{k-1}] and df = max(1, min r_k).
-## One-way and nested: A - 1 (minus any between-group fixed columns); crossed
-## A x B: min(A, B) - 1. Ranks are numerical (QR).
-.ddf_containment <- function(model) {
+## Stratum df adjusted for the fixed effects (the rank rule). With the
+## random-intercept terms ordered coarsest first (fewest levels, i.e. main
+## effects before the nested / interaction terms that contain them -- the order
+## SAS's RANDOM statement uses; lme4's own term order puts the finest term first
+## and would give a rank contribution of 0 to the coarse term),
+##   r_k = rank[X Z_1..Z_k] - rank[X Z_1..Z_{k-1}],   residual = N - rank[X Z].
+## With an intercept-only X these are the classical ANOVA df (one-way A - 1,
+## N - A; nested A - 1, A(B - 1), N - AB; crossed A - 1, B - 1, (A - 1)(B - 1),
+## N - AB). Each fixed column beyond the intercept costs one df in the COARSEST
+## stratum within whose levels it is constant (it is absorbed by that factor's
+## indicator span), or in the residual stratum if it varies within the finest
+## level -- e.g. a between-group covariate turns the one-way top df into A - 2,
+## a within-group factor turns the residual df into N - A - 1 (Francq et al.
+## 2019, Sec. 5.1: residual df (23 - 1)(4 - 1) = 66 after the fixed effects).
+## Ranks are numerical (QR). Returns a vector named by grouping factor (as in
+## lme4's Ztlist), coarsest first, then "Residual". Shared by the containment CI
+## df and every EMS stratum df, so the two cannot diverge.
+.stratum_df <- function(model) {
   X <- as.matrix(lme4::getME(model, "X"))
   Zl <- lapply(lme4::getME(model, "Ztlist"), function(zt) as.matrix(Matrix::t(zt)))
+  names(Zl) <- sub("\\.\\(Intercept\\)$", "", names(Zl))
   Zl <- Zl[order(vapply(Zl, ncol, numeric(1)))]           # coarsest term first
   rk <- function(M) qr(M)$rank
   M <- X; r_prev <- rk(M); r <- numeric(length(Zl))
@@ -297,7 +310,38 @@ requireNamespace <- NULL
     M <- cbind(M, Zl[[k]]); r_k <- rk(M)
     r[k] <- r_k - r_prev; r_prev <- r_k
   }
-  max(1, min(r))
+  c(stats::setNames(r, names(Zl)), Residual = nrow(X) - r_prev)
+}
+
+## SAS-style containment df (the DDFM=CONTAIN rank rule): every random-intercept
+## term contains the intercept, so df = max(1, min over random terms of the
+## stratum df above). One-way and nested: A - 1 (minus any between-group fixed
+## columns); crossed A x B: min(A, B) - 1.
+.ddf_containment <- function(model) {
+  s <- .stratum_df(model)
+  max(1, min(s[names(s) != "Residual"]))
+}
+
+## The EMS decomposition of a fitted model with its stratum df replaced by the
+## fixed-effect-adjusted .stratum_df(). .design_components() (pure) returns the
+## classical df; the EMS terms are ordered top factor first, residual last
+## (balanced adapters name them by grouping factor, the unbalanced synthesis
+## A / B / AB / Residual), so they are matched positionally to the grouping
+## factors of the descriptor. Used by the EMS TI, the bounded-Satterthwaite PI
+## fallback's design, vc_extract(), and the new-group mean (Gm / Gv).
+.design_components_fit <- function(model, desc, components, target) {
+  dc <- .design_components(desc, components, target, .counts_if_unbalanced(model, desc))
+  if (is.null(dc$ems)) return(dc)
+  grp <- switch(desc$type,
+    oneway  = desc$grp,
+    nested  = c(desc$grp_alpha, desc$grp_beta),
+    crossed = c(desc$grp_A, desc$grp_B, desc$grp_AB))
+  sd <- .stratum_df(model)[c(grp, "Residual")]
+  if (anyNA(sd) || length(sd) != length(dc$ems$df)) {
+    stop("Internal: stratum df could not be matched to the EMS terms.", call. = FALSE)
+  }
+  dc$ems$df[] <- unname(sd)
+  dc
 }
 
 #' Extract variance components and degrees of freedom from a fitted model
@@ -343,8 +387,7 @@ vc_extract <- function(model, design = NULL,
   desc <- if (is.null(design)) classify_design(flist, n_obs) else design
 
   theta <- .theta_cov(model)
-  dc <- .design_components(desc, theta$components, target,
-                          .counts_if_unbalanced(model, desc))
+  dc <- .design_components_fit(model, desc, theta$components, target)
   fx <- .fixed(model, newdata)
   ci_ddf <- .ci_ddf(model, fx$L[1, ], theta = theta)$df
 

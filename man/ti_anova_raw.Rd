@@ -31,8 +31,8 @@ the one-way (Hoffman-Kringle) interval with no covariate.}
 \item{alpha, level}{Confidence as a mutually-exclusive pair (give at most one);
 \code{level = 1 - alpha}, default \code{alpha = 0.05}.}
 
-\item{sides}{\code{"two.sided"} (default), \code{"lower"}, or \code{"upper"}. One-sided
-intervals are available only with a time covariate.}
+\item{sides}{\code{"two.sided"} (default), \code{"lower"}, or \code{"upper"} (Hoffman's
+one-sided limit).}
 }
 \value{
 A data frame (one row per \code{t0}, or one row when \code{time = NULL}):
@@ -60,8 +60,13 @@ two-sided interval for the one-way random-effects model, balanced or
 unbalanced (restated in Hoffman & Kringle 2007, Eqs. 1-2). It is the same
 computation with the slope removed (residual df \code{N - I}, centre = the
 unweighted mean of the group means). \code{\link[=ti_lmm]{ti_lmm()}} uses it by default for an
-intercept-only model with one random-intercept factor. Two-sided only.
+intercept-only model with one random-intercept factor.
 }
+
+One-sided limits (both cases) are Hoffman's (2010) limit
+\verb{Yhat -/+ (z_P sqrt(U) + z_\{1-alpha\} sqrt(Vhat(Yhat)))}, with the same MLS
+bound \code{U} as the two-sided interval and \code{Vhat(Yhat)} the variance of the
+centre (Montes et al. 2019, Eqs. 2-3 and 6-7).
 
 Method-pure (never touches \code{lme4}). The between- and within-lot mean squares
 are sums of squares over their degrees of freedom and so are non-negative by
@@ -80,6 +85,10 @@ ti_anova_raw(hk_assay$conc, time = NULL, lot = hk_assay$run,
              P = 0.95, level = 0.90)
 }
 \references{
+Hoffman D (2010). One-sided tolerance limits for balanced and
+unbalanced random effects models. \emph{Technometrics} 52(3):303-312.
+\doi{10.1198/TECH.2010.09171}
+
 Montes RO, Burdick RK, Leblond DJ (2019). Simple approach to
 calculate random effects model tolerance intervals to set release and
 shelf-life specification limits of pharmaceutical products. \emph{PDA Journal of Pharmaceutical Science and Technology}. \doi{10.5731/pdajpst.2018.008839}

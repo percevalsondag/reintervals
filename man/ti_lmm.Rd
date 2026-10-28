@@ -33,7 +33,11 @@ tolerance interval).}
 \item{alpha, level}{The confidence, as a mutually-exclusive pair: give at most
 one. \code{level} is \code{1 - alpha}; default \code{alpha = 0.05}.}
 
-\item{sides}{\code{"two.sided"} (default), \code{"lower"}, or \code{"upper"}.}
+\item{sides}{\code{"two.sided"} (default), \code{"lower"}, or \code{"upper"}. One-sided
+tolerance limits: \code{anova-mls} uses Hoffman's (2010) one-sided limit;
+\code{ems-mls} and a forced \code{reml-mls} use the package's extension of it
+(provisional, pending validation); random-slope models use GPQ by default.
+See \link{reintervals-models}.}
 
 \item{method}{\code{"auto"} (default) chooses the algorithm by structure; one of
 \code{"ems-mls"}, \code{"reml-mls"}, \code{"anova-mls"}, \code{"gpq"} forces it and errors if
@@ -78,14 +82,16 @@ exact/validated for that case --- all transparently:
 interval when the fit is non-singular and the GPQ interval when the fit is
 singular or, at a given \code{t0}, when the Satterthwaite df of the closed form's
 between-group or residual variance is unavailable (its containment fallback
-fired); \code{over = "group_mean"} always uses GPQ. The reason is reported per
-row in \code{attr(., "diagnostics")$route_reason} (\code{"none"}, \code{"singular"},
-\code{"df_unavailable"}, \code{"group_mean_target"}, or \code{"method"} when forced).
+fired); \code{over = "group_mean"} always uses GPQ, and so do one-sided
+intervals (\code{sides = "lower"} / \code{"upper"}) by default. The reason is
+reported per row in \code{attr(., "diagnostics")$route_reason} (\code{"none"},
+\code{"singular"}, \code{"df_unavailable"}, \code{"group_mean_target"}, \code{"one_sided"}, or
+\code{"method"} when forced).
 \item \strong{Random intercept + fixed slope.} Clean balanced -> EMS engine; single-
 observation / staggered / unbalanced -> the Montes ANOVA/MLS closed form.
 \item \strong{Intercept-only one-way} (\code{y ~ 1 + (1 | g)}, one grouping factor, no
 covariates), balanced or not -> the Hoffman & Kringle (2005) closed form
-(\code{"anova-mls"}, two-sided only). \code{method = "ems-mls"} gives the Francq et
+(\code{"anova-mls"}). \code{method = "ems-mls"} gives the Francq et
 al. (2019) interval instead; the two coincide on balanced data with a
 non-singular fit and differ on singular or unbalanced data.
 \item \strong{Any other random-intercept model, no fixed slope} (one-way with
@@ -123,6 +129,10 @@ ti_lmm(fs, newdata = data.frame(Days = 5), over = "group_mean",
        control = lmm_interval_control(seed = 1))
 }
 \references{
+Hoffman D (2010). One-sided tolerance limits for balanced and
+unbalanced random effects models. \emph{Technometrics} 52(3):303-312.
+\doi{10.1198/TECH.2010.09171}
+
 Hoffman D, Kringle R (2005). Two-sided tolerance intervals for
 balanced and unbalanced random effects models. \emph{Journal of
 Biopharmaceutical Statistics} 15(2):283-293. \doi{10.1081/BIP-200048826}

@@ -37,7 +37,9 @@
 #' @keywords internal
 #' @noRd
 .ti_ems <- function(model, newdata = NULL, level = 0.95, conf = 0.95,
-                    target = c("observable", "true_value")) {
+                    target = c("observable", "true_value"),
+                    sides = c("two.sided", "lower", "upper")) {
+  sides <- match.arg(sides)
   if (!inherits(model, "lmerMod")) {
     stop("`model` must be a fitted `lmerMod` (an lmer fit).", call. = FALSE)
   }
@@ -51,7 +53,7 @@
   .assert_random_intercepts(model)
   desc <- .design_of(model)
   comps <- .var_components(model)
-  dc <- .design_components(desc, comps, target, .counts_if_unbalanced(model, desc))
+  dc <- .design_components_fit(model, desc, comps, target)   # fixed-effect-adjusted stratum df
   if (is.null(dc$ems)) {
     stop(sprintf("Tolerance intervals are not available for a '%s' design (no closed-form variance decomposition). Confidence and prediction intervals are available for this model.", desc$type), call. = FALSE)
   }
@@ -65,14 +67,15 @@
       mean = fx$fit[i], var_mean = fx$var_fix[i],
       coefs = dc$coefs, ems = dc$ems, target = target, design = desc$type
     )
-    ti <- ti_francq(comp, content = level, conf = conf)
+    ti <- ti_francq(comp, content = level, conf = conf,
+                    sides = if (sides == "two.sided") "two" else sides)
     c(ti$lower, ti$upper)
   }
   bm <- vapply(seq_len(nr), bounds, numeric(2))
 
   out <- cbind(fx$newdata, data.frame(
     type = "TI", estimate = fx$fit, lower = bm[1, ], upper = bm[2, ],
-    level = level, conf = conf
+    level = level, conf = conf, sides = sides, stringsAsFactors = FALSE
   ), row.names = NULL)
   attr(out, "design") <- desc$type
   attr(out, "balanced") <- isTRUE(desc$balanced)

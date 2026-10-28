@@ -74,6 +74,13 @@ df (\code{A - 1} one-way or nested, \code{min(A, B) - 1} crossed) when that df i
 unavailable; Kenward-Roger df only on request
 (\code{lmm_interval_control(ci_df = "kenward-roger")}).
 
+\strong{One-sided intervals} (\code{sides = "lower"} / \code{"upper"}) are available from
+every verb. CI, PI, and new-group mean keep the two-sided centre, variance,
+and df with \verb{t_\{1 - alpha\}}. One-sided tolerance limits: \code{anova-mls} uses
+Hoffman's (2010) one-sided limit; random-slope models use GPQ by default;
+\code{ems-mls} and a forced \code{reml-mls} use the package's extension of Hoffman's
+limit, provisional pending validation. See \link{reintervals-models}.
+
 \strong{Scope.} General fixed effects are supported for random-intercept
 models; random-slope models are supported for a single continuous covariate (the
 stability design). The two tier-2 direct engines \code{\link[=ti_anova_raw]{ti_anova_raw()}} and

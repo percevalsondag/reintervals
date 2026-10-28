@@ -17,6 +17,12 @@
 ## unweighted-means between mean square and J_H = I / sum(1 / J_i).
 ## Provenance there: design = "random_intercept".
 ##
+## Stratum df: this core needs no fixed-effect adjustment (unlike the EMS
+## engines' .stratum_df): the slope-free branch is intercept-only by
+## construction (residual df N - I), and the fixed-slope branch already removes
+## the slope's df from the residual stratum (r = N - I - 1) and fits the slope
+## within lots, so the lot stratum keeps I - 1.
+##
 ## New-group-mean quantities (attributes ngm_W, ngm_df; consumed by
 ## new_group_mean_lmm(), never by the TI). Target: the TRUE mean of a new lot at
 ## t0, theta_new = mu + beta t0 + a_new. With D = sum_i (tbar_i - tbar_star)^2,
@@ -52,10 +58,6 @@
     if (!is.null(t0)) {
       stop("`t0` applies only with a `time` covariate; with `time = NULL` (the ",
            "Hoffman-Kringle one-way interval) leave `t0` as NULL.", call. = FALSE)
-    }
-    if (sides != "two.sided") {
-      stop("The Hoffman-Kringle (2005) one-way tolerance interval (time = NULL) ",
-           "is two-sided only.", call. = FALSE)
     }
   }
 
@@ -107,8 +109,16 @@
   C2 <- r / stats::qchisq(alpha, r) - 1     # HK: H2
   U  <- Vhat_Y + sqrt(C1^2 * S2_L^2 + C2^2 * (1 - 1 / JH)^2 * S2_E^2)
 
+  ## Two-sided: z_{(1+P)/2} sqrt(1 + 1/n_E) sqrt(U) (HK 2005; Montes et al. 2019).
+  ## One-sided: Hoffman's (2010) limit "H" (Montes et al. 2019, Eqs. 2-3, 6-7),
+  ##   Yhat -/+ ( z_P sqrt(U) + z_{1-alpha} sqrt(Vhat(Yhat)) ),
+  ## with the same MLS bound U and Vhat(Yhat) the variance of the centre. NOT the
+  ## two-sided formula with z_P ("HK1"), which Montes et al. (2019, Figs. 2-4)
+  ## show falls well below the nominal confidence for P < 0.99.
+  ## Hoffman D (2010). Technometrics 52(3):303-312. doi:10.1198/TECH.2010.09171
   zc <- if (sides == "two.sided") stats::qnorm((1 + content) / 2) else
     stats::qnorm(content)
+  z_conf <- stats::qnorm(conf)                # z_{1-alpha}
   df <- min(s, r)
 
   t_eval <- if (has_time) t0 else NA_real_
@@ -125,7 +135,8 @@
     VhatYh <- if (has_time) S2_L / I + S2_E * (tt - tbar_star)^2 / S_ttw else S2_L / I
     nE     <- Vhat_Y / VhatYh                # HK: N_e
     nE_vec[i] <<- nE
-    hw <- zc * sqrt(1 + 1 / nE) * sqrt(U)
+    hw <- if (sides == "two.sided") zc * sqrt(1 + 1 / nE) * sqrt(U) else
+      zc * sqrt(U) + z_conf * sqrt(VhatYh)   # Hoffman (2010) one-sided limit
     row <- data.frame(
       type = "TI", estimate = Yhat,
       lower = if (sides == "upper") -Inf else Yhat - hw,
@@ -165,7 +176,12 @@
 #'   unbalanced (restated in Hoffman & Kringle 2007, Eqs. 1-2). It is the same
 #'   computation with the slope removed (residual df `N - I`, centre = the
 #'   unweighted mean of the group means). [ti_lmm()] uses it by default for an
-#'   intercept-only model with one random-intercept factor. Two-sided only.
+#'   intercept-only model with one random-intercept factor.
+#'
+#' One-sided limits (both cases) are Hoffman's (2010) limit
+#' `Yhat -/+ (z_P sqrt(U) + z_{1-alpha} sqrt(Vhat(Yhat)))`, with the same MLS
+#' bound `U` as the two-sided interval and `Vhat(Yhat)` the variance of the
+#' centre (Montes et al. 2019, Eqs. 2-3 and 6-7).
 #'
 #' Method-pure (never touches `lme4`). The between- and within-lot mean squares
 #' are sums of squares over their degrees of freedom and so are non-negative by
@@ -180,8 +196,8 @@
 #' @param P Content proportion (default 0.95; pharma stability typically 0.99).
 #' @param alpha,level Confidence as a mutually-exclusive pair (give at most one);
 #'   `level = 1 - alpha`, default `alpha = 0.05`.
-#' @param sides `"two.sided"` (default), `"lower"`, or `"upper"`. One-sided
-#'   intervals are available only with a time covariate.
+#' @param sides `"two.sided"` (default), `"lower"`, or `"upper"` (Hoffman's
+#'   one-sided limit).
 #'
 #' @return A data frame (one row per `t0`, or one row when `time = NULL`):
 #'   `time` (only with a time covariate), `type = "TI"`, `estimate`, `lower`,
@@ -191,7 +207,11 @@
 #'   ANOVA intermediates are attached as attributes: `n_E`, `U`, `Vhat_Y`
 #'   (Hoffman-Kringle's `N_e` and `sTOT2` when `time = NULL`), `C1`, `C2`
 #'   (their `H1`, `H2`), and `beta_hat` (with a time covariate).
-#' @references Montes RO, Burdick RK, Leblond DJ (2019). Simple approach to
+#' @references Hoffman D (2010). One-sided tolerance limits for balanced and
+#'   unbalanced random effects models. *Technometrics* 52(3):303-312.
+#'   \doi{10.1198/TECH.2010.09171}
+#'
+#'   Montes RO, Burdick RK, Leblond DJ (2019). Simple approach to
 #'   calculate random effects model tolerance intervals to set release and
 #'   shelf-life specification limits of pharmaceutical products. *PDA Journal of Pharmaceutical Science and Technology*. \doi{10.5731/pdajpst.2018.008839}
 #'

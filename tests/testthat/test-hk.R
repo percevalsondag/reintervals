@@ -130,15 +130,21 @@ test_that("the slope-free core equals an independent HK implementation on 20 unb
   }
 })
 
-test_that("HK route: method choices and the two-sided restriction", {
+test_that("HK route: method choices; one-sided is Hoffman's (2010) limit", {
   skip_if_not_installed("lme4")
   fm <- fit_hk(hk_assay)
   expect_identical(ti_lmm(fm, method = "anova-mls")$method, "anova-mls")
   expect_identical(ti_lmm(fm, method = "ems-mls")$method, "ems-mls")
-  expect_error(ti_lmm(fm, sides = "lower"), "two-sided only")
+  lo <- ti_lmm(fm, P = 0.95, level = 0.90, sides = "lower")
+  d <- attr(lo, "diagnostics")
+  expect_identical(lo$method, "anova-mls")
+  ## H: z_P sqrt(U) + z_{1-alpha} sqrt(Vhat(Yhat)), Vhat(Yhat) = S2_L / I = Vhat_Y / n_E
+  expect_equal(lo$lower, lo$estimate - (qnorm(0.95) * sqrt(d$U) + qnorm(0.90) * sqrt(d$Vhat_Y / d$n_E)),
+               tolerance = 1e-12)
+  expect_identical(lo$upper, Inf)
+  up <- ti_anova_raw(hk_assay$conc, time = NULL, lot = hk_assay$run, P = 0.95, level = 0.90, sides = "upper")
+  expect_equal(up$upper, lo$estimate + (lo$estimate - lo$lower), tolerance = 1e-12)
   expect_error(ti_lmm(fm, method = "gpq"), "not available")
-  expect_error(ti_anova_raw(hk_assay$conc, time = NULL, lot = hk_assay$run, sides = "upper"),
-               "two-sided only")
   expect_error(ti_anova_raw(hk_assay$conc, time = NULL, lot = hk_assay$run, t0 = 1),
                "only with a `time` covariate")
   # a one-way model WITH a covariate is not HK: here a clean-balanced fixed-slope

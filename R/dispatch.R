@@ -201,6 +201,11 @@
   singular <- isTRUE(tryCatch(lme4::isSingular(model), error = function(e) NA))
   chosen   <- .choose_slope_engine(target, singular, engine)
   design   <- .slope_design(model)
+  ## One-sided TIs route to GPQ by default: its one-sided construction is the
+  ## pivot quantile of the beta-quantile (.gpq_core lower / upper branches).
+  ## method = "reml-mls" (engine "closed") is still honored when forced.
+  one_sided <- sides != "two.sided"
+  if (engine == "auto" && one_sided) chosen <- "gpq"
 
   ## Per-t0 route. Under the default (engine = "auto", future-observation target,
   ## non-singular fit) the closed form is also abandoned for GPQ at any t0 where
@@ -216,6 +221,7 @@
   use_gpq <- chosen == "gpq" | df_bad
   reason <- if (engine != "auto") rep("method", length(t0s))
             else if (target == "true_value") rep("group_mean_target", length(t0s))
+            else if (one_sided) rep("one_sided", length(t0s))
             else if (singular) rep("singular", length(t0s))
             else ifelse(df_bad, "df_unavailable", "none")
 
@@ -267,14 +273,16 @@
 #'   interval when the fit is non-singular and the GPQ interval when the fit is
 #'   singular or, at a given `t0`, when the Satterthwaite df of the closed form's
 #'   between-group or residual variance is unavailable (its containment fallback
-#'   fired); `over = "group_mean"` always uses GPQ. The reason is reported per
-#'   row in `attr(., "diagnostics")$route_reason` (`"none"`, `"singular"`,
-#'   `"df_unavailable"`, `"group_mean_target"`, or `"method"` when forced).
+#'   fired); `over = "group_mean"` always uses GPQ, and so do one-sided
+#'   intervals (`sides = "lower"` / `"upper"`) by default. The reason is
+#'   reported per row in `attr(., "diagnostics")$route_reason` (`"none"`,
+#'   `"singular"`, `"df_unavailable"`, `"group_mean_target"`, `"one_sided"`, or
+#'   `"method"` when forced).
 #' * **Random intercept + fixed slope.** Clean balanced -> EMS engine; single-
 #'   observation / staggered / unbalanced -> the Montes ANOVA/MLS closed form.
 #' * **Intercept-only one-way** (`y ~ 1 + (1 | g)`, one grouping factor, no
 #'   covariates), balanced or not -> the Hoffman & Kringle (2005) closed form
-#'   (`"anova-mls"`, two-sided only). `method = "ems-mls"` gives the Francq et
+#'   (`"anova-mls"`). `method = "ems-mls"` gives the Francq et
 #'   al. (2019) interval instead; the two coincide on balanced data with a
 #'   non-singular fit and differ on singular or unbalanced data.
 #' * **Any other random-intercept model, no fixed slope** (one-way with
@@ -305,7 +313,11 @@
 #'   tolerance interval).
 #' @param alpha,level The confidence, as a mutually-exclusive pair: give at most
 #'   one. `level` is `1 - alpha`; default `alpha = 0.05`.
-#' @param sides `"two.sided"` (default), `"lower"`, or `"upper"`.
+#' @param sides `"two.sided"` (default), `"lower"`, or `"upper"`. One-sided
+#'   tolerance limits: `anova-mls` uses Hoffman's (2010) one-sided limit;
+#'   `ems-mls` and a forced `reml-mls` use the package's extension of it
+#'   (provisional, pending validation); random-slope models use GPQ by default.
+#'   See [reintervals-models].
 #' @param method `"auto"` (default) chooses the algorithm by structure; one of
 #'   `"ems-mls"`, `"reml-mls"`, `"anova-mls"`, `"gpq"` forces it and errors if
 #'   incompatible with the model. `"anova-mls"` is available for fixed-slope
@@ -315,7 +327,11 @@
 #' @inherit ci_lmm return
 #' @seealso [ci_lmm()], [pi_lmm()], [new_group_mean_lmm()], [lmm_predict()],
 #'   [reintervals-models].
-#' @references Hoffman D, Kringle R (2005). Two-sided tolerance intervals for
+#' @references Hoffman D (2010). One-sided tolerance limits for balanced and
+#'   unbalanced random effects models. *Technometrics* 52(3):303-312.
+#'   \doi{10.1198/TECH.2010.09171}
+#'
+#'   Hoffman D, Kringle R (2005). Two-sided tolerance intervals for
 #'   balanced and unbalanced random effects models. *Journal of
 #'   Biopharmaceutical Statistics* 15(2):283-293. \doi{10.1081/BIP-200048826}
 #' @examples
@@ -391,14 +407,10 @@ ti_lmm <- function(model, newdata = NULL, P = 0.95,
   ## Intercept-only one-way -> Hoffman-Kringle (the slope-free branch of the
   ## anova-mls core), unless method = "ems-mls" asks for Francq.
   if (.is_oneway_intercept_only(model) && method %in% c("auto", "anova-mls")) {
-    if (sides != "two.sided") {
-      stop("The Hoffman-Kringle (2005) one-way tolerance interval (the default ",
-           "engine for an intercept-only one-way model) is two-sided only.",
-           call. = FALSE)
-    }
+    ## one-sided: Hoffman's (2010) published limit (see .montes_core)
     out <- .montes_core(as.numeric(lme4::getME(model, "y")), time = NULL,
                         lot = lme4::getME(model, "flist")[[1]], t0 = NULL,
-                        content = P, conf = conf)
+                        content = P, conf = conf, sides = sides)
     out$singular <- .is_singular(model)   # report the fit's flag, like the other verbs
     return(.unify_intervals(out, model, kind = "ti", P_value = P))  # carries anova-mls
   }
@@ -422,10 +434,8 @@ ti_lmm <- function(model, newdata = NULL, P = 0.95,
     return(.unify_intervals(out, model, kind = "ti", P_value = P))  # carries anova-mls
   }
 
-  if (sides != "two.sided") {
-    stop("The EMS engine ships two-sided tolerance intervals only; one-sided ",
-         "applies to the slope path.", call. = FALSE)
-  }
-  out <- .ti_ems(model, newdata = newdata, level = P, conf = conf, target = target)
+  ## one-sided EMS TI: PROVISIONAL, pending validation (see ti_francq)
+  out <- .ti_ems(model, newdata = newdata, level = P, conf = conf, target = target,
+                 sides = sides)
   .unify_intervals(out, model, kind = "ti", P_value = P, method_tag = "ems-mls")
 }

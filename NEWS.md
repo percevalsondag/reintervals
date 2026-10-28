@@ -20,7 +20,26 @@
 * Random-slope `ti_lmm()` reports why GPQ was used, per row, in
   `attr(., "diagnostics")$route_reason`.
 
+* One-sided intervals (`sides = "lower"` / `"upper"`) for `ci_lmm()`,
+  `pi_lmm()`, and `new_group_mean_lmm()` on every engine: the two-sided
+  interval's centre, variance, and df with `t_{1 - alpha}`.
+* One-sided tolerance limits: random-slope models route to GPQ by default
+  (`route_reason = "one_sided"`); `anova-mls` (Hoffman-Kringle one-way and
+  Montes fixed slope) uses Hoffman's (2010) one-sided limit; `ems-mls` and a
+  forced `reml-mls` use the package's extension of Hoffman's limit,
+  provisional pending validation. `lmm_predict()` passes `sides` through.
+
 ## Bug fixes
+* EMS stratum degrees of freedom now account for the fixed effects: each
+  stratum loses one df per fixed-effect column estimated in it (a column
+  belongs to the coarsest random factor within whose levels it is constant,
+  otherwise to the residual), so the residual df is N - rank([X Z]). This
+  affects the EMS tolerance interval, the bounded-Satterthwaite prediction df
+  fallback, and the new-group mean (e.g. a between-group covariate gives a
+  one-way top df of A - 2, not A - 1). Intercept-only designs are unchanged.
+* The one-sided `anova-mls` tolerance limit used the two-sided formula with
+  z_P, which is anti-conservative for P < 0.99 (Montes et al. 2019). It now
+  uses Hoffman's (2010) one-sided limit.
 * The random-intercept confidence-interval df no longer depends on which
   packages are installed. It used Kenward-Roger when pbkrtest was installed
   and otherwise the residual df N - p, because the Satterthwaite df was never

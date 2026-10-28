@@ -43,12 +43,27 @@
 #' here under both names so it is discoverable as "CInew" or "new batch mean".
 #'
 #' @section One-sided intervals:
-#' One-sided intervals (sides = "lower" or "upper") are currently available only
-#' for the Montes single-observation tolerance interval and the random-slope
-#' engines. The expected-mean-square (EMS) engine used for random-intercept and
-#' balanced fixed-slope designs, and the Hoffman-Kringle tolerance interval used
-#' for intercept-only one-way models, produce two-sided intervals only; one-sided
-#' EMS intervals are not currently available.
+#' Every verb accepts `sides = "lower"` or `"upper"`.
+#' \itemize{
+#'   \item Confidence, prediction, and new-group-mean intervals: the same centre,
+#'     variance, and df as the two-sided interval, with `t_{1 - alpha}` in place
+#'     of `t_{1 - alpha/2}` (all engines).
+#'   \item Tolerance intervals, `anova-mls` (Hoffman-Kringle one-way and Montes
+#'     fixed slope): Hoffman's (2010) one-sided limit
+#'     `Yhat -/+ (z_P sqrt(U) + z_{1-alpha} sqrt(Vhat(Yhat)))`, with the same MLS
+#'     bound `U` as the two-sided interval (Montes et al. 2019, Eqs. 2-3, 6-7).
+#'   \item Tolerance intervals, `ems-mls` (Francq): the same structure with
+#'     Francq's MLS bound on the total variance and `Vhat = V_F` --- the
+#'     package's extension of Hoffman (2010), **provisional, pending
+#'     validation**.
+#'   \item Tolerance intervals, random slope: GPQ by default
+#'     (`route_reason = "one_sided"`); `method = "reml-mls"` gives Hoffman's
+#'     limit with the REML closed form's bound (**provisional, pending
+#'     validation**).
+#' }
+#' @references Hoffman D (2010). One-sided tolerance limits for balanced and
+#'   unbalanced random effects models. *Technometrics* 52(3):303-312.
+#'   \doi{10.1198/TECH.2010.09171}
 #'
 #' @seealso [ci_lmm()], [pi_lmm()], [ti_lmm()], [new_group_mean_lmm()],
 #'   [lmm_predict()], [ti_anova_raw()], [ti_gpq_raw()].
