@@ -25,15 +25,18 @@ The other two local NOTEs come from the local machine, not the package:
 time-server access) and "checking HTML version of manual ... Skipping checking
 HTML validation" (local HTML Tidy too old).
 
-- win-builder devel: <pending>
-- win-builder release: <pending>
-- mac-builder: <pending>
+- win-builder devel (R-devel, 2026-11-01 r90825): 1 NOTE, "New submission" plus
+  the same possibly misspelled words in DESCRIPTION (author surnames and the
+  domain terms CInew, bioassay), all spelled correctly.
+- win-builder release (R 4.6.1): 1 NOTE, "New submission" plus possibly
+  misspelled words in DESCRIPTION; all are author surnames (Aviles, Burdick,
+  Francq, Hauser, Hoyer, Leblond, Montes, Oliva) or domain terms (CInew,
+  bioassay) and are spelled correctly.
 
 ## Test environments
 
 - Local: macOS 27.0 (aarch64-apple-darwin20), R 4.5.3.
-- win-builder: R-devel and R-release.
-- mac-builder: R-release.
+- win-builder: R-devel, R-release (R 4.6.1).
 
 ## Downstream dependencies
 
