@@ -47,9 +47,9 @@
   target <- match.arg(target)
   if (target == "true_value") {
     .abort("The true_value (between-level only) tolerance interval is not ",
-         "supported for any design; only `target = \"observable\"` is ",
-         "implemented. The prediction interval (intervals_lmm / pi_newobs) ",
-         "does support true_value.", class = "reintervals_error_unsupported")
+           "supported for any design; only `target = \"observable\"` is ",
+           "implemented. The prediction interval (intervals_lmm / pi_newobs) ",
+           "does support true_value.", class = "reintervals_error_unsupported")
   }
   .assert_random_intercepts(model)
   desc <- .design_of(model)
@@ -89,8 +89,8 @@
 
   if (singular) {
     .warn("Singular fit: a variance component is at the boundary (zero); the ",
-            "tolerance interval reflects a near-degenerate model.",
-                   class = "reintervals_warning_singular")
+          "tolerance interval reflects a near-degenerate model.",
+          class = "reintervals_warning_singular")
   }
   out
 }

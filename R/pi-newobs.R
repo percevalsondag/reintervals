@@ -48,8 +48,8 @@ pi_newobs <- function(comp, level = 0.95) {
   }
   if (!"pi" %in% names(comp$dfs)) {
     .abort("`comp$dfs` must contain a \"pi\" entry (the prediction-interval df ",
-         "from the observed Fisher information). The extraction layer supplies ",
-         "it.", class = "reintervals_error_input")
+           "from the observed Fisher information). The extraction layer supplies ",
+           "it.", class = "reintervals_error_input")
   }
 
   sigma2_t <- sum(comp$coefs * comp$components)

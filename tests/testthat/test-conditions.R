@@ -110,10 +110,18 @@ test_that("reintervals_warning_limitation: the two documented 0.2.0 limitations"
   set.seed(1); g <- factor(rep(1:5, each = 4))
   d <- data.frame(g = g, y = 10 + rnorm(5, 0, 2)[g] + rnorm(20))
   f5 <- lmer_q(y ~ 1 + (1 | g), d)
+  .reset_once_warnings()
   w <- tryCatch(pi_lmm(f5), warning = identity)
   expect_s3_class(w, "reintervals_warning_limitation")
   expect_match(conditionMessage(w), "has 5 levels")
   expect_identical(w$n_top_levels, 5)
+  ## at most once per session: a second call is silent until the flag is reset
+  .reset_once_warnings()
+  expect_warning(pi_lmm(f5), class = "reintervals_warning_limitation")
+  expect_warning(pi_lmm(f5), NA)
+  expect_warning(pi_lmm(f5, level = 0.9), NA)
+  .reset_once_warnings()
+  expect_warning(pi_lmm(f5), class = "reintervals_warning_limitation")
   expect_warning(ci_lmm(f5), NA)                                     # CI does not warn
   expect_warning(pi_lmm(fit_52()), NA)                               # 6 runs: no warning
   ## fixed-slope single-observation lots (MBL)
@@ -147,17 +155,27 @@ test_that("random-slope CI / PI / NGM report their df source as df_rule", {
                    "containment")
 })
 
-test_that("a non-finite slope df takes the containment df K - 1, not 1e6", {
+test_that("a non-finite slope df takes the slope engine's containment df (B - 2), not 1e6", {
   skip_if_not_installed("lme4")
   fs <- lmer_q(Reaction ~ Days + (1 + Days | Subject), lme4::sleepstudy)
   comp <- vfun_extract(fs, t0 = 5)
-  expect_identical(attr(comp, "n_groups"), 18L)
+  parts <- attr(comp, "containment")
+  expect_identical(c(parts$B, parts$k_re), c(18L, 2L))
+  for (kind in c("CI", "new_group_mean")) {                         # between-group pieces
+    cp <- comp; cp$dfs[[c(CI = "F", new_group_mean = "G")[[kind]]]] <- Inf
+    r <- .vfun_interval(cp, kind = kind)
+    expect_identical(r$df, 16, info = kind)                          # B - k_re = 18 - 2
+    expect_identical(r$df, .vfun_df_between(parts), info = kind)     # the engine's helper
+    expect_identical(r$df_rule, "containment", info = kind)
+  }
+  cp <- comp; cp$dfs[["F"]] <- Inf
+  r <- .vfun_interval(cp, kind = "CI")
+  expect_equal(r$upper - r$estimate, stats::qt(0.975, 16) * sqrt(comp$var_mean))
+  cp <- comp; cp$dfs[["T"]] <- Inf                                   # PI: engine's w rule
+  w <- comp$V_G / comp$V_T
+  expect_identical(.vfun_interval(cp, kind = "PI")$df, .vfun_df_containment(parts, w))
   comp$dfs[["F"]] <- Inf
-  r <- .vfun_interval(comp, kind = "CI")
-  expect_identical(r$df, 17)                                         # K - 1
-  expect_identical(r$df_rule, "containment")
-  expect_equal(r$upper - r$estimate, stats::qt(0.975, 17) * sqrt(comp$var_mean))
-  attr(comp, "n_groups") <- NULL
+  attr(comp, "containment") <- NULL
   expect_error(.vfun_interval(comp, kind = "CI"), class = "reintervals_error_numerical")
 })
 

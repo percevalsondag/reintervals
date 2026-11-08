@@ -56,13 +56,13 @@ ti_vfun <- function(comp, content = 0.99, conf = 0.95,
   tgt <- attr(comp, "target")
   if (!is.null(tgt) && !identical(tgt, "observable")) {
     .abort("ti_vfun() implements the observable (future-observation) target only ",
-         "in this stage; the batch-mean (true_value) target is the GPQ ",
-         "engine's job.", class = "reintervals_error_unsupported")
+           "in this stage; the batch-mean (true_value) target is the GPQ ",
+           "engine's job.", class = "reintervals_error_unsupported")
   }
   if (!all(c("G", "e") %in% names(comp$dfs))) {
     .abort("`comp$dfs` must carry the \"G\" (between) and \"e\" (residual) df ",
-         "entries; build the container with vfun_extract().",
-                class = "reintervals_error_input")
+           "entries; build the container with vfun_extract().",
+           class = "reintervals_error_input")
   }
 
   mu  <- comp$mean

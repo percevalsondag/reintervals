@@ -86,7 +86,7 @@ re_components <- function(components, dfs, mean, var_mean, coefs = NULL,
   if (any(components < 0)) {
     neg <- names(components)[components < 0]
     .warn("Negative variance-component estimate(s) truncated at 0: ",
-            paste(neg, collapse = ", "), ".", class = "reintervals_warning_truncation")
+          paste(neg, collapse = ", "), ".", class = "reintervals_warning_truncation")
     components[components < 0] <- 0
   }
 

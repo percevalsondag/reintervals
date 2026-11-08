@@ -65,16 +65,21 @@
           else if (isFALSE(fb[[key]])) "satterthwaite" else "containment"
   ## A non-finite or non-positive df (only reachable from a hand-built container;
   ## vfun_extract always returns a finite df) used to be replaced by 1e6, i.e. a
-  ## normal quantile. It now takes the containment df K - 1 (K = number of
-  ## groups, carried by vfun_extract as attr "n_groups").
+  ## normal quantile. It now takes the slope engine's own containment df, the
+  ## same rule vfun_extract falls back to (.vfun_df_containment, vfun-extract.R):
+  ## B - k_re (B - 2 with a random slope) for the between-group pieces (CI, NGM;
+  ## the PI when V_G / V_T >= 0.5), the residual df otherwise. The design sizes
+  ## it needs are carried by vfun_extract as attr "containment".
   if (!is.finite(nu) || nu <= 0) {
-    K <- attr(comp, "n_groups")
-    if (is.null(K)) {
+    parts <- attr(comp, "containment")
+    if (is.null(parts)) {
       .abort("The ", kind, " df is not finite and the container carries no ",
-             "group count to form the containment df (K - 1); build it with ",
+             "design sizes to form the containment df; build it with ",
              "vfun_extract().", class = "reintervals_error_numerical")
     }
-    nu <- max(1, K - 1)
+    w_between <- switch(kind, CI = 1, new_group_mean = 1,
+                        PI = if (V_T > 0) V_G / V_T else 0)
+    nu <- .vfun_df_containment(parts, w_between)
     rule <- "containment"
   }
   alpha <- 1 - level
@@ -132,8 +137,8 @@
   value_rows <- function(est, W, df, rule, method) {
     if (any(!is.finite(W) | W <= 0)) {
       .abort("The new-group-mean variance W is not positive for this fit (e.g. ",
-           "all group means are identical, so the between-group mean square is ",
-           "zero); the interval is not available.", class = "reintervals_error_numerical")
+             "all group means are identical, so the between-group mean square is ",
+             "zero); the interval is not available.", class = "reintervals_error_numerical")
     }
     hw <- tcrit(df) * sqrt(W)
     data.frame(type = "new_group_mean", estimate = est,
@@ -162,10 +167,10 @@
   }
   if (!desc$type %in% c("oneway", "nested", "crossed")) {
     .abort(sprintf(paste0("The new-group-mean interval is not available for a '%s' ",
-                        "design: it has no closed-form variance decomposition. ",
-                        "Supported: one-way, two-fold nested, and two crossed ",
-                        "factors with their interaction."), desc$type),
-                               class = "reintervals_error_design")
+                          "design: it has no closed-form variance decomposition. ",
+                          "Supported: one-way, two-fold nested, and two crossed ",
+                          "factors with their interaction."), desc$type),
+           class = "reintervals_error_design")
   }
   ## 2c / 2d / 2e: EMS route. Covariates beyond the intercept enter through V_F
   ## only. UNVALIDATED: the one-way design with other fixed effects (2e), and
@@ -175,7 +180,7 @@
   dc <- .design_components_fit(model, desc, .var_components(model), "observable")
   if (is.null(dc$ems)) {
     .abort("The new-group-mean interval is not available: no closed-form ",
-         "variance decomposition for this design.", class = "reintervals_error_design")
+           "variance decomposition for this design.", class = "reintervals_error_design")
   }
   ms <- dc$ems$ms; k <- dc$ems$k; dfj <- dc$ems$df
   j <- seq_len(length(ms) - 1L)            # every term but the residual (last)
@@ -230,15 +235,15 @@
   if (.has_random_slope(model)) {
     if (kind == "CI" && ci_df == "kenward-roger") {
       .abort("ci_df = \"kenward-roger\" applies to random-intercept models; the ",
-           "random-slope confidence interval uses its own generalized ",
-           "Satterthwaite df.", class = "reintervals_error_method")
+             "random-slope confidence interval uses its own generalized ",
+             "Satterthwaite df.", class = "reintervals_error_method")
     }
     fe <- lme4::fixef(model)
     time_var <- setdiff(names(fe), "(Intercept)")
     if (length(time_var) != 1L) {
       .abort("random-slope intervals require a single continuous covariate (e.g. ~ 1 + time); ",
-         "multiple fixed effects with a random slope are not currently supported.",
-                class = "reintervals_error_unsupported")
+             "multiple fixed effects with a random slope are not currently supported.",
+             class = "reintervals_error_unsupported")
     }
     t0s <- if (is.null(newdata)) stats::model.frame(model)[[time_var]][1] else
       newdata[[time_var]]

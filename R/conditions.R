@@ -55,6 +55,24 @@
   reintervals_warning_mc         = "reintervals_warning"
 )
 
+## Package-level state for once-per-session warnings (flags keyed by name).
+## Reset with .reset_once_warnings() (used by the tests).
+.reintervals_state <- new.env(parent = emptyenv())
+
+## TRUE the first time it is called for `key` in this R session, FALSE after.
+.once <- function(key) {
+  flag <- paste0("warned_", key)
+  if (isTRUE(get0(flag, envir = .reintervals_state, inherits = FALSE))) return(FALSE)
+  assign(flag, TRUE, envir = .reintervals_state)
+  TRUE
+}
+
+## Clear every once-per-session flag (internal; for tests).
+.reset_once_warnings <- function() {
+  rm(list = ls(.reintervals_state, all.names = TRUE), envir = .reintervals_state)
+  invisible(NULL)
+}
+
 ## Leaf class -> c(leaf, parent, ..., root). Errors on an unknown class so a
 ## typo at a call site fails loudly in the tests.
 .condition_chain <- function(class) {

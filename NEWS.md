@@ -14,10 +14,12 @@
   standard error.
 * A random-slope confidence, prediction or new-group-mean interval built from a
   component container with a non-finite df used a normal quantile (the df was
-  replaced by 1e6). It now uses the containment df `K - 1` (K = number of
-  groups) and reports `df_rule = "containment"`. Containers built by the
-  package always carry a finite df, so no interval computed from a fitted model
-  changes.
+  replaced by 1e6). It now uses the random-slope engine's own containment df,
+  the rule its Satterthwaite fallback already uses (`B - 2` groups-based df for
+  a random-slope model, or the residual df where the residual dominates the
+  prediction interval), and reports `df_rule = "containment"`. Containers built
+  by the package always carry a finite df, so no interval computed from a fitted
+  model changes.
 * The tolerance interval's MLS bound (`ems-mls`) now uses the
   Ting-Burdick-Graybill (1990) bound when an EMS coefficient is negative;
   Graybill-Wang is valid only for non-negative coefficients. The bound used is
@@ -39,8 +41,8 @@
   `_truncation`, `_singular`, `_limitation`). Message texts are unchanged.
 * `pi_lmm()` now emits a `reintervals_warning_limitation` for a
   random-intercept model whose top random factor has five or fewer levels (the
-  known limitation documented in `?pi_lmm` since 0.2.0). The interval is
-  unchanged.
+  known limitation documented in `?pi_lmm` since 0.2.0), at most once per R
+  session. The interval is unchanged.
 * New diagnostics: `pi_df_fallback` (prediction interval), `df_rule` for the
   random-slope confidence, prediction and new-group-mean intervals, `mls_bound`
   (tolerance intervals), `n_na_draws` (GPQ).

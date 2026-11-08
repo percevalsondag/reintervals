@@ -289,6 +289,10 @@ ci_lmm <- function(model, newdata = NULL, alpha = NULL, level = NULL,
 #' al. (2019) prediction interval used for random-intercept models can
 #' under-cover: the worst coverage observed in the package's validation was
 #' about 0.93 for a nominal 0.95, consistent with Francq et al. (2019, Fig. 2).
+#' When the top random factor of a random-intercept model has five or fewer
+#' levels, `pi_lmm()` signals a warning of class
+#' `reintervals_warning_limitation` (the interval itself is unchanged). The
+#' warning is given at most once per R session.
 #' @seealso [ci_lmm()], [ti_lmm()], [new_group_mean_lmm()], [lmm_predict()],
 #'   [reintervals-models].
 #' @examples
@@ -380,7 +384,7 @@ new_group_mean_lmm <- function(model, newdata = NULL, alpha = NULL, level = NULL
       .abort(sprintf(
         "method = \"%s\" is not available for a %s model on this interval; ",
         method, .model_class(model)),
-        sprintf("use \"auto\" or \"%s\".", ok), class = "reintervals_error_method")
+             sprintf("use \"auto\" or \"%s\".", ok), class = "reintervals_error_method")
     }
   }
   ## Anti-conservative-drift warning, scoped to the drifting cells: the EMS CI
@@ -393,22 +397,23 @@ new_group_mean_lmm <- function(model, newdata = NULL, alpha = NULL, level = NULL
   ## lot-mean construction (Fa, .ngm_ri) and does not warn.
   if (kind %in% c("CI", "PI") && .m1_has_single_obs_lot(model)) {
     .warn("This is a fixed-slope model with single-observation lots; the ",
-            "EMS ", kind, " interval may be anti-conservative (too ",
-            "narrow) on such data, because REML precision-weighting down-weights ",
-            "the single-observation lots. The tolerance and new-group-mean ",
-            "intervals use the unweighted lot-mean (Montes) closed forms on this ",
-            "structure; no validated alternative is currently available for the ",
-            "confidence or prediction interval here.",
-                   class = "reintervals_warning_limitation")
+          "EMS ", kind, " interval may be anti-conservative (too ",
+          "narrow) on such data, because REML precision-weighting down-weights ",
+          "the single-observation lots. The tolerance and new-group-mean ",
+          "intervals use the unweighted lot-mean (Montes) closed forms on this ",
+          "structure; no validated alternative is currently available for the ",
+          "confidence or prediction interval here.",
+          class = "reintervals_warning_limitation")
   }
   ## Known limitation (few top-level groups), documented in ?pi_lmm since
   ## 0.2.0: the Francq PI on a random-intercept model whose top (coarsest)
   ## random factor has five or fewer levels. The documented condition also
   ## names a dominant between-group variance (ICC near 0.9), but no ICC
-  ## threshold is documented, so only the level count is checked.
+  ## threshold is documented, so only the level count is checked. Emitted at
+  ## most once per R session (.once, conditions.R).
   if (kind == "PI" && !.has_random_slope(model)) {
     n_top <- min(vapply(lme4::getME(model, "flist"), nlevels, numeric(1)))
-    if (n_top <= 5L) {
+    if (n_top <= 5L && .once("few_groups_pi")) {
       .warn(sprintf("The top random factor has %d levels (five or fewer). ", n_top),
             "With few levels of the top random factor (five or fewer) and a ",
             "dominant between-group variance (an intraclass correlation near ",

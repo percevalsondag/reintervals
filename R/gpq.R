@@ -65,7 +65,7 @@
   y <- y[ok]; time <- time[ok]; batch <- droplevels(batch[ok])
   K <- nlevels(batch); n <- length(y)
   if (K < 2L) .abort(sprintf("ti_gpq_raw(): the GPQ tolerance interval needs >= 2 batches (grouping levels) to estimate the between-batch variance; got %d.", K),
-         class = "reintervals_error_groups")
+                     class = "reintervals_error_groups")
   s <- 2L                                   # random intercept + random slope
   df_resid <- n - s * K                     # n - 2K
   if (df_resid < 1L)

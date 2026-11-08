@@ -57,8 +57,8 @@
   } else {
     if (!is.null(t0)) {
       .abort("`t0` applies only with a `time` covariate; with `time = NULL` (the ",
-           "Hoffman-Kringle one-way interval) leave `t0` as NULL.",
-                  class = "reintervals_error_input")
+             "Hoffman-Kringle one-way interval) leave `t0` as NULL.",
+             class = "reintervals_error_input")
     }
   }
 
@@ -67,7 +67,7 @@
   y <- y[ok]; lot <- droplevels(lot[ok]); if (has_time) time <- time[ok]
   I <- nlevels(lot); N <- length(y)
   if (I < 2L) .abort(sprintf("ti_anova_raw(): the ANOVA tolerance interval needs >= 2 lots (grouping levels) to estimate the between-lot variance; got %d.", I),
-         class = "reintervals_error_groups")
+                     class = "reintervals_error_groups")
 
   Ji <- as.numeric(table(lot)); li <- as.integer(lot)
   ybar_i <- tapply(y, lot, mean)
@@ -80,8 +80,8 @@
     S_tyw <- sum(tc * yc); S_ttw <- sum(tc * tc)
     if (!is.finite(S_ttw) || S_ttw <= 0) {
       .abort("ti_anova_raw(): no within-lot time variation; the fixed-slope ANOVA ",
-           "route needs >= 2 distinct time points within lots.",
-                  class = "reintervals_error_time_points")
+             "route needs >= 2 distinct time points within lots.",
+             class = "reintervals_error_time_points")
     }
     beta_hat <- S_tyw / S_ttw
     tbar_star <- mean(tbar_i)
@@ -98,7 +98,7 @@
   r  <- if (has_time) N - I - 1 else N - I  # residual df (slope-adjusted or not)
   if (r < 1L) {
     .abort("ti_anova_raw(): non-positive residual df; need more within-lot ",
-         "replication.", class = "reintervals_error_residual_df")
+           "replication.", class = "reintervals_error_residual_df")
   }
 
   ## between- and within-lot mean squares (both >= 0 by construction)

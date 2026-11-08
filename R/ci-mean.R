@@ -48,9 +48,9 @@ ci_mean <- function(comp, conf = 0.95) {
   }
   if (!"ci" %in% names(comp$dfs)) {
     .abort("`comp$dfs` must contain a \"ci\" entry (the CI denominator df). ",
-         "The extraction layer supplies it: Satterthwaite with a SAS-style ",
-         "containment fallback, or Kenward-Roger on request.",
-                class = "reintervals_error_input")
+           "The extraction layer supplies it: Satterthwaite with a SAS-style ",
+           "containment fallback, or Kenward-Roger on request.",
+           class = "reintervals_error_input")
   }
 
   df <- unname(comp$dfs[["ci"]])

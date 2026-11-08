@@ -19,6 +19,24 @@ test_that("TBG bound reproduces a hand computation for one c2 < 0 case", {
   expect_equal(u$U, 41.5661260739, tolerance = 1e-10)
 })
 
+test_that("two or more negative coefficients are unsupported (no validated bound)", {
+  expect_error(.mls_upper(ms = c(a = 10, b = 4, e = 2), k = c(a = 1.4, b = -0.2, e = -0.2),
+                          df = c(a = 5, b = 20, e = 30), conf = 0.95),
+               class = "reintervals_error_unsupported")
+  expect_error(.mls_upper(ms = c(a = 10, b = 4, e = 2), k = c(a = 1.4, b = -0.2, e = -0.2),
+                          df = c(a = 5, b = 20, e = 30), conf = 0.95),
+               "more than one negative EMS coefficient is not implemented or validated")
+  ## through ti_francq as well
+  comp <- re_components(
+    components = c(a = 1, b = 1, ab = 0.5, Residual = 1),
+    dfs = c(pi = Inf), mean = 10, var_mean = 0.2,
+    ems = list(ms = c(a = 9, b = 8, ab = 3, Residual = 1),
+               k  = c(a = 0.9, b = 0.5, ab = -0.2, Residual = -0.2),
+               df = c(a = 3, b = 4, ab = 12, Residual = 40)),
+    design = "crossed")
+  expect_error(ti_francq(comp), class = "reintervals_error_unsupported")
+})
+
 test_that("Graybill-Wang branch is the 0.2.0 arithmetic bit for bit", {
   ms <- c(run = 0.001253 + 3 * 0.000681, Residual = 0.001253)     # Francq 5.2
   k  <- c(run = 1 / 3, Residual = 2 / 3); df <- c(run = 5, Residual = 12)

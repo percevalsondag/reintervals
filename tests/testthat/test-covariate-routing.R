@@ -32,6 +32,7 @@ expect_ems_all_verbs <- function(fm, nd) {
   expect_true(is.na(.m1_time_name(fm)))
   for (verb in list(ci_lmm, pi_lmm, new_group_mean_lmm)) {
     if (identical(verb, pi_lmm) && few) {
+      .reset_once_warnings()                         # the warning is once per session
       expect_warning(r <- verb(fm, newdata = nd), class = "reintervals_warning_limitation")
     } else {
       expect_warning(r <- verb(fm, newdata = nd), NA)

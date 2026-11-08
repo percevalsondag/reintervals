@@ -400,8 +400,10 @@ Deviations / findings:
 - Test (ii) therefore builds the negative coefficient at the **container** level
   (`re_components` with `k_AB = -0.3`), not from a design. The crossed-NGM fallback
   is tested by mocking `.design_components_fit` to zero k_A and k_B (pA = 0/0).
-- With several negative terms the TBG form is the pairwise generalisation; it has no
-  oracle (the reference has one negative term). It is unreachable today.
+- Step 2b: exactly one negative coefficient → TBG (oracle: `pilot/methods.R`
+  `mls_upper`, one positive + one negative term; with several positive terms the
+  same form sums H_qr over the positives). Two or more negative coefficients →
+  `reintervals_error_unsupported` (the earlier pairwise generalisation was removed).
 - The design-synthesis.R:57-69 code itself is unchanged: the guard lives where the
   k_j meet the bound (`ti_francq`). The synthesis still only enforces sum(k) = 1.
 
@@ -467,13 +469,15 @@ Silent paths surfaced (inventory numbers from A5.1):
 - #5 `pi_df_fallback` is now carried into `attr(., "diagnostics")`.
 - #2 slope CI/PI/NGM `df_rule` = `"satterthwaite"` / `"containment"` (NA for a
   hand-built container without `df_fallback`).
-- #1 the 1e6 substitution is replaced by the containment df **K - 1** (as
-  specified). `vfun_extract` now attaches `attr(, "n_groups")`; a container
-  without it is a `reintervals_error_numerical`. **No test value moved**: no test
-  reaches this branch (the committed `slope_oracle.rds` dfs are finite, and
-  `vfun_extract` always returns a finite df). Note that K - 1 is a different rule
-  from the slope engine's own between-containment `B - k_re` (= K - 2 with a random
-  slope, vfun-extract.R:49).
+- #1 the 1e6 substitution is replaced by the slope engine's **own containment
+  rule** (`.vfun_df_containment`, vfun-extract.R:49-53: B - k_re = B - 2 with a
+  random slope for the between-group pieces, the residual df where the residual
+  dominates the PI). `vfun_extract` attaches the design sizes as
+  `attr(, "containment")`; a container without them is a
+  `reintervals_error_numerical`. Step 2 first used K - 1; step 2b aligned it to the
+  engine's rule. **Which containment df the slope path should use, K - 1 or B - 2,
+  is decided by step-13 arm H2 (iii), not here.** No test value moved: no test
+  reaches this branch.
 - #11 `.solve_tau2` marks draws without a solution as NA (before, an NA would have
   errored inside the indexed assignments; it was not actually let through as a
   number); `.gpq_core` drops them, reports `n_na_draws`, and raises

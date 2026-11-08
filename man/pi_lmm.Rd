@@ -69,6 +69,10 @@ between-group variance (an intraclass correlation near 0.9), the Francq et
 al. (2019) prediction interval used for random-intercept models can
 under-cover: the worst coverage observed in the package's validation was
 about 0.93 for a nominal 0.95, consistent with Francq et al. (2019, Fig. 2).
+When the top random factor of a random-intercept model has five or fewer
+levels, \code{pi_lmm()} signals a warning of class
+\code{reintervals_warning_limitation} (the interval itself is unchanged). The
+warning is given at most once per R session.
 }
 
 \section{Known limitation}{

@@ -71,25 +71,25 @@ ti_francq <- function(comp, content = 0.95, conf = 0.95,
   }
   if (identical(comp$target, "true_value")) {
     .abort("The true_value (between-level only) tolerance interval is not ",
-         "supported for any design; only `target = \"observable\"` is implemented. ",
-         "(`pi_newobs()` does support true_value.) The true_value TI requires ",
-         "the difference-of-EMS / sign-unrestricted MLS variant and is deferred ",
-         "to a focused follow-up with its own derivation review and validation.",
-                class = "reintervals_error_unsupported")
+           "supported for any design; only `target = \"observable\"` is implemented. ",
+           "(`pi_newobs()` does support true_value.) The true_value TI requires ",
+           "the difference-of-EMS / sign-unrestricted MLS variant and is deferred ",
+           "to a focused follow-up with its own derivation review and validation.",
+           class = "reintervals_error_unsupported")
   }
   if (is.null(comp$ems)) {
     .abort("`comp$ems` is NULL: no expected-mean-square decomposition is ",
-         "available for this design/target, so the Francq tolerance interval ",
-         "(Eq. 26) cannot be computed. CI and PI remain available.",
-                class = "reintervals_error_design")
+           "available for this design/target, so the Francq tolerance interval ",
+           "(Eq. 26) cannot be computed. CI and PI remain available.",
+           class = "reintervals_error_design")
   }
 
   ems <- comp$ems
   sigma2_t <- sum(ems$k * ems$ms)
   if (sigma2_t <= 0) {
     .abort("Total variance `sum(k * EMS)` is not positive; the tolerance ",
-         "interval is undefined (all variance components at zero).",
-                class = "reintervals_error_numerical")
+           "interval is undefined (all variance components at zero).",
+           class = "reintervals_error_numerical")
   }
 
   ## MLS upper bound U = sigma2_T + excess on sigma2_T (.mls_upper, mls.R):

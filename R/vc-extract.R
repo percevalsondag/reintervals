@@ -15,7 +15,7 @@
   vc <- as.data.frame(lme4::VarCorr(model))
   if (!all(is.na(vc$var2))) {
     .abort("Only random-intercept models are supported (no random slopes or ",
-         "correlated random effects).", class = "reintervals_error_unsupported")
+           "correlated random effects).", class = "reintervals_error_unsupported")
   }
   vc
 }
@@ -145,18 +145,18 @@
   if (is.null(newdata)) return(invisible(NULL))
   if (!is.data.frame(newdata) && !is.list(newdata)) {
     .abort("`newdata` must be a data frame with one column per model predictor; ",
-         "got ", class(newdata)[1L], ". ",
-         "Supply e.g. data.frame(", paste(all.vars(stats::delete.response(
+           "got ", class(newdata)[1L], ". ",
+           "Supply e.g. data.frame(", paste(all.vars(stats::delete.response(
            stats::terms(model, fixed.only = TRUE))), collapse = " = , "),
-         " = ).", class = "reintervals_error_input")
+           " = ).", class = "reintervals_error_input")
   }
   need <- all.vars(stats::delete.response(stats::terms(model, fixed.only = TRUE)))
   miss <- setdiff(need, names(newdata))
   if (length(miss)) {
     .abort("`newdata` is missing required predictor(s): ",
-         paste(miss, collapse = ", "),
-         ". `newdata` must supply a column for each model predictor (",
-         paste(need, collapse = ", "), ").", class = "reintervals_error_input")
+           paste(miss, collapse = ", "),
+           ". `newdata` must supply a column for each model predictor (",
+           paste(need, collapse = ", "), ").", class = "reintervals_error_input")
   }
   invisible(NULL)
 }
@@ -200,7 +200,7 @@
     ddf <- tryCatch(pbkrtest::Lb_ddf(l, kr$V0, kr$Vadj), error = function(e) NA_real_)
     if (!isTRUE(is.finite(ddf) && ddf > 0)) {
       .abort("The Kenward-Roger df could not be computed for this model; use the ",
-           "default ci_df = \"satterthwaite\".", class = "reintervals_error_numerical")
+             "default ci_df = \"satterthwaite\".", class = "reintervals_error_numerical")
     }
     var_kr <- as.numeric(l %*% kr$Vadj_mat %*% t(l))
     return(list(df = ddf, method = "kenward-roger", var_mean = var_kr))
@@ -221,13 +221,13 @@
 .kr_parts <- function(model) {
   if (!requireNamespace("pbkrtest", quietly = TRUE)) {
     .abort("ci_df = \"kenward-roger\" requires the 'pbkrtest' package, which is ",
-         "not installed. Install it, or use the default ci_df = ",
-         "\"satterthwaite\".", class = "reintervals_error_dependency")
+           "not installed. Install it, or use the default ci_df = ",
+           "\"satterthwaite\".", class = "reintervals_error_dependency")
   }
   vadj <- tryCatch(pbkrtest::vcovAdj(model), error = function(e) NULL)
   if (is.null(vadj)) {
     .abort("The Kenward-Roger df could not be computed for this model; use the ",
-         "default ci_df = \"satterthwaite\".", class = "reintervals_error_numerical")
+           "default ci_df = \"satterthwaite\".", class = "reintervals_error_numerical")
   }
   list(V0 = stats::vcov(model), Vadj = vadj, Vadj_mat = as.matrix(vadj))
 }

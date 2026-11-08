@@ -58,12 +58,12 @@ ems_synthesis <- function(counts, design = c("crossed", "nested")) {
   k <- tryCatch(solve(t(E), rep(1, nrow(E))),
                 error = function(e)
                   .abort("EMS synthesis: the coefficient matrix is singular ",
-                       "(degenerate design).", class = "reintervals_error_numerical"))
+                         "(degenerate design).", class = "reintervals_error_numerical"))
   names(k) <- rownames(E)
   if (abs(sum(k) - 1) > 1e-6) {
     .abort(sprintf(paste("EMS synthesis invariant violated: sum(k) = %.8f, must",
-                       "be 1. The count table is malformed or the design is",
-                       "unsupported."), sum(k)), class = "reintervals_error_numerical")
+                         "be 1. The count table is malformed or the design is",
+                         "unsupported."), sum(k)), class = "reintervals_error_numerical")
   }
   k
 }
@@ -72,7 +72,7 @@ ems_synthesis <- function(counts, design = c("crossed", "nested")) {
 .ems_synth_crossed <- function(counts) {
   if (!is.matrix(counts) || any(counts < 1)) {
     .abort("crossed synthesis needs an A-by-B matrix with every cell filled ",
-         "(n_ij >= 1).", class = "reintervals_error_input")
+           "(n_ij >= 1).", class = "reintervals_error_input")
   }
   rg <- expand.grid(a = seq_len(nrow(counts)), b = seq_len(ncol(counts)))
   rows <- rg[rep(seq_len(nrow(rg)), as.vector(counts)), ]
@@ -106,7 +106,7 @@ ems_synthesis <- function(counts, design = c("crossed", "nested")) {
 .ems_synth_nested <- function(counts) {
   if (!is.list(counts) || length(counts) < 2L) {
     .abort("nested synthesis needs a list of >= 2 coarse levels, each a vector ",
-         "of fine-level replicate counts.", class = "reintervals_error_input")
+           "of fine-level replicate counts.", class = "reintervals_error_input")
   }
   a_levels <- length(counts)
   k_fine <- sum(lengths(counts))
@@ -152,8 +152,8 @@ ems_list_from_synthesis <- function(syn, sigma2) {
   comp <- sigma2[syn$terms]
   if (anyNA(comp)) {
     .abort("`sigma2` is missing components for: ",
-         paste(setdiff(syn$terms, names(sigma2)), collapse = ", "),
-                class = "reintervals_error_input")
+           paste(setdiff(syn$terms, names(sigma2)), collapse = ", "),
+           class = "reintervals_error_input")
   }
   list(ms = stats::setNames(as.vector(syn$E %*% comp), syn$terms),
        k = syn$k,

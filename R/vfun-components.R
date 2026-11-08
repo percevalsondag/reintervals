@@ -133,9 +133,9 @@ validate_vfun_components <- function(type, phi, cov, mean, var_mean,
   }
   if (!identical(names(phi), expected)) {
     .abort(sprintf(paste("`phi` names must be exactly c(%s) in that order for this",
-                       "model code (see ?reintervals-models)."),
-                 paste0("\"", expected, "\"", collapse = ", ")),
-                        class = "reintervals_error_input")
+                         "model code (see ?reintervals-models)."),
+                   paste0("\"", expected, "\"", collapse = ", ")),
+           class = "reintervals_error_input")
   }
   if (any(!is.finite(phi))) {
     .abort("`phi` entries must be finite.", class = "reintervals_error_input")
@@ -146,9 +146,9 @@ validate_vfun_components <- function(type, phi, cov, mean, var_mean,
   neg_var <- var_names[phi[var_names] < 0]
   if (length(neg_var)) {
     .abort("Variance component(s) must be non-negative: ",
-         paste(neg_var, collapse = ", "),
-         ". (The intercept-slope covariance `s01` may be negative; ",
-         "variances may not.)", class = "reintervals_error_input")
+           paste(neg_var, collapse = ", "),
+           ". (The intercept-slope covariance `s01` may be negative; ",
+           "variances may not.)", class = "reintervals_error_input")
   }
 
   ## --- cov: NULL (singular) or a symmetric length(phi)-square matrix ------
@@ -159,7 +159,7 @@ validate_vfun_components <- function(type, phi, cov, mean, var_mean,
     k <- length(phi)
     if (nrow(cov) != k || ncol(cov) != k) {
       .abort(sprintf("`cov` must be %d x %d to match `phi`; got %d x %d.",
-                   k, k, nrow(cov), ncol(cov)), class = "reintervals_error_input")
+                     k, k, nrow(cov), ncol(cov)), class = "reintervals_error_input")
     }
     if (any(!is.finite(cov))) {
       .abort("`cov` entries must be finite (use `cov = NULL` for a singular fit).",
