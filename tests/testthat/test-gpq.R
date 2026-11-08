@@ -56,12 +56,15 @@ test_that("A6: GPQ is reproducible under an ambient set.seed() through ti_lmm(me
 
 ## ---------------------------------------------------------------------------
 ## REGRESSION PIN, not an oracle: detects unintended changes to the GPQ draw
-## scheme; expected to change deliberately in A2 (common random numbers), and
-## that change must be visible in the diff.
-## Values computed on dev (A1 tree, 2026-11-07) with the call below: sleepstudy
-## Reaction ~ Days + (1 + Days | Subject), newdata Days = c(0, 5, 9), P = 0.99,
-## level = 0.95, seed = 20261107, M = 2000 (small M is fine: this pins the
-## Monte-Carlo stream, it does not check coverage).
+## scheme. Call: sleepstudy Reaction ~ Days + (1 + Days | Subject), newdata
+## Days = c(0, 5, 9), P = 0.99, level = 0.95, seed = 20261107, M = 2000 (small M
+## is fine: this pins the Monte-Carlo stream, it does not check coverage).
+## First pinned on dev (A1 tree, 2026-11-07).
+## re-pinned in A2: common random numbers (one pivot draw set per call, reused
+## for every t0). The Days = 0 values are unchanged (the draw order U, Q, Z is
+## the A1 order, and Days = 0 was the first t0, so it saw the same draws); the
+## Days = 5 and Days = 9 values changed because under A1 they used the 2nd and
+## 3rd per-t0 draw sets. The MC SE (MC sections) consumes no random numbers.
 ## ---------------------------------------------------------------------------
 test_that("REGRESSION PIN (not an oracle): random-slope GPQ TI limits, sleepstudy", {
   skip_if_not_installed("lme4")
@@ -71,19 +74,19 @@ test_that("REGRESSION PIN (not an oracle): random-slope GPQ TI limits, sleepstud
   nd  <- data.frame(Days = c(0, 5, 9))
   pin <- list(
     observation = list(
-      two.sided = list(lower = c(132.2476126096, 137.8980914938, 108.7649061215),
-                       upper = c(370.7005974070, 470.2129931313, 582.5487016444)),
-      lower     = list(lower = c(141.9646754089, 151.2000857935, 129.2630089864),
+      two.sided = list(lower = c(132.2476126096, 142.0696865491, 111.3936166104),
+                       upper = c(370.7005974070, 465.6071263883, 580.1235511015)),
+      lower     = list(lower = c(141.9646754089, 155.1699903682, 131.2061556454),
                        upper = c(Inf, Inf, Inf)),
       upper     = list(lower = c(-Inf, -Inf, -Inf),
-                       upper = c(360.0519545146, 454.6152803259, 562.3157002639))),
+                       upper = c(360.0519545146, 451.1151381177, 559.3199285048))),
     group_mean = list(
-      two.sided = list(lower = c(152.7000817467, 151.6316182215, 118.4618669310),
-                       upper = c(350.2481282699, 456.4794664036, 572.8517408348)),
-      lower     = list(lower = c(161.0066973224, 164.7261376006, 138.2779902132),
+      two.sided = list(lower = c(152.7000817467, 156.3612792006, 121.5178799511),
+                       upper = c(350.2481282699, 451.3155337367, 569.9992877608)),
+      lower     = list(lower = c(161.0066973224, 168.1496405247, 139.5336678269),
                        upper = c(Inf, Inf, Inf)),
       upper     = list(lower = c(-Inf, -Inf, -Inf),
-                       upper = c(340.6157438629, 441.0548808166, 553.0228005650))))
+                       upper = c(340.6157438629, 438.1431594977, 549.7941022778))))
   for (ov in names(pin)) for (sd in names(pin[[ov]])) {
     r <- ti_lmm(fs, newdata = nd, P = 0.99, level = 0.95, over = ov, sides = sd,
                 control = ctl)

@@ -1,14 +1,13 @@
 # reintervals 1.0.0 — development plan (branch `dev`)
 
-Status: planning only. No engine code has been changed. Line numbers are at HEAD of
-`dev` = `d94d441` (R code identical to `a73e8b7`, the 0.2.0 CRAN submission).
-`main` stays frozen at the CRAN submission.
+Status: implementation in progress on `dev`. Done: A5 (partly; see its status),
+A3, A4, A1 and A2 (see each section's status block and section 9). Engine code
+has changed since this plan was written: line numbers in the unmarked sections
+are at `d94d441` (R code identical to `a73e8b7`, the 0.2.0 CRAN submission) and
+are stale where a done item touched the file. `main` stays frozen at the CRAN
+submission.
 
-Housekeeping before step 1 of the implementation: `notes/` is not in `.Rbuildignore`
-(current entries: `.github`, `README.Rmd`, `paper.*`, `CONTRIBUTING.md`,
-`CODE_OF_CONDUCT.md`, `cran-comments.md`, `*.html`, `.DS_Store`, `data-raw`,
-`LICENSE.md`, `.claude`, `CRAN-SUBMISSION`). Add `^notes$`, or `R CMD check` will
-NOTE a non-standard top-level directory.
+Housekeeping: `^notes$` is in `.Rbuildignore` (added in `8afffa9`).
 
 ---
 
@@ -258,6 +257,44 @@ NEWS entry.
 ---
 
 ## A2. GPQ hardening (gpq.R)
+
+**Status: DONE on `dev` (plumbing only; Percy's decisions of 2026-11-07, which
+override plan items 3, 5 and 6 below).** Not committed at the time of writing.
+- Seed (overrides item 3, no fixed default seed): `lmm_interval_control(seed =
+  NULL)` stays the default. `NULL` draws one integer seed from the caller's
+  stream (`sample.int(.Machine$integer.max, 1L)`, so `set.seed()` still
+  controls results and the stream advances by one draw); the pivots are drawn
+  under `withr::with_seed()` of that seed (or the supplied one). Diagnostics
+  record `gpq_seed` and `rng_kind` (the `RNGkind()` in effect during the
+  draws). `with_seed` (withr 3.x) keeps the caller's RNG kind; it does not
+  pin the default kind as this plan said, hence `rng_kind`.
+- CRN (items 1-2): `.gpq_core` = `.gpq_prepare` (checks + per-lot OLS) +
+  `.gpq_pivots` (U, Q, Z once per call, A1 draw order) + `.gpq_eval_t0`. The
+  single call covers every t0 and both limits; the two targets and the sides
+  remain separate calls (allowed). The first t0 of a seeded call reproduces
+  the A1 numbers; later t0 changed (test-gpq.R pin re-pinned, Days = 5 and 9).
+- MC SE (overrides item 5, sectioning instead of order-statistic intervals):
+  20 MC sections by draw index before the NA drop, the same limit functional
+  per section, `sd / sqrt(20)`; `mc_se_lower` / `mc_se_upper` (NA on an
+  infinite side), `mc_sections = 20`. Remainder `M %% 20` left out of the
+  sections only. `reintervals_warning_mc` stays reserved (no threshold
+  warning). `lmm_interval_control(M < 2000 or non-integer)` →
+  `reintervals_error_input`. Calibration check (sleepstudy, t0 = 5, 200
+  seeds, M = 2000): mean MC SE 1.03 vs run-to-run sd 1.12.
+- Time-point guard (overrides item 6's new subclass): the existing
+  `reintervals_error_time_points` (a `reintervals_error_data`), raised up front
+  in `.gpq_prepare` before any draw, naming the lots (first 5, then "and k
+  more"; `$lots` on the condition). Reachable through `ti_lmm()`: lme4 fits
+  such data. The dispatcher pre-check of item 6 is moot (no closed-form
+  routing left after A1).
+- `ti_gpq_raw()` now goes through `.gpq_rows()`: same diagnostics as the
+  `ti_lmm()` GPQ route (`route_reason = "method"`), and it reports one-sided
+  `sides` correctly (bug: it said `"two.sided"`).
+- Item 4 (M = 20000) was already done in A1.
+
+CRN changes only the joint distribution of limits across t0 within a call; each
+limit's marginal distribution is unchanged, so the phase-0 coverage results still
+apply per t0. Step 13 runs on the final code regardless.
 
 Current state:
 - Draws happen **inside** the per-t0 `lapply` (gpq.R:97, draws at gpq.R:113-115),
@@ -744,8 +781,9 @@ defaults unchanged unless stated):
    (SE + df, 1e-8) on all five SAS fits; KR SE vs SAS on the balanced fits only.
 4. **A4** `.mls_upper` + TBG. **Done on `dev`** (no negative k_j reachable from the
    synthesis; guard with a round-off tolerance).
-5. **A2** GPQ hardening (CRN, pivots/eval split, default seed, M = 20000, MC error,
-   time-point class). **Changes the GPQ numbers** (NEWS).
+5. **A2** GPQ hardening. **Done on `dev`** (CRN, pivots/eval split, recorded
+   seed instead of a default seed, MC SE by MC sections, M >= 2000, time-point
+   guard). **Changed the GPQ numbers** at every t0 after the first (NEWS).
 6. **B plumbing**: control passed down, diagnostics carry the arm; then arms one at
    a time (`ci_df = "containment"`, `pi_df`, `slope_ci_df`, `ngm`, `slope_ngm`),
    each with its oracle or a reference test and a one-sided check (C).
@@ -753,11 +791,17 @@ defaults unchanged unless stated):
 8. **A1** **Done on `dev`** (option a, defunct): every random-slope TI is GPQ at
    M = 20000, `reml-mls` errors, and the RS CI/PI/NGM tag is `"reml"`. **Changed
    the default RS TI numbers.** If A2 (step 5) changes the GPQ draw order, re-run
-   the phase-0 harness against the A2 build.
+   the phase-0 harness against the A2 build. A2 kept the draw order: a
+   single-t0 call is bit-identical to A1 (checked in the A2 review against a
+   `2e09497` build, 16/16 limits `identical()`).
 9. Step 13 (simstudy) chooses the defaults for the B arms; flip the defaults in one
    commit with NEWS.
+   - **Open:** Random-slope TI with single-time-point lots is unsupported in
+     1.0.0 (A1 + A2). Quantify in step 13 how often this occurs in the G-grids'
+     staggered designs, and evaluate the fallback advice (random intercept +
+     fixed slope) when slope variance is small.
 
-Risk summary: A1 medium-high (default change to a validated GPQ; defunct vs
-deprecated pending); A2 medium (all GPQ numbers move); A5 medium churn / zero
+Risk summary: A1 medium-high (default change to a validated GPQ; defunct,
+decided 2026-11-07); A2 medium (all GPQ numbers move); A5 medium churn / zero
 numeric change; A4 low-medium; A3 low (done); B low while the defaults are
 unchanged; T low.

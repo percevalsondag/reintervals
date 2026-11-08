@@ -29,8 +29,63 @@
 * **Default `M = 20000`** in `lmm_interval_control()` (was 10000), the GPQ
   size validated by simulation. GPQ results at the default therefore change
   (and take about twice as long).
+* **GPQ numbers change (common random numbers).** The GPQ pivot draws are now
+  generated once per call and reused for every time point in `newdata` (and
+  both limits); before, each time point drew its own set, in turn. For a
+  seeded call the first time point is unchanged and every later time point
+  moves by Monte-Carlo noise (sleepstudy regression pin, `P = 0.99`,
+  `M = 2000`: by up to about 5 units). With `seed = NULL`, every GPQ number changes,
+  because the draws now run under a seed taken from the ambient stream (see
+  below).
+* **A random-slope tolerance interval now errors when any lot has fewer than
+  two distinct time points** (class `reintervals_error_time_points`): GPQ needs
+  a per-lot slope. In 0.2.0 the removed `reml-mls` closed form handled such data
+  for the future-observation target (the batch-mean target already errored).
+  The error message suggests refitting without those lots or, if the
+  between-lot slope variance is negligible, a random-intercept model with a
+  fixed slope. The random-slope CI, PI and new-group mean are unaffected.
+* **`lmm_interval_control(M = )` below 2000 is an error** (class
+  `reintervals_error_input`), as is a non-integer `M`. The Monte-Carlo
+  standard error uses 20 MC sections, and below 2000 a section has fewer than
+  100 draws.
+
+## New features
+
+* **GPQ reproducibility contract.** Every GPQ interval (`ti_lmm()` random-slope
+  route and `ti_gpq_raw()`) records `gpq_seed`, the integer seed actually used,
+  and `rng_kind`, the `RNGkind()` triple in effect, in
+  `attr(., "diagnostics")`. `lmm_interval_control(seed = <gpq_seed>)` with the
+  same `M` under the same `rng_kind` returns an identical interval. With the
+  default `seed = NULL`, one integer seed is drawn from the caller's stream (so
+  `set.seed()` before the call still controls the result; the stream advances
+  by exactly one draw) and the draws run under it, restoring the caller's RNG
+  state afterwards.
+* **Common random numbers across time points.** Within one call, a GPQ limit
+  at a time point no longer depends on which other time points were requested
+  or their order.
+* **Monte-Carlo standard error of each GPQ limit**, `mc_se_lower` and
+  `mc_se_upper` in the diagnostics (`NA` on the infinite side of a one-sided
+  interval), by 20 MC sections of consecutive draws (`mc_sections = 20`). It
+  is the run-to-run jitter of the Monte-Carlo computation, not statistical
+  uncertainty: a limit within approximately 2 MC SE of a specification limit
+  has a seed-dependent pass/fail. At `M = 2000` the sectioning estimate ran
+  about 8% below the observed run-to-run SD in a sleepstudy check (sections of
+  100 draws); the gap is expected to shrink at the default `M = 20000`. It is
+  not printed.
+* **Per-lot time-point guard.** A random-slope GPQ tolerance interval
+  (`ti_lmm()` and `ti_gpq_raw()`) signals `reintervals_error_time_points`
+  (a `reintervals_error_data`), before any draw, when a lot has fewer than two
+  distinct time points, naming the lots. Previously this was reported only for
+  the first such lot found. lme4 fits such data, so the check is reachable
+  through `ti_lmm()`.
 
 ## Bug fixes
+
+* `ti_gpq_raw(sides = "lower")` / `"upper"` reported `sides = "two.sided"` in
+  its output (the limits themselves were one-sided and correct). It now uses
+  the same row schema as the `ti_lmm()` GPQ route and so reports the side, and
+  its diagnostics now match that route's fields (adding `df` and
+  `route_reason = "method"`).
 
 * `ci_lmm(control = lmm_interval_control(ci_df = "kenward-roger"))` paired the
   Kenward-Roger df with the *unadjusted* standard error (from `vcov()`). The

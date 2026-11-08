@@ -11,7 +11,7 @@ test_that("lmm_interval_control validates its tuning knobs", {
   ctl <- lmm_interval_control(seed = 1, M = 5000)
   expect_s3_class(ctl, "lmm_interval_control")
   expect_identical(ctl$M, 5000L)
-  expect_error(lmm_interval_control(M = 0), "positive")
+  expect_error(lmm_interval_control(M = 0), class = "reintervals_error_input")
   expect_error(lmm_interval_control(seed = "x"), "seed")
 })
 
@@ -139,7 +139,7 @@ test_that("every verb on every engine returns the identical core column contract
 test_that("engine diagnostics live in attr(.,'diagnostics'), off the core frame", {
   skip_if_not_installed("lme4")
   g <- ti_lmm(slope_fit(), newdata = data.frame(Days = 5), over = "group_mean",
-              control = lmm_interval_control(seed = 1, M = 500))
+              control = lmm_interval_control(seed = 1, M = 2000))
   d <- attr(g, "diagnostics")
   expect_type(d, "list")
   expect_true(all(c("tau2_med", "s2e_med", "frac_boundary") %in% names(d)))  # GPQ audit

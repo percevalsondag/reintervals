@@ -12,11 +12,31 @@ lmm_interval_control(
 }
 \arguments{
 \item{seed}{Optional integer seed for the GPQ draws (reproducibility / GxP
-traceability). \code{NULL} uses the ambient RNG state.}
+traceability). With the default \code{NULL}, one integer seed is drawn from the
+caller's RNG stream (\code{sample.int(.Machine$integer.max, 1L)}), so a
+\code{set.seed()} before the call still controls the result; this advances the
+caller's stream by exactly one draw. The GPQ draws then run under that seed
+(or under the supplied one) and the caller's RNG state is restored
+afterwards. Either way the seed actually used is reported as
+\code{attr(., "diagnostics")$gpq_seed}, and the RNG kind in effect
+(the \code{\link[=RNGkind]{RNGkind()}} triple) as \verb{$rng_kind}. Reproducibility contract:
+\verb{lmm_interval_control(seed = <gpq_seed>)} with the same \code{M}, under the same
+\code{rng_kind}, returns an identical interval.}
 
-\item{M}{Number of GPQ Monte-Carlo realizations. Default 20000, the size
-validated by simulation for the random-slope tolerance interval (one- and
-two-sided, both targets). Smaller values run faster but are not validated.}
+\item{M}{Number of GPQ Monte-Carlo realizations, an integer \verb{>= 2000}.
+Default 20000, the size validated by simulation for the random-slope
+tolerance interval (one- and two-sided, both targets). Smaller values run
+faster but are not validated. Values below 2000 are an error: the
+Monte-Carlo standard error of each limit (\code{mc_se_lower}, \code{mc_se_upper} in
+the diagnostics) is computed from 20 MC sections of consecutive draws, and
+below 2000 a section has fewer than 100 draws, too few for a 0.99 tail
+quantile. The MC SE is the run-to-run jitter of the Monte-Carlo
+computation, not statistical uncertainty: a limit within approximately 2
+MC SE of a specification limit has a seed-dependent pass/fail. At
+\code{M = 2000} the sectioning estimate ran about 8\% below the observed
+run-to-run SD in a sleepstudy check (sections of 100 draws); the gap is
+expected to shrink at the default \code{M = 20000}. When \code{M} is not divisible by 20, the last \code{M \%\% 20} draws are
+left out of the sections only; the limit itself uses all \code{M} draws.}
 
 \item{ci_df}{Denominator-df rule for the confidence interval (\code{\link[=ci_lmm]{ci_lmm()}}) on
 random-intercept models: \code{"satterthwaite"} (default; Satterthwaite with the

@@ -39,9 +39,13 @@ ti_gpq_raw(
 \item{control}{\code{\link[=lmm_interval_control]{lmm_interval_control()}} tuning (the GPQ \code{seed} and \code{M}).}
 }
 \value{
-A data frame, one row per \code{t0}: \code{method = "gpq"}, \code{time}, \code{estimate},
-\code{lower}, \code{upper}, \code{design = "random_slope_correlated"}, plus audit fields
-(\code{tau2_med}, \code{s2e_med}, \code{frac_boundary}, \code{K}, \code{df_resid}, \code{phi1}).
+An \code{lmm_interval} data frame, one row per \code{t0}: \code{time}, \code{type},
+\code{estimate}, \code{lower}, \code{upper}, \code{level}, \code{P}, \code{sides}, \code{method = "gpq"},
+\code{design = "random_slope_correlated"}, plus the flag columns. The
+diagnostics attribute carries the same fields as the \code{\link[=ti_lmm]{ti_lmm()}} GPQ route
+(\code{df}, \code{tau2_med}, \code{s2e_med}, \code{frac_boundary}, \code{K}, \code{df_resid}, \code{phi1},
+\code{c_resid}, \code{route_reason = "method"}, \code{n_na_draws}, \code{mc_se_lower},
+\code{mc_se_upper}, \code{gpq_seed}, \code{rng_kind}, \code{mc_sections}).
 }
 \description{
 The Oliva-Aviles & Hauser (2025) generalized-pivotal-
@@ -50,6 +54,17 @@ model, from raw \verb{(y, time, batch)} vectors without a fitted \code{lmer} mod
 fit-based dispatcher \code{\link[=ti_lmm]{ti_lmm()}} uses it for every random-slope tolerance
 interval (both targets, all sides); use \code{ti_gpq_raw()} directly when you have
 data but no model object.
+}
+\details{
+The seed handling, common random numbers across \code{t0}, and the Monte-Carlo
+standard error are those of \code{\link[=ti_lmm]{ti_lmm()}} (see its Details): one pivot draw set
+per call, reused for every \code{t0} and both limits; the seed used is
+\code{attr(., "diagnostics")$gpq_seed} (with \verb{$rng_kind}), and
+\verb{lmm_interval_control(seed = <gpq_seed>)} with the same \code{M} under the same RNG
+kind reproduces the result. \code{mc_se_lower} / \code{mc_se_upper} are the run-to-run
+Monte-Carlo jitter of each limit (20 MC sections), not statistical
+uncertainty. Every batch needs at least two distinct time points (error
+class \code{reintervals_error_time_points}, naming the batches).
 }
 \examples{
 fm <- lme4::lmer(Reaction ~ Days + (1 + Days | Subject), data = lme4::sleepstudy)

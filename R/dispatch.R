@@ -144,7 +144,7 @@
 ## method has no fitted-boundary notion (frac_boundary is an internal MC
 ## diagnostic, reported in the diagnostics).
 .gpq_rows <- function(g, design, sides, singular) {
-  data.frame(
+  out <- data.frame(
     time = g$time, type = "TI", estimate = g$estimate,
     lower = g$lower, upper = g$upper,
     content = g$content, conf = g$conf, df = g$df_resid, sides = sides,
@@ -153,9 +153,13 @@
     ## GPQ audit fields carried through (-> attr(.,"diagnostics") at unify)
     tau2_med = g$tau2_med, s2e_med = g$s2e_med, frac_boundary = g$frac_boundary,
     n_na_draws = g$n_na_draws,
+    mc_se_lower = g$mc_se_lower, mc_se_upper = g$mc_se_upper,
     K = g$K, df_resid = g$df_resid, phi1 = g$phi1, c_resid = g$c_resid,
     stringsAsFactors = FALSE
   )
+  ## per-call (not per-row) Monte-Carlo provenance
+  for (a in c("gpq_seed", "rng_kind", "mc_sections")) attr(out, a) <- attr(g, a)
+  out
 }
 
 ## Random-slope tolerance interval: GPQ at every requested time point, for
@@ -234,8 +238,8 @@
 #'   Oliva-Aviles & Hauser (2025), for both targets (`over = "observation"` and
 #'   `"group_mean"`), two-sided and one-sided, on every fit (singular included).
 #'   It is a Monte-Carlo interval: set `lmm_interval_control(seed = )` for
-#'   reproducibility; the default `M = 20000` is the size validated by
-#'   simulation. `attr(., "diagnostics")$route_reason` is `"auto"`, or
+#'   reproducibility (see Details); the default `M = 20000` is the size
+#'   validated by simulation. `attr(., "diagnostics")$route_reason` is `"auto"`, or
 #'   `"method"` when `method = "gpq"` was passed. The REML closed-form interval
 #'   (`method = "reml-mls"`) was removed in 1.0.0 because it under-covers; it
 #'   now signals an error of class `reintervals_error_defunct`.
@@ -254,6 +258,30 @@
 #' an extrapolation of that quadratic and should be done knowingly (the interval
 #' is computed without a guard or warning). The same applies to the other slope
 #' verbs ([ci_lmm()], [pi_lmm()], [new_group_mean_lmm()]).
+#'
+#' @details
+#' **Monte-Carlo (GPQ) intervals.** Within one call, the GPQ pivot draws are
+#' generated once and reused for every time point in `newdata` and for both
+#' limits (common random numbers): for a given seed and `M`, the limits at a
+#' time point are identical whatever other time points are requested, and in
+#' any order. The seed used is in `attr(., "diagnostics")$gpq_seed` and the
+#' RNG kind in `$rng_kind`; passing
+#' `control = lmm_interval_control(seed = <gpq_seed>, M = <same M>)` under the
+#' same RNG kind reproduces the interval exactly (with `seed = NULL`, one seed
+#' is drawn from the caller's RNG stream, so `set.seed()` before the call also
+#' reproduces it; see [lmm_interval_control()]). The diagnostics also carry the
+#' Monte-Carlo standard error of each limit, `mc_se_lower` and `mc_se_upper`
+#' (`NA` on the infinite side of a one-sided interval), computed by MC
+#' sections (`mc_sections = 20` consecutive groups of draws; the standard
+#' error is the standard deviation of the 20 section limits over
+#' `sqrt(20)`). The MC SE is the run-to-run jitter of the Monte-Carlo
+#' computation, not statistical uncertainty: a limit within approximately 2 MC
+#' SE of a specification limit has a seed-dependent pass/fail. In a sleepstudy
+#' check at `M = 2000` the sectioning estimate ran about 8% below the observed
+#' run-to-run SD (sections of 100 draws); the gap is expected to shrink at the
+#' default `M = 20000`. The GPQ route requires
+#' every lot to have at least two distinct time points and otherwise signals
+#' an error of class `reintervals_error_time_points`.
 #'
 #' @section Availability:
 #' Tolerance intervals require a closed-form variance decomposition. They are

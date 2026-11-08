@@ -13,10 +13,30 @@
 #' confidence interval. Algorithm *selection* is the `method` argument, not this.
 #'
 #' @param seed Optional integer seed for the GPQ draws (reproducibility / GxP
-#'   traceability). `NULL` uses the ambient RNG state.
-#' @param M Number of GPQ Monte-Carlo realizations. Default 20000, the size
-#'   validated by simulation for the random-slope tolerance interval (one- and
-#'   two-sided, both targets). Smaller values run faster but are not validated.
+#'   traceability). With the default `NULL`, one integer seed is drawn from the
+#'   caller's RNG stream (`sample.int(.Machine$integer.max, 1L)`), so a
+#'   `set.seed()` before the call still controls the result; this advances the
+#'   caller's stream by exactly one draw. The GPQ draws then run under that seed
+#'   (or under the supplied one) and the caller's RNG state is restored
+#'   afterwards. Either way the seed actually used is reported as
+#'   `attr(., "diagnostics")$gpq_seed`, and the RNG kind in effect
+#'   (the [RNGkind()] triple) as `$rng_kind`. Reproducibility contract:
+#'   `lmm_interval_control(seed = <gpq_seed>)` with the same `M`, under the same
+#'   `rng_kind`, returns an identical interval.
+#' @param M Number of GPQ Monte-Carlo realizations, an integer `>= 2000`.
+#'   Default 20000, the size validated by simulation for the random-slope
+#'   tolerance interval (one- and two-sided, both targets). Smaller values run
+#'   faster but are not validated. Values below 2000 are an error: the
+#'   Monte-Carlo standard error of each limit (`mc_se_lower`, `mc_se_upper` in
+#'   the diagnostics) is computed from 20 MC sections of consecutive draws, and
+#'   below 2000 a section has fewer than 100 draws, too few for a 0.99 tail
+#'   quantile. The MC SE is the run-to-run jitter of the Monte-Carlo
+#'   computation, not statistical uncertainty: a limit within approximately 2
+#'   MC SE of a specification limit has a seed-dependent pass/fail. At
+#'   `M = 2000` the sectioning estimate ran about 8% below the observed
+#'   run-to-run SD in a sleepstudy check (sections of 100 draws); the gap is
+#'   expected to shrink at the default `M = 20000`. When `M` is not divisible by 20, the last `M %% 20` draws are
+#'   left out of the sections only; the limit itself uses all `M` draws.
 #' @param ci_df Denominator-df rule for the confidence interval ([ci_lmm()]) on
 #'   random-intercept models: `"satterthwaite"` (default; Satterthwaite with the
 #'   observed-information covariance of the variance components, falling back to
@@ -41,11 +61,18 @@
 lmm_interval_control <- function(seed = NULL, M = 20000L,
                                  ci_df = c("satterthwaite", "kenward-roger")) {
   ci_df <- match.arg(ci_df)
-  if (!is.null(seed) && (!is.numeric(seed) || length(seed) != 1L || is.na(seed))) {
-    .abort("`seed` must be NULL or a single number.", class = "reintervals_error_input")
+  if (!is.null(seed) && (!is.numeric(seed) || length(seed) != 1L || is.na(seed) ||
+                           abs(seed) > .Machine$integer.max)) {
+    .abort("`seed` must be NULL or a single number in the integer range.",
+           class = "reintervals_error_input")
   }
-  if (!is.numeric(M) || length(M) != 1L || is.na(M) || M < 1) {
-    .abort("`M` must be a single positive integer.", class = "reintervals_error_input")
+  ## M >= 2000: the MC standard error splits the draws into 20 MC sections, and
+  ## below 2000 a section has fewer than 100 draws, too few for a 0.99 tail quantile
+  if (!is.numeric(M) || length(M) != 1L || is.na(M) || !is.finite(M) ||
+        M != round(M) || M < 2000) {
+    .abort("`M` must be a single integer >= 2000 (the Monte-Carlo standard error ",
+           "uses 20 MC sections of at least 100 draws each).",
+           class = "reintervals_error_input")
   }
   structure(list(seed = seed, M = as.integer(M), ci_df = ci_df),
             class = "lmm_interval_control")
@@ -125,7 +152,7 @@ lmm_interval_control <- function(seed = NULL, M = 20000L,
                  "singular", "boundary", "vg_floored", "tau2_med", "s2e_med",
                  "frac_boundary", "K", "df_resid", "phi1", "c_resid", "n_E",
                  "df_method", "route_reason", "df_rule", "W", "mls_bound",
-                 "n_na_draws")
+                 "n_na_draws", "mc_se_lower", "mc_se_upper")
 
 ## The output unifier. Maps any engine's native frame to the single tidy
 ## contract; relabels only, never recomputes. Universal columns, in order:
@@ -169,10 +196,12 @@ lmm_interval_control <- function(seed = NULL, M = 20000L,
   diag <- list()
   for (cn in c("df", "df_method", "df_rule", "W", "se", "tau2_med", "s2e_med",
                "frac_boundary", "K", "df_resid", "phi1", "c_resid",
-               "route_reason", "mls_bound", "n_na_draws")) {
+               "route_reason", "mls_bound", "n_na_draws", "mc_se_lower",
+               "mc_se_upper")) {
     if (cn %in% names(native)) diag[[cn]] <- native[[cn]]
   }
-  for (a in c("beta_hat", "n_E", "U", "Vhat_Y", "C1", "C2", "pi_df_fallback")) {
+  for (a in c("beta_hat", "n_E", "U", "Vhat_Y", "C1", "C2", "pi_df_fallback",
+              "gpq_seed", "rng_kind", "mc_sections")) {
     v <- attr(native, a); if (!is.null(v)) diag[[a]] <- v
   }
   attr(out, "diagnostics") <- diag

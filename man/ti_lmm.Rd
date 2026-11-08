@@ -81,8 +81,8 @@ case --- all transparently:
 Oliva-Aviles & Hauser (2025), for both targets (\code{over = "observation"} and
 \code{"group_mean"}), two-sided and one-sided, on every fit (singular included).
 It is a Monte-Carlo interval: set \code{lmm_interval_control(seed = )} for
-reproducibility; the default \code{M = 20000} is the size validated by
-simulation. \code{attr(., "diagnostics")$route_reason} is \code{"auto"}, or
+reproducibility (see Details); the default \code{M = 20000} is the size
+validated by simulation. \code{attr(., "diagnostics")$route_reason} is \code{"auto"}, or
 \code{"method"} when \code{method = "gpq"} was passed. The REML closed-form interval
 (\code{method = "reml-mls"}) was removed in 1.0.0 because it under-covers; it
 now signals an error of class \code{reintervals_error_defunct}.
@@ -102,6 +102,29 @@ time covariate, so evaluating at a \code{t0} outside the observed time range is
 an extrapolation of that quadratic and should be done knowingly (the interval
 is computed without a guard or warning). The same applies to the other slope
 verbs (\code{\link[=ci_lmm]{ci_lmm()}}, \code{\link[=pi_lmm]{pi_lmm()}}, \code{\link[=new_group_mean_lmm]{new_group_mean_lmm()}}).
+
+\strong{Monte-Carlo (GPQ) intervals.} Within one call, the GPQ pivot draws are
+generated once and reused for every time point in \code{newdata} and for both
+limits (common random numbers): for a given seed and \code{M}, the limits at a
+time point are identical whatever other time points are requested, and in
+any order. The seed used is in \code{attr(., "diagnostics")$gpq_seed} and the
+RNG kind in \verb{$rng_kind}; passing
+\verb{control = lmm_interval_control(seed = <gpq_seed>, M = <same M>)} under the
+same RNG kind reproduces the interval exactly (with \code{seed = NULL}, one seed
+is drawn from the caller's RNG stream, so \code{set.seed()} before the call also
+reproduces it; see \code{\link[=lmm_interval_control]{lmm_interval_control()}}). The diagnostics also carry the
+Monte-Carlo standard error of each limit, \code{mc_se_lower} and \code{mc_se_upper}
+(\code{NA} on the infinite side of a one-sided interval), computed by MC
+sections (\code{mc_sections = 20} consecutive groups of draws; the standard
+error is the standard deviation of the 20 section limits over
+\code{sqrt(20)}). The MC SE is the run-to-run jitter of the Monte-Carlo
+computation, not statistical uncertainty: a limit within approximately 2 MC
+SE of a specification limit has a seed-dependent pass/fail. In a sleepstudy
+check at \code{M = 2000} the sectioning estimate ran about 8\% below the observed
+run-to-run SD (sections of 100 draws); the gap is expected to shrink at the
+default \code{M = 20000}. The GPQ route requires
+every lot to have at least two distinct time points and otherwise signals
+an error of class \code{reintervals_error_time_points}.
 }
 \section{Availability}{
 

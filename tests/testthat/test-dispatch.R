@@ -120,9 +120,9 @@ test_that("GPQ draws are reproducible through ti_lmm (control seed honoured)", {
   skip_if_not_installed("lme4")
   fs <- slope_fit()
   a <- ti_lmm(fs, newdata = data.frame(Days = 5), method = "gpq",
-              control = lmm_interval_control(seed = 99, M = 1500L))
+              control = lmm_interval_control(seed = 99, M = 2000L))
   b <- ti_lmm(fs, newdata = data.frame(Days = 5), method = "gpq",
-              control = lmm_interval_control(seed = 99, M = 1500L))
+              control = lmm_interval_control(seed = 99, M = 2000L))
   expect_equal(a$lower, b$lower); expect_equal(a$upper, b$upper)
 })
 
