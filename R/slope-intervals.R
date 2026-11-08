@@ -31,15 +31,15 @@
                            level = 0.95,
                            sides = c("two.sided", "lower", "upper")) {
   if (!inherits(comp, "vfun_components")) {
-    stop("`comp` must be a `vfun_components` object (see ?vfun_extract).",
-         call. = FALSE)
+    .abort("`comp` must be a `vfun_components` object (see ?vfun_extract).",
+           class = "reintervals_error_input")
   }
   kind  <- match.arg(kind)
   sides <- match.arg(sides)
   if (!is.numeric(level) || length(level) != 1L || is.na(level) ||
         level <= 0 || level >= 1) {
-    stop("`level` must be a single number strictly between 0 and 1.",
-         call. = FALSE)
+    .abort("`level` must be a single number strictly between 0 and 1.",
+           class = "reintervals_error_input")
   }
 
   mu  <- comp$mean
@@ -55,18 +55,38 @@
   nu <- pick$df
   se <- sqrt(pick$var)
 
-  ## a non-finite/non-positive df degrades to ~normal.
+  ## df source, from vfun_extract's per-df fallback flags: TRUE = the
+  ## Satterthwaite df was unavailable and containment was used; NA = containment
+  ## was forced (df_method = "containment"); no attribute = a hand-built
+  ## container (source unknown).
+  key <- c(CI = "F", PI = "T", new_group_mean = "G")[[kind]]
+  fb  <- attr(comp, "df_fallback")
+  rule <- if (is.null(fb) || !key %in% names(fb)) NA_character_
+          else if (isFALSE(fb[[key]])) "satterthwaite" else "containment"
+  ## A non-finite or non-positive df (only reachable from a hand-built container;
+  ## vfun_extract always returns a finite df) used to be replaced by 1e6, i.e. a
+  ## normal quantile. It now takes the containment df K - 1 (K = number of
+  ## groups, carried by vfun_extract as attr "n_groups").
+  if (!is.finite(nu) || nu <= 0) {
+    K <- attr(comp, "n_groups")
+    if (is.null(K)) {
+      .abort("The ", kind, " df is not finite and the container carries no ",
+             "group count to form the containment df (K - 1); build it with ",
+             "vfun_extract().", class = "reintervals_error_numerical")
+    }
+    nu <- max(1, K - 1)
+    rule <- "containment"
+  }
   alpha <- 1 - level
-  nu_use <- if (!is.finite(nu) || nu <= 0) 1e6 else nu
-  tcrit <- if (sides == "two.sided") stats::qt(1 - alpha / 2, nu_use) else
-    stats::qt(level, nu_use)
+  tcrit <- if (sides == "two.sided") stats::qt(1 - alpha / 2, nu) else
+    stats::qt(level, nu)
   hw <- tcrit * se
 
   data.frame(
     time = comp$t0, type = kind, estimate = mu,
     lower = if (sides == "upper") -Inf else mu - hw,
     upper = if (sides == "lower")  Inf else mu + hw,
-    se = se, level = level, df = nu, sides = sides,
+    se = se, level = level, df = nu, df_rule = rule, sides = sides,
     design = comp$type, method = "reml-mls",        # harmonized engine tag
     singular = isTRUE(comp$singular), boundary = isTRUE(comp$boundary),
     vg_floored = isTRUE(attr(comp, "vg_floored")),  # V_G<0 floored at this t0
@@ -111,9 +131,9 @@
                         else stats::qt(level, df)
   value_rows <- function(est, W, df, rule, method) {
     if (any(!is.finite(W) | W <= 0)) {
-      stop("The new-group-mean variance W is not positive for this fit (e.g. ",
+      .abort("The new-group-mean variance W is not positive for this fit (e.g. ",
            "all group means are identical, so the between-group mean square is ",
-           "zero); the interval is not available.", call. = FALSE)
+           "zero); the interval is not available.", class = "reintervals_error_numerical")
     }
     hw <- tcrit(df) * sqrt(W)
     data.frame(type = "new_group_mean", estimate = est,
@@ -141,11 +161,11 @@
     return(out)
   }
   if (!desc$type %in% c("oneway", "nested", "crossed")) {
-    stop(sprintf(paste0("The new-group-mean interval is not available for a '%s' ",
+    .abort(sprintf(paste0("The new-group-mean interval is not available for a '%s' ",
                         "design: it has no closed-form variance decomposition. ",
                         "Supported: one-way, two-fold nested, and two crossed ",
                         "factors with their interaction."), desc$type),
-         call. = FALSE)
+                               class = "reintervals_error_design")
   }
   ## 2c / 2d / 2e: EMS route. Covariates beyond the intercept enter through V_F
   ## only. UNVALIDATED: the one-way design with other fixed effects (2e), and
@@ -154,8 +174,8 @@
   ## checked by simulation separately.
   dc <- .design_components_fit(model, desc, .var_components(model), "observable")
   if (is.null(dc$ems)) {
-    stop("The new-group-mean interval is not available: no closed-form ",
-         "variance decomposition for this design.", call. = FALSE)
+    .abort("The new-group-mean interval is not available: no closed-form ",
+         "variance decomposition for this design.", class = "reintervals_error_design")
   }
   ms <- dc$ems$ms; k <- dc$ems$k; dfj <- dc$ems$df
   j <- seq_len(length(ms) - 1L)            # every term but the residual (last)
@@ -168,12 +188,18 @@
     ## k_A EMS_A : k_B EMS_B; W = sum_j c_j EMS_j is unchanged.
     pA <- k[1] * ms[1] / (k[1] * ms[1] + k[2] * ms[2])
     df <- vapply(VF, function(v) {
+      if (!is.finite(pA)) return(NA_real_)
       co <- k[j]
       co[1] <- co[1] + pA * v / ms[1]
       co[2] <- co[2] + (1 - pA) * v / ms[2]
       sum(co * ms[j])^2 / sum((co * ms[j])^2 / dfj[j])
     }, numeric(1))
-    rule <- "satterthwaite-vf"
+    ## Undefined Satterthwaite term (k_A EMS_A + k_B EMS_B not positive, so pA
+    ## is NaN/Inf, or a non-finite / non-positive df): never return a NaN
+    ## limit. Fall back to the containment df min(A, B) - 1, reported per row.
+    bad  <- !is.finite(df) | df <= 0
+    rule <- ifelse(bad, "containment", "satterthwaite-vf")
+    if (any(bad)) df[bad] <- .ddf_containment(model)
   } else {
     df <- rep(dfj[[1]], length(VF))        # Gm: top-factor stratum df (A - 1,
                                            # less any between-group fixed columns)
@@ -194,7 +220,8 @@
                           level = 0.95, sides = c("two.sided", "lower", "upper"),
                           ci_df = c("satterthwaite", "kenward-roger")) {
   if (!inherits(model, "lmerMod")) {
-    stop("`model` must be a fitted `lmerMod` (an lmer fit).", call. = FALSE)
+    .abort("`model` must be a fitted `lmerMod` (an lmer fit).",
+           class = "reintervals_error_input")
   }
   kind  <- match.arg(kind)
   sides <- match.arg(sides)
@@ -202,16 +229,16 @@
 
   if (.has_random_slope(model)) {
     if (kind == "CI" && ci_df == "kenward-roger") {
-      stop("ci_df = \"kenward-roger\" applies to random-intercept models; the ",
+      .abort("ci_df = \"kenward-roger\" applies to random-intercept models; the ",
            "random-slope confidence interval uses its own generalized ",
-           "Satterthwaite df.", call. = FALSE)
+           "Satterthwaite df.", class = "reintervals_error_method")
     }
     fe <- lme4::fixef(model)
     time_var <- setdiff(names(fe), "(Intercept)")
     if (length(time_var) != 1L) {
-      stop("random-slope intervals require a single continuous covariate (e.g. ~ 1 + time); ",
+      .abort("random-slope intervals require a single continuous covariate (e.g. ~ 1 + time); ",
          "multiple fixed effects with a random slope are not currently supported.",
-         call. = FALSE)
+                class = "reintervals_error_unsupported")
     }
     t0s <- if (is.null(newdata)) stats::model.frame(model)[[time_var]][1] else
       newdata[[time_var]]

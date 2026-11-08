@@ -38,18 +38,19 @@
 #' @noRd
 ci_mean <- function(comp, conf = 0.95) {
   if (!inherits(comp, "re_components")) {
-    stop("`comp` must be an `re_components` object (see ?re_components).",
-         call. = FALSE)
+    .abort("`comp` must be an `re_components` object (see ?re_components).",
+           class = "reintervals_error_input")
   }
   if (!is.numeric(conf) || length(conf) != 1L || is.na(conf) ||
         conf <= 0 || conf >= 1) {
-    stop("`conf` must be a single number strictly between 0 and 1.",
-         call. = FALSE)
+    .abort("`conf` must be a single number strictly between 0 and 1.",
+           class = "reintervals_error_input")
   }
   if (!"ci" %in% names(comp$dfs)) {
-    stop("`comp$dfs` must contain a \"ci\" entry (the CI denominator df). ",
+    .abort("`comp$dfs` must contain a \"ci\" entry (the CI denominator df). ",
          "The extraction layer supplies it: Satterthwaite with a SAS-style ",
-         "containment fallback, or Kenward-Roger on request.", call. = FALSE)
+         "containment fallback, or Kenward-Roger on request.",
+                class = "reintervals_error_input")
   }
 
   df <- unname(comp$dfs[["ci"]])

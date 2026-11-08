@@ -38,18 +38,18 @@
 #' @noRd
 pi_newobs <- function(comp, level = 0.95) {
   if (!inherits(comp, "re_components")) {
-    stop("`comp` must be an `re_components` object (see ?re_components).",
-         call. = FALSE)
+    .abort("`comp` must be an `re_components` object (see ?re_components).",
+           class = "reintervals_error_input")
   }
   if (!is.numeric(level) || length(level) != 1L || is.na(level) ||
         level <= 0 || level >= 1) {
-    stop("`level` must be a single number strictly between 0 and 1.",
-         call. = FALSE)
+    .abort("`level` must be a single number strictly between 0 and 1.",
+           class = "reintervals_error_input")
   }
   if (!"pi" %in% names(comp$dfs)) {
-    stop("`comp$dfs` must contain a \"pi\" entry (the prediction-interval df ",
+    .abort("`comp$dfs` must contain a \"pi\" entry (the prediction-interval df ",
          "from the observed Fisher information). The extraction layer supplies ",
-         "it.", call. = FALSE)
+         "it.", class = "reintervals_error_input")
   }
 
   sigma2_t <- sum(comp$coefs * comp$components)

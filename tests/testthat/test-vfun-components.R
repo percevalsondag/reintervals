@@ -142,5 +142,5 @@ test_that("print returns its input invisibly and shows the NULL-cov note", {
   vc <- do.call(vfun_components, mk_m2c(cov = NULL, singular = TRUE))
   expect_output(print(vc), "vfun_components")
   expect_output(print(vc), "NULL")
-  expect_invisible(print(vc))
+  expect_output(expect_invisible(print(vc)), "vfun_components")
 })

@@ -49,7 +49,8 @@ test_that("vc_extract rejects random-slope models", {
   skip_if_not_installed("lme4")
   dat <- build_52_data()
   dat$t <- rep(c(-1, 0, 1), 6)
-  m <- suppressWarnings(lme4::lmer(y ~ t + (t | run), data = dat, REML = TRUE))
+  m <- suppressMessages(suppressWarnings(          # singular by construction:
+    lme4::lmer(y ~ t + (t | run), data = dat, REML = TRUE)))  # silence lme4's note
   expect_error(vc_extract(m), "random-intercept")
 })
 

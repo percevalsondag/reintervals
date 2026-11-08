@@ -58,57 +58,61 @@
 ti_francq <- function(comp, content = 0.95, conf = 0.95,
                       sides = c("two", "lower", "upper")) {
   if (!inherits(comp, "re_components")) {
-    stop("`comp` must be an `re_components` object (see ?re_components).",
-         call. = FALSE)
+    .abort("`comp` must be an `re_components` object (see ?re_components).",
+           class = "reintervals_error_input")
   }
   sides <- match.arg(sides)
   for (nm in c("content", "conf")) {
     v <- get(nm)
     if (!is.numeric(v) || length(v) != 1L || is.na(v) || v <= 0 || v >= 1) {
-      stop(sprintf("`%s` must be a single number strictly between 0 and 1.", nm),
-           call. = FALSE)
+      .abort(sprintf("`%s` must be a single number strictly between 0 and 1.", nm),
+             class = "reintervals_error_input")
     }
   }
   if (identical(comp$target, "true_value")) {
-    stop("The true_value (between-level only) tolerance interval is not ",
+    .abort("The true_value (between-level only) tolerance interval is not ",
          "supported for any design; only `target = \"observable\"` is implemented. ",
          "(`pi_newobs()` does support true_value.) The true_value TI requires ",
          "the difference-of-EMS / sign-unrestricted MLS variant and is deferred ",
          "to a focused follow-up with its own derivation review and validation.",
-         call. = FALSE)
+                class = "reintervals_error_unsupported")
   }
   if (is.null(comp$ems)) {
-    stop("`comp$ems` is NULL: no expected-mean-square decomposition is ",
+    .abort("`comp$ems` is NULL: no expected-mean-square decomposition is ",
          "available for this design/target, so the Francq tolerance interval ",
          "(Eq. 26) cannot be computed. CI and PI remain available.",
-         call. = FALSE)
+                class = "reintervals_error_design")
   }
 
   ems <- comp$ems
   sigma2_t <- sum(ems$k * ems$ms)
   if (sigma2_t <= 0) {
-    stop("Total variance `sum(k * EMS)` is not positive; the tolerance ",
+    .abort("Total variance `sum(k * EMS)` is not positive; the tolerance ",
          "interval is undefined (all variance components at zero).",
-         call. = FALSE)
+                class = "reintervals_error_numerical")
   }
 
-  a <- 1 - conf                                   # chi-square lower-tail prob
-  h <- ems$df / stats::qchisq(a, df = ems$df) - 1
-  inner <- sum(h^2 * ems$k^2 * ems$ms^2)
+  ## MLS upper bound U = sigma2_T + excess on sigma2_T (.mls_upper, mls.R):
+  ## Graybill-Wang, excess = sqrt(sum H_j^2 k_j^2 EMS_j^2), when every k_j >= 0;
+  ## Ting-Burdick-Graybill (1990) when a k_j < 0 (possible in principle for the
+  ## unbalanced EMS synthesis, where nothing constrains the sign; Graybill-Wang
+  ## is valid only for non-negative coefficients).
+  mls <- .mls_upper(ems$ms, ems$k, ems$df, conf)
+  excess <- mls$excess
   ## One-sided: the package's extension of Hoffman's (2010) one-sided limit to
   ## the Francq construction (validated by simulation):
   ##   mean -/+ ( z_P sqrt(U) + z_{1-alpha} sqrt(V_F) ),
-  ## with U = sigma2_T + sqrt(sum H_j^2 k_j^2 EMS_j^2), Francq's MLS upper bound
-  ## on sigma2_T. Hoffman D (2010), Technometrics 52(3):303-312.
+  ## with U the MLS upper bound on sigma2_T. Hoffman D (2010), Technometrics
+  ## 52(3):303-312.
   hw <- if (sides == "two") {
     stats::qnorm((1 + content) / 2) * sqrt(comp$var_mean + sigma2_t) *
-      sqrt(1 + sqrt(inner) / sigma2_t)
+      sqrt(1 + excess / sigma2_t)
   } else {
-    stats::qnorm(content) * sqrt(sigma2_t + sqrt(inner)) +
+    stats::qnorm(content) * sqrt(sigma2_t + excess) +
       stats::qnorm(conf) * sqrt(comp$var_mean)
   }
 
-  new_re_interval(
+  out <- new_re_interval(
     estimate = comp$mean,
     lower    = if (sides == "upper") -Inf else comp$mean - hw,
     upper    = if (sides == "lower")  Inf else comp$mean + hw,
@@ -121,4 +125,6 @@ ti_francq <- function(comp, content = 0.95, conf = 0.95,
     design   = comp$design,
     call     = match.call()
   )
+  attr(out, "mls_bound") <- mls$bound
+  out
 }

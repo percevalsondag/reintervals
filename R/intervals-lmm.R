@@ -48,7 +48,8 @@ intervals_lmm <- function(model, newdata = NULL, level = 0.95, conf = 0.95,
                           which = c("CI", "PI"), ci_df = NULL,
                           ci_method = c("satterthwaite", "kenward-roger")) {
   if (!inherits(model, "lmerMod")) {
-    stop("`model` must be a fitted `lmerMod` (an lmer fit).", call. = FALSE)
+    .abort("`model` must be a fitted `lmerMod` (an lmer fit).",
+           class = "reintervals_error_input")
   }
   which <- match.arg(which, c("CI", "PI"), several.ok = TRUE)
   ci_method <- match.arg(ci_method)

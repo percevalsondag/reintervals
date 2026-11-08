@@ -12,6 +12,38 @@
   is unchanged. SAS PROC MIXED `DDFM=KR` can differ on unbalanced data: in the
   package's checks against SAS it reported the Satterthwaite df with an adjusted
   standard error.
+* A random-slope confidence, prediction or new-group-mean interval built from a
+  component container with a non-finite df used a normal quantile (the df was
+  replaced by 1e6). It now uses the containment df `K - 1` (K = number of
+  groups) and reports `df_rule = "containment"`. Containers built by the
+  package always carry a finite df, so no interval computed from a fitted model
+  changes.
+* The tolerance interval's MLS bound (`ems-mls`) now uses the
+  Ting-Burdick-Graybill (1990) bound when an EMS coefficient is negative;
+  Graybill-Wang is valid only for non-negative coefficients. The bound used is
+  reported in `attr(., "diagnostics")$mls_bound`. No design in the package's
+  checks produced a negative coefficient, so no current result changes.
+* The crossed new-group-mean interval can no longer return `NaN` limits: when
+  its Satterthwaite df is undefined it falls back to the containment df
+  (`df_rule = "containment"`).
+* The GPQ engine drops Monte-Carlo draws without a valid between-batch variance
+  solution (reported as `n_na_draws` in the diagnostics) and errors if they
+  exceed 1% of the draws.
+
+## Other changes
+
+* Every error and warning is now a classed condition: errors inherit from
+  `reintervals_error` (`_input`, `_unsupported`, `_design`, `_method`, `_data`,
+  `_groups`, `_time_points`, `_residual_df`, `_numerical`, `_dependency`,
+  `_internal`) and warnings from `reintervals_warning` (`_fallback`,
+  `_truncation`, `_singular`, `_limitation`). Message texts are unchanged.
+* `pi_lmm()` now emits a `reintervals_warning_limitation` for a
+  random-intercept model whose top random factor has five or fewer levels (the
+  known limitation documented in `?pi_lmm` since 0.2.0). The interval is
+  unchanged.
+* New diagnostics: `pi_df_fallback` (prediction interval), `df_rule` for the
+  random-slope confidence, prediction and new-group-mean intervals, `mls_bound`
+  (tolerance intervals), `n_na_draws` (GPQ).
 
 # reintervals 0.2.0
 

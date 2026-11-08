@@ -77,26 +77,28 @@ re_components <- function(components, dfs, mean, var_mean, coefs = NULL,
   ## --- components ----------------------------------------------------------
   if (!is.numeric(components) || length(components) < 1L ||
         is.null(names(components)) || any(names(components) == "")) {
-    stop("`components` must be a non-empty named numeric vector.", call. = FALSE)
+    .abort("`components` must be a non-empty named numeric vector.",
+           class = "reintervals_error_input")
   }
   if (any(!is.finite(components))) {
-    stop("`components` must be finite.", call. = FALSE)
+    .abort("`components` must be finite.", class = "reintervals_error_input")
   }
   if (any(components < 0)) {
     neg <- names(components)[components < 0]
-    warning("Negative variance-component estimate(s) truncated at 0: ",
-            paste(neg, collapse = ", "), ".", call. = FALSE)
+    .warn("Negative variance-component estimate(s) truncated at 0: ",
+            paste(neg, collapse = ", "), ".", class = "reintervals_warning_truncation")
     components[components < 0] <- 0
   }
 
   ## --- dfs ------------------------------------------------------------------
   if (!is.numeric(dfs) || length(dfs) < 1L ||
         is.null(names(dfs)) || any(names(dfs) == "")) {
-    stop("`dfs` must be a non-empty named numeric vector.", call. = FALSE)
+    .abort("`dfs` must be a non-empty named numeric vector.",
+           class = "reintervals_error_input")
   }
   if (any(is.na(dfs)) || any(dfs <= 0)) {
-    stop("`dfs` must be positive (Inf allowed); NA is not permitted.",
-         call. = FALSE)
+    .abort("`dfs` must be positive (Inf allowed); NA is not permitted.",
+           class = "reintervals_error_input")
   }
 
   ## --- coefs (target selector) ---------------------------------------------
@@ -104,22 +106,25 @@ re_components <- function(components, dfs, mean, var_mean, coefs = NULL,
     coefs <- stats::setNames(rep(1, length(components)), names(components))
   } else {
     if (!is.numeric(coefs) || is.null(names(coefs))) {
-      stop("`coefs` must be a named numeric vector or NULL.", call. = FALSE)
+      .abort("`coefs` must be a named numeric vector or NULL.",
+             class = "reintervals_error_input")
     }
     if (!setequal(names(coefs), names(components))) {
-      stop("`coefs` names must match `components` names.", call. = FALSE)
+      .abort("`coefs` names must match `components` names.",
+             class = "reintervals_error_input")
     }
     coefs <- coefs[names(components)]
   }
 
   ## --- mean / var_mean ------------------------------------------------------
   if (!is.numeric(mean) || length(mean) != 1L || !is.finite(mean)) {
-    stop("`mean` must be a single finite numeric value.", call. = FALSE)
+    .abort("`mean` must be a single finite numeric value.",
+           class = "reintervals_error_input")
   }
   if (!is.numeric(var_mean) || length(var_mean) != 1L ||
         !is.finite(var_mean) || var_mean < 0) {
-    stop("`var_mean` must be a single finite non-negative numeric value.",
-         call. = FALSE)
+    .abort("`var_mean` must be a single finite non-negative numeric value.",
+           class = "reintervals_error_input")
   }
   mean <- unname(mean)            # keep interval bounds free of stray names
   var_mean <- unname(var_mean)
@@ -133,10 +138,11 @@ re_components <- function(components, dfs, mean, var_mean, coefs = NULL,
   target    <- match.arg(target, c("observable", "true_value"))
   estimator <- match.arg(estimator, c("reml", "anova"))
   if (!is.character(design) || length(design) != 1L) {
-    stop("`design` must be a character scalar.", call. = FALSE)
+    .abort("`design` must be a character scalar.", class = "reintervals_error_input")
   }
   if (!is.null(n_levels) && !is.numeric(n_levels)) {
-    stop("`n_levels` must be NULL or a numeric vector.", call. = FALSE)
+    .abort("`n_levels` must be NULL or a numeric vector.",
+           class = "reintervals_error_input")
   }
 
   structure(
@@ -150,30 +156,32 @@ re_components <- function(components, dfs, mean, var_mean, coefs = NULL,
 ## Validate and normalize the `ems` sub-list. Internal.
 validate_ems <- function(ems) {
   if (!is.list(ems) || !setequal(names(ems), c("ms", "k", "df"))) {
-    stop('`ems` must be NULL or a list with elements "ms", "k", "df".',
-         call. = FALSE)
+    .abort('`ems` must be NULL or a list with elements "ms", "k", "df".',
+           class = "reintervals_error_input")
   }
   for (nm in c("ms", "k", "df")) {
     v <- ems[[nm]]
     if (!is.numeric(v) || length(v) < 1L || is.null(names(v)) ||
           any(names(v) == "")) {
-      stop(sprintf("`ems$%s` must be a non-empty named numeric vector.", nm),
-           call. = FALSE)
+      .abort(sprintf("`ems$%s` must be a non-empty named numeric vector.", nm),
+             class = "reintervals_error_input")
     }
     if (any(!is.finite(v))) {
-      stop(sprintf("`ems$%s` must be finite.", nm), call. = FALSE)
+      .abort(sprintf("`ems$%s` must be finite.", nm), class = "reintervals_error_input")
     }
   }
   if (!setequal(names(ems$ms), names(ems$k)) ||
         !setequal(names(ems$ms), names(ems$df))) {
-    stop("`ems$ms`, `ems$k`, and `ems$df` must share the same names.",
-         call. = FALSE)
+    .abort("`ems$ms`, `ems$k`, and `ems$df` must share the same names.",
+           class = "reintervals_error_input")
   }
   if (any(ems$df <= 0)) {
-    stop("`ems$df` (ANOVA degrees of freedom) must be positive.", call. = FALSE)
+    .abort("`ems$df` (ANOVA degrees of freedom) must be positive.",
+           class = "reintervals_error_input")
   }
   if (any(ems$ms < 0)) {
-    stop("`ems$ms` (expected mean squares) must be non-negative.", call. = FALSE)
+    .abort("`ems$ms` (expected mean squares) must be non-negative.",
+           class = "reintervals_error_input")
   }
   ord <- names(ems$ms)
   list(ms = ems$ms, k = ems$k[ord], df = ems$df[ord])

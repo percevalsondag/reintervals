@@ -108,7 +108,8 @@ vfun_components <- function(type, phi, mean, var_mean, V_G, V_T, n_E, dfs,
     M1  = c("s2_0", "s2e"),
     M2c = c("s2_0", "s01", "s2_1", "s2e"),
     M2i = c("s2_0", "s2_1", "s2e"),
-    stop("`type` must be a recognized model code (see ?reintervals-models).", call. = FALSE)
+    .abort("`type` must be a recognized model code (see ?reintervals-models).",
+           class = "reintervals_error_input")
   )
 }
 
@@ -121,68 +122,70 @@ validate_vfun_components <- function(type, phi, cov, mean, var_mean,
   ## --- type --------------------------------------------------------------
   if (!is.character(type) || length(type) != 1L ||
         !type %in% c("M1", "M2c", "M2i")) {
-    stop("`type` must be a single recognized model code (see ?reintervals-models).",
-         call. = FALSE)
+    .abort("`type` must be a single recognized model code (see ?reintervals-models).",
+           class = "reintervals_error_input")
   }
   expected <- .vfun_phi_names(type)
 
   ## --- phi: names, order, finiteness, and ROLE-AWARE sign rules ----------
   if (!is.numeric(phi) || is.null(names(phi))) {
-    stop("`phi` must be a named numeric vector.", call. = FALSE)
+    .abort("`phi` must be a named numeric vector.", class = "reintervals_error_input")
   }
   if (!identical(names(phi), expected)) {
-    stop(sprintf(paste("`phi` names must be exactly c(%s) in that order for this",
+    .abort(sprintf(paste("`phi` names must be exactly c(%s) in that order for this",
                        "model code (see ?reintervals-models)."),
                  paste0("\"", expected, "\"", collapse = ", ")),
-         call. = FALSE)
+                        class = "reintervals_error_input")
   }
   if (any(!is.finite(phi))) {
-    stop("`phi` entries must be finite.", call. = FALSE)
+    .abort("`phi` entries must be finite.", class = "reintervals_error_input")
   }
   ## variances (everything except the covariance s01) must be non-negative;
   ## s01 is a covariance and MAY be negative -- do NOT truncate it.
   var_names <- setdiff(names(phi), "s01")
   neg_var <- var_names[phi[var_names] < 0]
   if (length(neg_var)) {
-    stop("Variance component(s) must be non-negative: ",
+    .abort("Variance component(s) must be non-negative: ",
          paste(neg_var, collapse = ", "),
          ". (The intercept-slope covariance `s01` may be negative; ",
-         "variances may not.)", call. = FALSE)
+         "variances may not.)", class = "reintervals_error_input")
   }
 
   ## --- cov: NULL (singular) or a symmetric length(phi)-square matrix ------
   if (!is.null(cov)) {
     if (!is.matrix(cov) || !is.numeric(cov)) {
-      stop("`cov` must be a numeric matrix or NULL.", call. = FALSE)
+      .abort("`cov` must be a numeric matrix or NULL.", class = "reintervals_error_input")
     }
     k <- length(phi)
     if (nrow(cov) != k || ncol(cov) != k) {
-      stop(sprintf("`cov` must be %d x %d to match `phi`; got %d x %d.",
-                   k, k, nrow(cov), ncol(cov)), call. = FALSE)
+      .abort(sprintf("`cov` must be %d x %d to match `phi`; got %d x %d.",
+                   k, k, nrow(cov), ncol(cov)), class = "reintervals_error_input")
     }
     if (any(!is.finite(cov))) {
-      stop("`cov` entries must be finite (use `cov = NULL` for a singular fit).",
-           call. = FALSE)
+      .abort("`cov` entries must be finite (use `cov = NULL` for a singular fit).",
+             class = "reintervals_error_input")
     }
     if (!isSymmetric(unname(cov), tol = 1e-8)) {
-      stop("`cov` must be symmetric (it is a covariance matrix).", call. = FALSE)
+      .abort("`cov` must be symmetric (it is a covariance matrix).",
+             class = "reintervals_error_input")
     }
   }
 
   ## --- scalar payload -----------------------------------------------------
   .scalar <- function(x, nm, nonneg = FALSE, positive = FALSE) {
     if (!is.numeric(x) || length(x) != 1L || is.na(x)) {
-      stop(sprintf("`%s` must be a single non-NA numeric value.", nm),
-           call. = FALSE)
+      .abort(sprintf("`%s` must be a single non-NA numeric value.", nm),
+             class = "reintervals_error_input")
     }
     if (positive && !(x > 0)) {
-      stop(sprintf("`%s` must be positive (Inf allowed).", nm), call. = FALSE)
+      .abort(sprintf("`%s` must be positive (Inf allowed).", nm),
+             class = "reintervals_error_input")
     }
     if (nonneg && (is.finite(x) && x < 0)) {
-      stop(sprintf("`%s` must be non-negative.", nm), call. = FALSE)
+      .abort(sprintf("`%s` must be non-negative.", nm), class = "reintervals_error_input")
     }
     if (!positive && nm != "n_E" && !is.finite(x)) {
-      stop(sprintf("`%s` must be finite.", nm), call. = FALSE)
+      .abort(sprintf("`%s` must be finite.", nm), class = "reintervals_error_input")
     }
     unname(x)
   }
@@ -202,19 +205,20 @@ validate_vfun_components <- function(type, phi, cov, mean, var_mean,
   ## --- dfs: same contract as re_components$dfs (positive, Inf ok, no NA) --
   if (!is.numeric(dfs) || length(dfs) < 1L ||
         is.null(names(dfs)) || any(names(dfs) == "")) {
-    stop("`dfs` must be a non-empty named numeric vector.", call. = FALSE)
+    .abort("`dfs` must be a non-empty named numeric vector.",
+           class = "reintervals_error_input")
   }
   if (any(is.na(dfs)) || any(dfs <= 0)) {
-    stop("`dfs` must be positive (Inf allowed); NA is not permitted.",
-         call. = FALSE)
+    .abort("`dfs` must be positive (Inf allowed); NA is not permitted.",
+           class = "reintervals_error_input")
   }
 
   ## --- singular / boundary flags ------------------------------------------
   if (!is.logical(singular) || length(singular) != 1L || is.na(singular)) {
-    stop("`singular` must be a single TRUE/FALSE.", call. = FALSE)
+    .abort("`singular` must be a single TRUE/FALSE.", class = "reintervals_error_input")
   }
   if (!is.logical(boundary) || length(boundary) != 1L || is.na(boundary)) {
-    stop("`boundary` must be a single TRUE/FALSE.", call. = FALSE)
+    .abort("`boundary` must be a single TRUE/FALSE.", class = "reintervals_error_input")
   }
 
   structure(

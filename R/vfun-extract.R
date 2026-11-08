@@ -64,13 +64,15 @@
 ## ---- model parse: classify + Sigma/V/REML-NLL closures  --
 .vfun_parse <- function(model) {
   if (!inherits(model, "merMod"))
-    stop("vfun_extract(): `model` must be an lme4 merMod fit.", call. = FALSE)
+    .abort("vfun_extract(): `model` must be an lme4 merMod fit.",
+           class = "reintervals_error_input")
 
   cnms <- lme4::getME(model, "cnms")
   gnames <- names(cnms)
   if (length(unique(gnames)) != 1L)
-    stop("vfun_extract(): exactly one grouping factor is supported (got: ",
-         paste(unique(gnames), collapse = ", "), ").", call. = FALSE)
+    .abort("vfun_extract(): exactly one grouping factor is supported (got: ",
+         paste(unique(gnames), collapse = ", "), ").",
+                class = "reintervals_error_unsupported")
   group_name <- unique(gnames)
 
   re_terms <- unlist(cnms, use.names = FALSE)
@@ -79,8 +81,8 @@
 
   slope_name <- setdiff(re_terms, "(Intercept)")
   if (has_slope && length(slope_name) != 1L)
-    stop("vfun_extract(): expected a single slope term; got: ",
-         paste(slope_name, collapse = ", "), call. = FALSE)
+    .abort("vfun_extract(): expected a single slope term; got: ",
+         paste(slope_name, collapse = ", "), class = "reintervals_error_unsupported")
 
   if (!has_slope) {
     type <- "M1"; time_name <- NA_character_
@@ -93,14 +95,15 @@
   fe <- lme4::fixef(model)
   fe_names <- names(fe)
   if (!("(Intercept)" %in% fe_names))
-    stop("vfun_extract(): fixed part must contain an intercept.", call. = FALSE)
+    .abort("vfun_extract(): fixed part must contain an intercept.",
+           class = "reintervals_error_unsupported")
   if (has_slope && !(time_name %in% fe_names))
-    stop("vfun_extract(): the random-slope variable '", time_name,
-         "' must also be a fixed effect.", call. = FALSE)
+    .abort("vfun_extract(): the random-slope variable '", time_name,
+         "' must also be a fixed effect.", class = "reintervals_error_unsupported")
   fe_time <- setdiff(fe_names, "(Intercept)")
   if (length(fe_time) != 1L)
-    stop("vfun_extract(): fixed part must be exactly ~ 1 + time (found: ",
-         paste(fe_names, collapse = ", "), ").", call. = FALSE)
+    .abort("vfun_extract(): fixed part must be exactly ~ 1 + time (found: ",
+         paste(fe_names, collapse = ", "), ").", class = "reintervals_error_unsupported")
   if (is.na(time_name)) time_name <- fe_time
 
   mf <- stats::model.frame(model)
@@ -270,8 +273,8 @@ vfun_extract <- function(model, t0,
   target    <- match.arg(target)
   df_method <- match.arg(df_method)
   if (!is.numeric(t0) || length(t0) != 1L || !is.finite(t0))
-    stop("`t0` must be a single finite numeric value (the container holds one ",
-         "time point).", call. = FALSE)
+    .abort("`t0` must be a single finite numeric value (the container holds one ",
+         "time point).", class = "reintervals_error_input")
 
   parsed <- .vfun_parse(model)
   vc     <- .vfun_vc_cov(parsed, boundary_tol = boundary_tol)
@@ -333,6 +336,7 @@ vfun_extract <- function(model, t0,
   attr(out, "vg_floored") <- vg$floored
   attr(out, "df_fallback") <- c(F = rF[2] == 1, T = rT[2] == 1, G = rG[2] == 1,
                                 e = re[2] == 1)
+  attr(out, "n_groups") <- parsed$B          # for the K - 1 containment df
   out
 }
 
@@ -343,10 +347,11 @@ vfun_extract <- function(model, t0,
 ## numerical round-off (~ -1e-15) as a genuine negative group variance.
 .floor_vg <- function(raw_vg, t0, tol = 1e-8) {
   if (is.finite(raw_vg) && raw_vg < -tol) {
-    warning(sprintf(
+    .warn(sprintf(
       "V_G(t0 = %g) is model-implied negative (%.3g); floored to 0. The interval ",
       t0, raw_vg),
-      "at this t0 is degenerate and may be anti-conservative.", call. = FALSE)
+      "at this t0 is degenerate and may be anti-conservative.",
+             class = "reintervals_warning_truncation")
     return(list(value = 0, floored = TRUE))
   }
   list(value = max(0, raw_vg), floored = FALSE)

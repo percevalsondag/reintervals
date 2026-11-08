@@ -26,7 +26,7 @@ test_that("new_group_mean_lmm errors (no NA bounds) on a crossed-no-interaction 
 test_that("CI / PI stay available with finite bounds there", {
   fit <- crossed_noint_fit()
   for (verb in list(ci_lmm, pi_lmm)) {
-    out <- verb(fit)
+    out <- quiet_limitation(verb(fit))
     expect_true(all(is.finite(out$lower)))
     expect_true(all(is.finite(out$upper)))
   }

@@ -64,11 +64,13 @@
   ok <- !is.na(y) & !is.na(time) & !is.na(batch)
   y <- y[ok]; time <- time[ok]; batch <- droplevels(batch[ok])
   K <- nlevels(batch); n <- length(y)
-  if (K < 2L) stop(sprintf("ti_gpq_raw(): the GPQ tolerance interval needs >= 2 batches (grouping levels) to estimate the between-batch variance; got %d.", K), call. = FALSE)
+  if (K < 2L) .abort(sprintf("ti_gpq_raw(): the GPQ tolerance interval needs >= 2 batches (grouping levels) to estimate the between-batch variance; got %d.", K),
+         class = "reintervals_error_groups")
   s <- 2L                                   # random intercept + random slope
   df_resid <- n - s * K                     # n - 2K
   if (df_resid < 1L)
-    stop("ti_gpq_raw(): non-positive residual df (need more within-batch replication).")
+    .abort("ti_gpq_raw(): non-positive residual df (need more within-batch replication).",
+           class = "reintervals_error_residual_df")
 
   ## ---- per-batch OLS pieces: (Z_k'Z_k)^{-1}, bhat_k, within-batch SSE ----
   bl  <- split(seq_len(n), batch)
@@ -81,7 +83,8 @@
     Zk  <- cbind(1, tk)                     # n_k x 2
     ZtZ <- crossprod(Zk)                    # 2x2
     if (qr(ZtZ)$rank < 2L)
-      stop(sprintf("ti_gpq_raw(): batch %s has < 2 distinct time points.", levels(batch)[k]))
+      .abort(sprintf("ti_gpq_raw(): batch %s has < 2 distinct time points.", levels(batch)[k]),
+             class = "reintervals_error_time_points")
     ZtZinv <- solve(ZtZ)
     bk  <- ZtZinv %*% crossprod(Zk, yk)     # OLS coefficients
     ZtZi[[k]] <- ZtZinv
@@ -117,6 +120,19 @@
 
     ## solve  sum_i Qi/(a_tau + lambda_i Rs2e) = Qstar  for a_tau in (-phi1 Rs2e, Inf)
     Rtau2 <- .solve_tau2(Qi, lam, Rs2e, Qstar, phi1)
+    ## drop draws without a valid tau2 solution (NA); more than 1% is an error
+    na <- is.na(Rtau2)
+    n_na <- sum(na)
+    if (n_na > 0.01 * M) {
+      .abort(sprintf(paste0("ti_gpq_raw(): %d of %d GPQ draws (%.1f%%) have no valid ",
+                            "between-batch variance solution at t0 = %g; more than ",
+                            "1%% is treated as a numerical failure."),
+                     n_na, M, 100 * n_na / M, tt),
+             class = "reintervals_error_numerical")
+    }
+    if (n_na > 0L) {
+      Rtau2 <- Rtau2[!na]; Rs2e <- Rs2e[!na]; Zstar <- Zstar[!na]
+    }
     boundary <- Rtau2 <= (-phi1 * Rs2e + 1e-12 * pmax(Rs2e, 1))
 
     ## R_G = diag(Rtau2 + Rs2e a_k); weighted-mean center and its variance.
@@ -153,7 +169,7 @@
                lower = lower, upper = upper,
                tau2_med = stats::median(Rtau2),
                s2e_med = stats::median(Rs2e),
-               frac_boundary = mean(boundary),
+               frac_boundary = mean(boundary), n_na_draws = n_na,
                K = K, df_resid = df_resid, phi1 = phi1,
                content = content, conf = conf, c_resid = c_resid,
                stringsAsFactors = FALSE)
@@ -193,6 +209,11 @@
   clamp <- is.finite(h_lo) & (Qstar >= h_lo) # interior root does NOT exist
   out <- lo
   interior <- !clamp
+  ## A draw whose h is NA anywhere (a denominator a + lambda_i s2e <= 0, which
+  ## can only arise from round-off pushing a lambda_i below phi1) has no valid
+  ## solution: it is returned as NA, never as a number. The caller drops it and
+  ## reports the count.
+  bad <- is.na(h_lo)
   if (any(interior)) {
     blo <- (lo + eps)[interior]
     s2e_i <- s2e[interior]; Qs_i <- Qstar[interior]
@@ -203,11 +224,14 @@
       denom[denom <= 0] <- NA
       rowSums(sweep(1 / denom, 2, Qi, `*`))
     }
-    need <- rep(TRUE, length(blo)); it <- 0L
+    bad_i <- bad[interior]
+    need <- !bad_i; it <- 0L
     while (any(need) && it < 200L) {
       hv <- rep(Inf, length(blo))
       hv[need] <- h_at(bhi[need], which(need))
       done <- hv < Qs_i
+      bad_i[is.na(done)] <- TRUE
+      done[is.na(done)] <- TRUE               # stop expanding a bad draw
       need[done] <- FALSE
       bhi[need] <- blo[need] + (bhi[need] - blo[need]) * 2
       it <- it + 1L
@@ -217,11 +241,15 @@
       mid <- 0.5 * (blo + bhi)
       hv  <- h_at(mid, seq_along(mid))
       go_up <- hv > Qs_i                      # h decreasing: too high -> move lo up
+      bad_i[is.na(go_up)] <- TRUE
+      go_up[is.na(go_up)] <- FALSE
       blo[go_up] <- mid[go_up]
       bhi[!go_up] <- mid[!go_up]
     }
     out[interior] <- 0.5 * (blo + bhi)
+    bad[interior] <- bad_i
   }
+  out[bad] <- NA_real_
   out
 }
 

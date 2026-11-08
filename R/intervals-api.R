@@ -40,10 +40,10 @@ lmm_interval_control <- function(seed = NULL, M = 10000L,
                                  ci_df = c("satterthwaite", "kenward-roger")) {
   ci_df <- match.arg(ci_df)
   if (!is.null(seed) && (!is.numeric(seed) || length(seed) != 1L || is.na(seed))) {
-    stop("`seed` must be NULL or a single number.", call. = FALSE)
+    .abort("`seed` must be NULL or a single number.", class = "reintervals_error_input")
   }
   if (!is.numeric(M) || length(M) != 1L || is.na(M) || M < 1) {
-    stop("`M` must be a single positive integer.", call. = FALSE)
+    .abort("`M` must be a single positive integer.", class = "reintervals_error_input")
   }
   structure(list(seed = seed, M = as.integer(M), ci_df = ci_df),
             class = "lmm_interval_control")
@@ -53,20 +53,22 @@ lmm_interval_control <- function(seed = NULL, M = 10000L,
 ## Returns alpha. both -> error; neither -> 0.05; level -> 1 - level.
 .resolve_alpha <- function(alpha, level) {
   if (!is.null(alpha) && !is.null(level)) {
-    stop("Supply only one of `alpha` or `level` (they are the same quantity).",
-         call. = FALSE)
+    .abort("Supply only one of `alpha` or `level` (they are the same quantity).",
+           class = "reintervals_error_input")
   }
   if (is.null(alpha) && is.null(level)) return(0.05)
   if (!is.null(level)) {
     if (!is.numeric(level) || length(level) != 1L || is.na(level) ||
           level <= 0 || level >= 1) {
-      stop("`level` must be a single number in (0, 1).", call. = FALSE)
+      .abort("`level` must be a single number in (0, 1).",
+             class = "reintervals_error_input")
     }
     return(1 - level)
   }
   if (!is.numeric(alpha) || length(alpha) != 1L || is.na(alpha) ||
         alpha <= 0 || alpha >= 1) {
-    stop("`alpha` must be a single number in (0, 1).", call. = FALSE)
+    .abort("`alpha` must be a single number in (0, 1).",
+           class = "reintervals_error_input")
   }
   alpha
 }
@@ -74,8 +76,8 @@ lmm_interval_control <- function(seed = NULL, M = 10000L,
 ## defensive front-door class check (clear error at the door).
 .assert_lmm <- function(model) {
   if (!inherits(model, "lmerMod")) {
-    stop("`model` must be a fitted lme4 model (an `lmerMod` from lmer()).",
-         call. = FALSE)
+    .abort("`model` must be a fitted lme4 model (an `lmerMod` from lmer()).",
+           class = "reintervals_error_input")
   }
   invisible(TRUE)
 }
@@ -120,7 +122,8 @@ lmm_interval_control <- function(seed = NULL, M = 10000L,
                  "content", "P", "sides", "df", "se", "method", "design",
                  "singular", "boundary", "vg_floored", "tau2_med", "s2e_med",
                  "frac_boundary", "K", "df_resid", "phi1", "c_resid", "n_E",
-                 "df_method", "route_reason", "df_rule", "W")
+                 "df_method", "route_reason", "df_rule", "W", "mls_bound",
+                 "n_na_draws")
 
 ## The output unifier. Maps any engine's native frame to the single tidy
 ## contract; relabels only, never recomputes. Universal columns, in order:
@@ -164,10 +167,10 @@ lmm_interval_control <- function(seed = NULL, M = 10000L,
   diag <- list()
   for (cn in c("df", "df_method", "df_rule", "W", "se", "tau2_med", "s2e_med",
                "frac_boundary", "K", "df_resid", "phi1", "c_resid",
-               "route_reason")) {
+               "route_reason", "mls_bound", "n_na_draws")) {
     if (cn %in% names(native)) diag[[cn]] <- native[[cn]]
   }
-  for (a in c("beta_hat", "n_E", "U", "Vhat_Y", "C1", "C2")) {
+  for (a in c("beta_hat", "n_E", "U", "Vhat_Y", "C1", "C2", "pi_df_fallback")) {
     v <- attr(native, a); if (!is.null(v)) diag[[a]] <- v
   }
   attr(out, "diagnostics") <- diag
@@ -374,10 +377,10 @@ new_group_mean_lmm <- function(model, newdata = NULL, alpha = NULL, level = NULL
           else if (kind == "new_group_mean" && .ngm_uses_anova(model)) "anova-mls"
           else "ems-mls"
     if (!method %in% ok) {
-      stop(sprintf(
+      .abort(sprintf(
         "method = \"%s\" is not available for a %s model on this interval; ",
         method, .model_class(model)),
-        sprintf("use \"auto\" or \"%s\".", ok), call. = FALSE)
+        sprintf("use \"auto\" or \"%s\".", ok), class = "reintervals_error_method")
     }
   }
   ## Anti-conservative-drift warning, scoped to the drifting cells: the EMS CI
@@ -389,13 +392,33 @@ new_group_mean_lmm <- function(model, newdata = NULL, alpha = NULL, level = NULL
   ## re-route. The new-group-mean interval on this structure uses the unweighted
   ## lot-mean construction (Fa, .ngm_ri) and does not warn.
   if (kind %in% c("CI", "PI") && .m1_has_single_obs_lot(model)) {
-    warning("This is a fixed-slope model with single-observation lots; the ",
+    .warn("This is a fixed-slope model with single-observation lots; the ",
             "EMS ", kind, " interval may be anti-conservative (too ",
             "narrow) on such data, because REML precision-weighting down-weights ",
             "the single-observation lots. The tolerance and new-group-mean ",
             "intervals use the unweighted lot-mean (Montes) closed forms on this ",
             "structure; no validated alternative is currently available for the ",
-            "confidence or prediction interval here.", call. = FALSE)
+            "confidence or prediction interval here.",
+                   class = "reintervals_warning_limitation")
+  }
+  ## Known limitation (few top-level groups), documented in ?pi_lmm since
+  ## 0.2.0: the Francq PI on a random-intercept model whose top (coarsest)
+  ## random factor has five or fewer levels. The documented condition also
+  ## names a dominant between-group variance (ICC near 0.9), but no ICC
+  ## threshold is documented, so only the level count is checked.
+  if (kind == "PI" && !.has_random_slope(model)) {
+    n_top <- min(vapply(lme4::getME(model, "flist"), nlevels, numeric(1)))
+    if (n_top <= 5L) {
+      .warn(sprintf("The top random factor has %d levels (five or fewer). ", n_top),
+            "With few levels of the top random factor (five or fewer) and a ",
+            "dominant between-group variance (an intraclass correlation near ",
+            "0.9), the Francq et al. (2019) prediction interval used for ",
+            "random-intercept models can under-cover: the worst coverage observed ",
+            "in the package's validation was about 0.93 for a nominal 0.95, ",
+            "consistent with Francq et al. (2019, Fig. 2).",
+            class = "reintervals_warning_limitation",
+            data = list(n_top_levels = n_top))
+    }
   }
   out <- .interval_lmm(model, newdata = newdata, kind = kind, level = level,
                        sides = sides,
@@ -438,7 +461,8 @@ lmm_predict <- function(model,
   over     <- match.arg(over)
   if (interval != "tolerance" && (!isTRUE(all.equal(P, 0.95)) ||
         over != "observation")) {
-    stop("`P` and `over` apply to interval = \"tolerance\" only.", call. = FALSE)
+    .abort("`P` and `over` apply to interval = \"tolerance\" only.",
+           class = "reintervals_error_input")
   }
   switch(interval,
     confidence     = ci_lmm(model, newdata, alpha, level, sides, method, control),

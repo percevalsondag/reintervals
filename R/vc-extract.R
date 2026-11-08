@@ -14,8 +14,8 @@
 .assert_random_intercepts <- function(model) {
   vc <- as.data.frame(lme4::VarCorr(model))
   if (!all(is.na(vc$var2))) {
-    stop("Only random-intercept models are supported (no random slopes or ",
-         "correlated random effects).", call. = FALSE)
+    .abort("Only random-intercept models are supported (no random slopes or ",
+         "correlated random effects).", class = "reintervals_error_unsupported")
   }
   vc
 }
@@ -144,19 +144,19 @@
 .check_newdata <- function(model, newdata) {
   if (is.null(newdata)) return(invisible(NULL))
   if (!is.data.frame(newdata) && !is.list(newdata)) {
-    stop("`newdata` must be a data frame with one column per model predictor; ",
+    .abort("`newdata` must be a data frame with one column per model predictor; ",
          "got ", class(newdata)[1L], ". ",
          "Supply e.g. data.frame(", paste(all.vars(stats::delete.response(
            stats::terms(model, fixed.only = TRUE))), collapse = " = , "),
-         " = ).", call. = FALSE)
+         " = ).", class = "reintervals_error_input")
   }
   need <- all.vars(stats::delete.response(stats::terms(model, fixed.only = TRUE)))
   miss <- setdiff(need, names(newdata))
   if (length(miss)) {
-    stop("`newdata` is missing required predictor(s): ",
+    .abort("`newdata` is missing required predictor(s): ",
          paste(miss, collapse = ", "),
          ". `newdata` must supply a column for each model predictor (",
-         paste(need, collapse = ", "), ").", call. = FALSE)
+         paste(need, collapse = ", "), ").", class = "reintervals_error_input")
   }
   invisible(NULL)
 }
@@ -199,8 +199,8 @@
     ## vcovAdj(model)); called with the precomputed adjusted covariance.
     ddf <- tryCatch(pbkrtest::Lb_ddf(l, kr$V0, kr$Vadj), error = function(e) NA_real_)
     if (!isTRUE(is.finite(ddf) && ddf > 0)) {
-      stop("The Kenward-Roger df could not be computed for this model; use the ",
-           "default ci_df = \"satterthwaite\".", call. = FALSE)
+      .abort("The Kenward-Roger df could not be computed for this model; use the ",
+           "default ci_df = \"satterthwaite\".", class = "reintervals_error_numerical")
     }
     var_kr <- as.numeric(l %*% kr$Vadj_mat %*% t(l))
     return(list(df = ddf, method = "kenward-roger", var_mean = var_kr))
@@ -220,14 +220,14 @@
 ## pbkrtest is missing or vcovAdj() fails.
 .kr_parts <- function(model) {
   if (!requireNamespace("pbkrtest", quietly = TRUE)) {
-    stop("ci_df = \"kenward-roger\" requires the 'pbkrtest' package, which is ",
+    .abort("ci_df = \"kenward-roger\" requires the 'pbkrtest' package, which is ",
          "not installed. Install it, or use the default ci_df = ",
-         "\"satterthwaite\".", call. = FALSE)
+         "\"satterthwaite\".", class = "reintervals_error_dependency")
   }
   vadj <- tryCatch(pbkrtest::vcovAdj(model), error = function(e) NULL)
   if (is.null(vadj)) {
-    stop("The Kenward-Roger df could not be computed for this model; use the ",
-         "default ci_df = \"satterthwaite\".", call. = FALSE)
+    .abort("The Kenward-Roger df could not be computed for this model; use the ",
+         "default ci_df = \"satterthwaite\".", class = "reintervals_error_numerical")
   }
   list(V0 = stats::vcov(model), Vadj = vadj, Vadj_mat = as.matrix(vadj))
 }
@@ -316,7 +316,8 @@ requireNamespace <- NULL
     crossed = c(desc$grp_A, desc$grp_B, desc$grp_AB))
   sd <- .stratum_df(model)[c(grp, "Residual")]
   if (anyNA(sd) || length(sd) != length(dc$ems$df)) {
-    stop("Internal: stratum df could not be matched to the EMS terms.", call. = FALSE)
+    .abort("Internal: stratum df could not be matched to the EMS terms.",
+           class = "reintervals_error_internal")
   }
   dc$ems$df[] <- unname(sd)
   dc
@@ -356,7 +357,8 @@ vc_extract <- function(model, design = NULL,
                        target = c("observable", "true_value"),
                        newdata = NULL) {
   if (!inherits(model, "lmerMod")) {
-    stop("`model` must be a fitted `lmerMod` (from lme4::lmer).", call. = FALSE)
+    .abort("`model` must be a fitted `lmerMod` (from lme4::lmer).",
+           class = "reintervals_error_input")
   }
   target <- match.arg(target)
   .assert_random_intercepts(model)

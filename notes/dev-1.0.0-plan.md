@@ -380,6 +380,32 @@ path is untouched.
 
 ## A4. Graybill-Wang non-negativity guard
 
+**Status: DONE on `dev`.** `R/mls.R` `.mls_upper()`: Graybill-Wang when every
+k_j >= 0, otherwise Ting-Burdick-Graybill (H_q on the positive terms, G_r on the
+negative ones, H_qr over every (positive, negative) pair; for one term of each sign
+it reproduces simstudy `pilot/methods.R` `mls_upper()` exactly). `ti_francq()` uses
+it; `mls_bound` is reported in the diagnostics for every MLS TI (`ems-mls`
+computed; `anova-mls` and `reml-mls` are always `"graybill-wang"`, since their
+coefficients are non-negative by construction). The crossed NGM Gv df falls back to
+`.ddf_containment()` with `df_rule = "containment"` when pA or the df is undefined.
+
+Deviations / findings:
+- **No negative k_j found from the synthesis.** Searches: all 625 2×2 crossed tables
+  with n_ij in 1..5; 3000+ random crossed tables (A, B in 2..6, small and large
+  counts); 3000 random nested designs. The smallest k was **-2.8e-16 round-off**
+  (the exact value is 0, e.g. counts [[3,1],[4,1]] give k_AB = -3.6e-17). The
+  analysis agrees for nested designs: k_A = 1/e_AA > 0 always. So the guard uses a
+  scale-relative tolerance, `k < -1e-12 * max|k|`; a bare `k < 0` would have switched
+  those designs to TBG on round-off.
+- Test (ii) therefore builds the negative coefficient at the **container** level
+  (`re_components` with `k_AB = -0.3`), not from a design. The crossed-NGM fallback
+  is tested by mocking `.design_components_fit` to zero k_A and k_B (pA = 0/0).
+- With several negative terms the TBG form is the pairwise generalisation; it has no
+  oracle (the reference has one negative term). It is unreachable today.
+- The design-synthesis.R:57-69 code itself is unchanged: the guard lives where the
+  k_j meet the bound (`ti_francq`). The synthesis still only enforces sum(k) = 1.
+
+
 Where the k_j enter the MLS bound:
 - `ti_francq()` ti-francq.R:88 (`sigma2_t <- sum(ems$k * ems$ms)`), ti-francq.R:96-97
   (`h <- df/qchisq(a, df) - 1`; `inner <- sum(h^2 * k^2 * ms^2)`), used in
@@ -427,6 +453,50 @@ unbalanced designs that today give a wrong (mis-signed) bound.
 ---
 
 ## A5. Classed conditions
+
+**Status: DONE on `dev`.** `R/conditions.R`: `.abort()` / `.warn()` (base
+`errorCondition` / `warningCondition`, no call recorded) and the registered
+hierarchy. All 111 `stop()` / `warning()` sites in R/ are converted with unchanged
+message text. The only bare `stop()` / `warning()` left are inside the two helpers
+(guarded by a grep test in `test-conditions.R`). Names follow the step-2 brief:
+`reintervals_warning_limitation` (the plan said `reintervals_known_limitation`).
+Reserved, defined but not yet emitted: `reintervals_error_defunct`,
+`reintervals_warning_deprecated`, `reintervals_warning_mc`.
+
+Silent paths surfaced (inventory numbers from A5.1):
+- #5 `pi_df_fallback` is now carried into `attr(., "diagnostics")`.
+- #2 slope CI/PI/NGM `df_rule` = `"satterthwaite"` / `"containment"` (NA for a
+  hand-built container without `df_fallback`).
+- #1 the 1e6 substitution is replaced by the containment df **K - 1** (as
+  specified). `vfun_extract` now attaches `attr(, "n_groups")`; a container
+  without it is a `reintervals_error_numerical`. **No test value moved**: no test
+  reaches this branch (the committed `slope_oracle.rds` dfs are finite, and
+  `vfun_extract` always returns a finite df). Note that K - 1 is a different rule
+  from the slope engine's own between-containment `B - k_re` (= K - 2 with a random
+  slope, vfun-extract.R:49).
+- #11 `.solve_tau2` marks draws without a solution as NA (before, an NA would have
+  errored inside the indexed assignments; it was not actually let through as a
+  number); `.gpq_core` drops them, reports `n_na_draws`, and raises
+  `reintervals_error_numerical` above 1%.
+- #12 crossed NGM NaN path: see A4.
+- #18 the few-groups PI limitation: `reintervals_warning_limitation` from `pi_lmm()`
+  on random-intercept models whose coarsest random factor has <= 5 levels, using the
+  documented text and no ICC threshold. #17 (the single-obs fixed-slope CI/PI
+  warning) is now the same class.
+- Not done, as not in the step-2 brief: the fallback *warnings* proposed in A5.2
+  (`reintervals_warning_fallback` on df fallbacks; the class exists and is used
+  only by the truncation/floor warnings); #13, #14, #15 (newdata check on the
+  slope coverage path), #19 (extrapolation).
+- Found while testing: `ems_synthesis(matrix(1, 1, 1), "crossed")` fails inside
+  `stats::model.matrix` with an unclassed base error (no package check runs first).
+  It is unreachable from a fitted model (classify_design needs >= 2 levels), but
+  it is a gap for the internal function.
+- Test churn: the new limitation warning hit 4 existing tests (top factor 3-5
+  levels). They use a `quiet_limitation()` helper that muffles only that class
+  (helper-conditions.R), or, in covariate-routing, `expect_warning(class = )`. The
+  two stray outputs are silenced at the call site (test-vc-extract.R:52
+  `suppressMessages`; test-vfun-components.R:145 `expect_output`).
+
 
 ### A5.1 Inventory: places that can return NaN/NA limits or fall back silently
 
@@ -638,11 +708,12 @@ Proposed implementation order (each step is one reviewable commit series, with
 defaults unchanged unless stated):
 1. **T scaffolding + `.Rbuildignore` `^notes$`**: move the published-number tests,
    add the SAS part1 fixtures and parser. No R/ changes. (Low risk.)
-2. **A5 helpers + inventory fixes** that change no numbers (classes, carrying
-   `pi_df_fallback`/`df_fallback` into the diagnostics, #15 newdata check, #20).
+2. **A5 helpers + inventory fixes**. **Done on `dev`** (see A5 status; #13-#15 and
+   #19 remain).
 3. **A3** KR vcovAdj. **Done on `dev`** (decision a). Gates: KR vs pbkrtest
    (SE + df, 1e-8) on all five SAS fits; KR SE vs SAS on the balanced fits only.
-4. **A4** `.mls_upper` + TBG. Gate: bit-identity on 5.2/5.3/4.4 + negative-k case.
+4. **A4** `.mls_upper` + TBG. **Done on `dev`** (no negative k_j reachable from the
+   synthesis; guard with a round-off tolerance).
 5. **A2** GPQ hardening (CRN, pivots/eval split, default seed, M = 20000, MC error,
    time-point class). **Changes the GPQ numbers** (NEWS).
 6. **B plumbing**: control passed down, diagnostics carry the arm; then arms one at

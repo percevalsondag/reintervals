@@ -77,9 +77,9 @@ test_that("one-sided 0.95 bound == two-sided 0.90 bound for CI / PI / new-group 
     nested = list(fit_q(y ~ 1 + (1 | fa) + (1 | fc), balanced_nested()), NULL))        # NGM ems (Gm)
   for (nm in names(cases)) for (v in c("ci_lmm", "pi_lmm", "new_group_mean_lmm")) {
     fm <- cases[[nm]][[1]]; nd <- cases[[nm]][[2]]
-    two <- get(v)(fm, newdata = nd, level = 0.90)
-    lo <- get(v)(fm, newdata = nd, level = 0.95, sides = "lower")
-    up <- get(v)(fm, newdata = nd, level = 0.95, sides = "upper")
+    two <- quiet_limitation(get(v)(fm, newdata = nd, level = 0.90))
+    lo <- quiet_limitation(get(v)(fm, newdata = nd, level = 0.95, sides = "lower"))
+    up <- quiet_limitation(get(v)(fm, newdata = nd, level = 0.95, sides = "upper"))
     info <- paste(nm, v)
     expect_equal(lo$lower, two$lower, tolerance = 1e-12, info = info)
     expect_equal(up$upper, two$upper, tolerance = 1e-12, info = info)
@@ -128,7 +128,7 @@ test_that("PI df on singular fits is the stratum containment df (A - 1; min(A, B
   expect_true(th$pi_df_fallback)
   expect_equal(th$df_pi, .ddf_containment(f1))
   expect_equal(th$df_pi, 4)
-  expect_equal(attr(pi_lmm(f1), "diagnostics")$df, 4)
+  expect_equal(attr(quiet_limitation(pi_lmm(f1)), "diagnostics")$df, 4)
   set.seed(1); A <- 3; B <- 4                                       # singular unbalanced crossed
   cells <- matrix(c(1, 2, 3, 2, 1, 2, 3, 1, 2, 1, 2, 3), A, B)
   ci <- rep(seq_len(A * B), as.vector(cells))

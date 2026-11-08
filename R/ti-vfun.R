@@ -42,26 +42,27 @@
 ti_vfun <- function(comp, content = 0.99, conf = 0.95,
                     sides = c("two.sided", "lower", "upper")) {
   if (!inherits(comp, "vfun_components")) {
-    stop("`comp` must be a `vfun_components` object (see ?vfun_extract).",
-         call. = FALSE)
+    .abort("`comp` must be a `vfun_components` object (see ?vfun_extract).",
+           class = "reintervals_error_input")
   }
   sides <- match.arg(sides)
   for (nm in c("content", "conf")) {
     v <- get(nm)
     if (!is.numeric(v) || length(v) != 1L || is.na(v) || v <= 0 || v >= 1) {
-      stop(sprintf("`%s` must be a single number strictly between 0 and 1.", nm),
-           call. = FALSE)
+      .abort(sprintf("`%s` must be a single number strictly between 0 and 1.", nm),
+             class = "reintervals_error_input")
     }
   }
   tgt <- attr(comp, "target")
   if (!is.null(tgt) && !identical(tgt, "observable")) {
-    stop("ti_vfun() implements the observable (future-observation) target only ",
+    .abort("ti_vfun() implements the observable (future-observation) target only ",
          "in this stage; the batch-mean (true_value) target is the GPQ ",
-         "engine's job.", call. = FALSE)
+         "engine's job.", class = "reintervals_error_unsupported")
   }
   if (!all(c("G", "e") %in% names(comp$dfs))) {
-    stop("`comp$dfs` must carry the \"G\" (between) and \"e\" (residual) df ",
-         "entries; build the container with vfun_extract().", call. = FALSE)
+    .abort("`comp$dfs` must carry the \"G\" (between) and \"e\" (residual) df ",
+         "entries; build the container with vfun_extract().",
+                class = "reintervals_error_input")
   }
 
   mu  <- comp$mean
@@ -94,6 +95,7 @@ ti_vfun <- function(comp, content = 0.99, conf = 0.95,
     upper = if (sides == "lower")  Inf else mu + hw,
     content = content, conf = conf, df = min(nu_G, nu_e), sides = sides,
     design = comp$type, method = "reml-mls",
+    mls_bound = "graybill-wang",                    # coefficients on V_G and s2e are 1
     singular = isTRUE(comp$singular), boundary = isTRUE(comp$boundary),
     vg_floored = isTRUE(attr(comp, "vg_floored")),
     stringsAsFactors = FALSE

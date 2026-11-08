@@ -41,21 +41,23 @@
                     sides = c("two.sided", "lower", "upper")) {
   sides <- match.arg(sides)
   if (!inherits(model, "lmerMod")) {
-    stop("`model` must be a fitted `lmerMod` (an lmer fit).", call. = FALSE)
+    .abort("`model` must be a fitted `lmerMod` (an lmer fit).",
+           class = "reintervals_error_input")
   }
   target <- match.arg(target)
   if (target == "true_value") {
-    stop("The true_value (between-level only) tolerance interval is not ",
+    .abort("The true_value (between-level only) tolerance interval is not ",
          "supported for any design; only `target = \"observable\"` is ",
          "implemented. The prediction interval (intervals_lmm / pi_newobs) ",
-         "does support true_value.", call. = FALSE)
+         "does support true_value.", class = "reintervals_error_unsupported")
   }
   .assert_random_intercepts(model)
   desc <- .design_of(model)
   comps <- .var_components(model)
   dc <- .design_components_fit(model, desc, comps, target)   # fixed-effect-adjusted stratum df
   if (is.null(dc$ems)) {
-    stop(sprintf("Tolerance intervals are not available for a '%s' design (no closed-form variance decomposition). Confidence and prediction intervals are available for this model.", desc$type), call. = FALSE)
+    .abort(sprintf("Tolerance intervals are not available for a '%s' design (no closed-form variance decomposition). Confidence and prediction intervals are available for this model.", desc$type),
+           class = "reintervals_error_design")
   }
   fx <- .fixed(model, newdata)
   singular <- .is_singular(model)
@@ -69,21 +71,26 @@
     )
     ti <- ti_francq(comp, content = level, conf = conf,
                     sides = if (sides == "two.sided") "two" else sides)
-    c(ti$lower, ti$upper)
+    list(lower = ti$lower, upper = ti$upper, mls_bound = attr(ti, "mls_bound"))
   }
-  bm <- vapply(seq_len(nr), bounds, numeric(2))
+  bm <- lapply(seq_len(nr), bounds)
 
   out <- cbind(fx$newdata, data.frame(
-    type = "TI", estimate = fx$fit, lower = bm[1, ], upper = bm[2, ],
-    level = level, conf = conf, sides = sides, stringsAsFactors = FALSE
+    type = "TI", estimate = fx$fit,
+    lower = vapply(bm, `[[`, numeric(1), "lower"),
+    upper = vapply(bm, `[[`, numeric(1), "upper"),
+    level = level, conf = conf, sides = sides,
+    mls_bound = vapply(bm, `[[`, character(1), "mls_bound"),
+    stringsAsFactors = FALSE
   ), row.names = NULL)
   attr(out, "design") <- desc$type
   attr(out, "balanced") <- isTRUE(desc$balanced)
   attr(out, "singular") <- singular
 
   if (singular) {
-    warning("Singular fit: a variance component is at the boundary (zero); the ",
-            "tolerance interval reflects a near-degenerate model.", call. = FALSE)
+    .warn("Singular fit: a variance component is at the boundary (zero); the ",
+            "tolerance interval reflects a near-degenerate model.",
+                   class = "reintervals_warning_singular")
   }
   out
 }

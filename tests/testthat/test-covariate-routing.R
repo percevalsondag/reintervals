@@ -21,14 +21,21 @@ covar_data <- function(single_obs = FALSE, seed = 7) {
   d
 }
 
-## all four verbs run, route to ems-mls, and emit no warning at all
+## all four verbs run, route to ems-mls, and emit no warning at all -- except
+## the documented few-top-level-groups PI limitation (<= 5 levels), which must
+## then be the only warning pi_lmm raises
 expect_ems_all_verbs <- function(fm, nd) {
+  few <- min(vapply(lme4::getME(fm, "flist"), nlevels, numeric(1))) <= 5
   expect_false(lme4::isSingular(fm))                 # no singular-fit warning either
   expect_false(.m1_not_clean_balanced(fm))
   expect_false(.m1_has_single_obs_lot(fm))
   expect_true(is.na(.m1_time_name(fm)))
   for (verb in list(ci_lmm, pi_lmm, new_group_mean_lmm)) {
-    expect_warning(r <- verb(fm, newdata = nd), NA)
+    if (identical(verb, pi_lmm) && few) {
+      expect_warning(r <- verb(fm, newdata = nd), class = "reintervals_warning_limitation")
+    } else {
+      expect_warning(r <- verb(fm, newdata = nd), NA)
+    }
     expect_identical(r$method, "ems-mls")
     expect_true(all(is.finite(c(r$lower, r$upper))))
   }

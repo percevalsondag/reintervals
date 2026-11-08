@@ -147,10 +147,10 @@
 ## exercised directly.
 .choose_slope_engine <- function(target, singular, engine) {
   if (engine == "closed" && target == "true_value") {
-    stop("The closed form has no validated batch-mean (true_value) variant; it ",
+    .abort("The closed form has no validated batch-mean (true_value) variant; it ",
          "is precisely the route the dispatcher avoids for batch-mean (verified ",
          "non-singular breakdown). Use engine = \"gpq\" or ",
-         "\"auto\".", call. = FALSE)
+         "\"auto\".", class = "reintervals_error_method")
   }
   switch(engine,
     gpq    = "gpq",
@@ -173,6 +173,7 @@
     singular = singular, boundary = NA,
     ## GPQ audit fields carried through (-> attr(.,"diagnostics") at unify)
     tau2_med = g$tau2_med, s2e_med = g$s2e_med, frac_boundary = g$frac_boundary,
+    n_na_draws = g$n_na_draws,
     K = g$K, df_resid = g$df_resid, phi1 = g$phi1, c_resid = g$c_resid,
     stringsAsFactors = FALSE
   )
@@ -186,16 +187,16 @@
   fe <- lme4::fixef(model)
   time_var <- setdiff(names(fe), "(Intercept)")
   if (length(time_var) != 1L) {
-    stop("random-slope intervals require a single continuous covariate (e.g. ~ 1 + time); ",
+    .abort("random-slope intervals require a single continuous covariate (e.g. ~ 1 + time); ",
          "multiple fixed effects with a random slope are not currently supported.",
-         call. = FALSE)
+                class = "reintervals_error_unsupported")
   }
   t0s <- if (is.null(newdata)) stats::model.frame(model)[[time_var]][1] else
     newdata[[time_var]]
   if (is.null(t0s) || !length(t0s)) {
-    stop("Could not determine the evaluation time point(s) for this interval; ",
+    .abort("Could not determine the evaluation time point(s) for this interval; ",
          "supply `newdata` with a numeric '", time_var,
-         "' column giving the time(s) to evaluate at.", call. = FALSE)
+         "' column giving the time(s) to evaluate at.", class = "reintervals_error_input")
   }
 
   singular <- isTRUE(tryCatch(lme4::isSingular(model), error = function(e) NA))
@@ -260,9 +261,9 @@
   yts <- .model_yts(model, time_name)
   t0s <- if (is.null(newdata)) yts$time[1] else newdata[[time_name]]
   if (is.null(t0s) || !length(t0s)) {
-    stop("Could not determine the evaluation time point(s) for this interval; ",
+    .abort("Could not determine the evaluation time point(s) for this interval; ",
          "supply `newdata` with a numeric '", time_name,
-         "' column giving the time(s) to evaluate at.", call. = FALSE)
+         "' column giving the time(s) to evaluate at.", class = "reintervals_error_input")
   }
   .montes_core(yts$y, yts$time, yts$batch, t0 = t0s,
                content = content, conf = conf, sides = sides)
@@ -374,7 +375,8 @@ ti_lmm <- function(model, newdata = NULL, P = 0.95,
   ## content proportion passed straight to the engines as `content`.
   conf   <- 1 - .resolve_alpha(alpha, level)
   if (!is.numeric(P) || length(P) != 1L || is.na(P) || P <= 0 || P >= 1) {
-    stop("`P` must be a single number strictly between 0 and 1.", call. = FALSE)
+    .abort("`P` must be a single number strictly between 0 and 1.",
+           class = "reintervals_error_input")
   }
   seed <- control$seed
   M    <- control$M
@@ -386,9 +388,9 @@ ti_lmm <- function(model, newdata = NULL, P = 0.95,
       auto       = "auto",
       `reml-mls` = "closed",
       gpq        = "gpq",
-      stop(sprintf("method = \"%s\" is not available for a %s model; use ",
+      .abort(sprintf("method = \"%s\" is not available for a %s model; use ",
                    method, .model_class(model)),
-           "\"auto\", \"reml-mls\", or \"gpq\".", call. = FALSE))
+           "\"auto\", \"reml-mls\", or \"gpq\".", class = "reintervals_error_method"))
     out <- .ti_slope_path(model, newdata = newdata, content = P, conf = conf,
                           target = target, sides = sides, engine = engine,
                           seed = seed, M = M)
@@ -406,15 +408,15 @@ ti_lmm <- function(model, newdata = NULL, P = 0.95,
     } else {
       "ti_lmm(over = \"observation\")"
     }
-    stop(sprintf(paste0("The batch-mean tolerance interval (over = ",
+    .abort(sprintf(paste0("The batch-mean tolerance interval (over = ",
          "\"group_mean\") is not implemented for a %s model; available here: %s."),
-         .model_class(model), avail), call. = FALSE)
+         .model_class(model), avail), class = "reintervals_error_unsupported")
   }
 
   if (method %in% c("reml-mls", "gpq")) {
-    stop(sprintf("method = \"%s\" is not available for a %s model; use ",
+    .abort(sprintf("method = \"%s\" is not available for a %s model; use ",
                  method, .model_class(model)),
-         "\"auto\", \"ems-mls\", or \"anova-mls\".", call. = FALSE)
+         "\"auto\", \"ems-mls\", or \"anova-mls\".", class = "reintervals_error_method")
   }
 
   ## Intercept-only one-way -> Hoffman-Kringle (the slope-free branch of the
@@ -434,8 +436,9 @@ ti_lmm <- function(model, newdata = NULL, P = 0.95,
   use_montes <- .m1_not_clean_balanced(model)
   if (method == "anova-mls") {
     if (!is_m1) {
-      stop("method = \"anova-mls\" needs a fixed-slope (random intercept + ",
-           "fixed slope) model or an intercept-only one-way model.", call. = FALSE)
+      .abort("method = \"anova-mls\" needs a fixed-slope (random intercept + ",
+           "fixed slope) model or an intercept-only one-way model.",
+                  class = "reintervals_error_method")
     }
     use_montes <- TRUE
   }
