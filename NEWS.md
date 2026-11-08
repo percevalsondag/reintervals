@@ -2,6 +2,17 @@
 
 * Development towards 1.0.0.
 
+## Bug fixes
+
+* `ci_lmm(control = lmm_interval_control(ci_df = "kenward-roger"))` paired the
+  Kenward-Roger df with the *unadjusted* standard error (from `vcov()`). The
+  confidence interval now uses the KR-adjusted covariance
+  (`pbkrtest::vcovAdj()`) for the standard error together with the KR df
+  (`pbkrtest::Lb_ddf()`), computed once per call. The default Satterthwaite CI
+  is unchanged. SAS PROC MIXED `DDFM=KR` can differ on unbalanced data: in the
+  package's checks against SAS it reported the Satterthwaite df with an adjusted
+  standard error.
+
 # reintervals 0.2.0
 
 ## New features

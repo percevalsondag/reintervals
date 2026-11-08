@@ -71,8 +71,9 @@ variance-component covariance is not positive definite); the reason is in
 \code{attr(., "diagnostics")$route_reason}. The random-intercept confidence
 interval uses a Satterthwaite df, falling back to the SAS-style containment
 df (\code{A - 1} one-way or nested, \code{min(A, B) - 1} crossed) when that df is
-unavailable; Kenward-Roger df only on request
-(\code{lmm_interval_control(ci_df = "kenward-roger")}).
+unavailable; Kenward-Roger only on request
+(\code{lmm_interval_control(ci_df = "kenward-roger")}: the KR df with the
+KR-adjusted covariance from \pkg{pbkrtest}).
 
 \strong{One-sided intervals} (\code{sides = "lower"} / \code{"upper"}) are available from
 every verb. CI, PI, and new-group mean keep the two-sided center, variance,

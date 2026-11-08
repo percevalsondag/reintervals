@@ -6,8 +6,11 @@
 #' The denominator degrees of freedom `nu` are supplied by the extraction layer
 #' (Satterthwaite with a SAS-style containment fallback, or Kenward-Roger on
 #' request via `lmm_interval_control(ci_df = )`) and read from
-#' `comp$dfs["ci"]`. This constructor is method-pure: it consumes the numbers in
-#' an `re_components` object and never touches `lme4`, so it can be checked
+#' `comp$dfs["ci"]`. For Kenward-Roger the extraction layer also sets
+#' `comp$var_mean` to `l Phi_A l'` from the KR-adjusted covariance
+#' (`pbkrtest::vcovAdj()`), so the KR df is paired with the KR standard error.
+#' This constructor is method-pure: it consumes the numbers in an
+#' `re_components` object and never touches `lme4`, so it can be checked
 #' directly against a paper's printed values.
 #'
 #' @param comp An `re_components` object. Uses `comp$mean` (`l\hat\beta`),

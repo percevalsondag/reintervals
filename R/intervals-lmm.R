@@ -23,7 +23,9 @@
 #' @param ci_method CI df rule: `"satterthwaite"` (default; Satterthwaite with
 #'   the observed-information covariance of the variance components, falling
 #'   back to the SAS-style containment df when it is unavailable) or
-#'   `"kenward-roger"` (requires \pkg{pbkrtest}; errors otherwise).
+#'   `"kenward-roger"` (requires \pkg{pbkrtest}; errors otherwise): the KR
+#'   (1997) df with the KR-adjusted covariance `pbkrtest::vcovAdj()` for the
+#'   standard error.
 #'
 #' @return A data frame with the `newdata` predictor columns plus `type`,
 #'   `estimate`, `lower`, `upper`, `df`, `df_method` (the CI df source:
@@ -60,19 +62,26 @@ intervals_lmm <- function(model, newdata = NULL, level = 0.95, conf = 0.95,
   nr <- nrow(fx$L)
   base <- fx$newdata
 
-  ## one container per prediction row, reusing the model-level components
-  make_comp <- function(i, ci_ddf) {
+  ## one container per prediction row, reusing the model-level components.
+  ## `var_mean` overrides the unadjusted l C11 l' (Kenward-Roger CI only).
+  make_comp <- function(i, ci_ddf, var_mean = fx$var_fix[i]) {
     dfs <- if (!is.null(theta)) c(ci = ci_ddf, pi = theta$df_pi) else c(ci = ci_ddf)
     re_components(components = comps, dfs = dfs, mean = fx$fit[i],
-                  var_mean = fx$var_fix[i], target = "observable")
+                  var_mean = var_mean, target = "observable")
   }
 
   blocks <- list()
   if ("CI" %in% which) {
+    ## Kenward-Roger: one vcovAdj() per call, shared by every newdata row
+    kr <- if (is.null(ci_df) && ci_method == "kenward-roger") .kr_parts(model) else NULL
     dd <- lapply(seq_len(nr), function(i)
-      .ci_ddf(model, fx$L[i, ], theta = theta, ci_df = ci_df, df_method = ci_method))
+      .ci_ddf(model, fx$L[i, ], theta = theta, ci_df = ci_df, df_method = ci_method,
+              kr = kr))
     ddf <- vapply(dd, function(x) x$df, numeric(1))
-    cis <- lapply(seq_len(nr), function(i) ci_mean(make_comp(i, ddf[i]), conf = conf))
+    cis <- lapply(seq_len(nr), function(i) {
+      vm <- if (is.null(dd[[i]]$var_mean)) fx$var_fix[i] else dd[[i]]$var_mean
+      ci_mean(make_comp(i, ddf[i], var_mean = vm), conf = conf)
+    })
     blocks$CI <- cbind(base, data.frame(
       type = "CI",
       estimate = vapply(cis, function(x) x$estimate, numeric(1)),

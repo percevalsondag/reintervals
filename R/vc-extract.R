@@ -180,30 +180,56 @@
 ## explicit request (lmm_interval_control(ci_df = "kenward-roger")) and errors if
 ## pbkrtest is not installed or the KR df cannot be computed -- it never falls
 ## back silently, so the result never depends on which packages are installed.
-## Returns list(df, method) with method "satterthwaite", "containment",
-## "kenward-roger" (or "user" for the internal numeric override).
+## Returns list(df, method, var_mean) with method "satterthwaite",
+## "containment", "kenward-roger" (or "user" for the internal numeric override).
+## var_mean is the contrast variance to pair with that df: NULL (= keep the
+## unadjusted l C11 l' from .fixed()) except for Kenward-Roger, where it is
+## l Phi_A l' from the KR-adjusted covariance -- the KR df and the KR-adjusted
+## variance belong together (Kenward & Roger 1997; SAS DDFM=KR reports the
+## adjusted SE). Pass `kr` (from .kr_parts()) to reuse one vcovAdj() across rows.
 .ci_ddf <- function(model, Lrow, theta = NULL, ci_df = NULL,
-                    df_method = c("satterthwaite", "kenward-roger")) {
-  if (!is.null(ci_df)) return(list(df = as.numeric(ci_df), method = "user"))
+                    df_method = c("satterthwaite", "kenward-roger"), kr = NULL) {
+  if (!is.null(ci_df)) return(list(df = as.numeric(ci_df), method = "user",
+                                   var_mean = NULL))
   df_method <- match.arg(df_method)
   if (df_method == "kenward-roger") {
-    if (!requireNamespace("pbkrtest", quietly = TRUE)) {
-      stop("ci_df = \"kenward-roger\" requires the 'pbkrtest' package, which is ",
-           "not installed. Install it, or use the default ci_df = ",
-           "\"satterthwaite\".", call. = FALSE)
-    }
-    ddf <- tryCatch(pbkrtest::get_Lb_ddf(model, as.numeric(Lrow)),
-                    error = function(e) NA_real_)
+    if (is.null(kr)) kr <- .kr_parts(model)
+    l <- matrix(as.numeric(Lrow), nrow = 1L)
+    ## == pbkrtest::get_Lb_ddf(model, l), which is Lb_ddf(l, vcov(model),
+    ## vcovAdj(model)); called with the precomputed adjusted covariance.
+    ddf <- tryCatch(pbkrtest::Lb_ddf(l, kr$V0, kr$Vadj), error = function(e) NA_real_)
     if (!isTRUE(is.finite(ddf) && ddf > 0)) {
       stop("The Kenward-Roger df could not be computed for this model; use the ",
            "default ci_df = \"satterthwaite\".", call. = FALSE)
     }
-    return(list(df = ddf, method = "kenward-roger"))
+    var_kr <- as.numeric(l %*% kr$Vadj_mat %*% t(l))
+    return(list(df = ddf, method = "kenward-roger", var_mean = var_kr))
   }
   if (is.null(theta)) theta <- .theta_cov(model)
   d <- .ci_ddf_satterthwaite(model, Lrow, theta)
-  if (isTRUE(is.finite(d) && d >= 1)) return(list(df = d, method = "satterthwaite"))
-  list(df = .ddf_containment(model), method = "containment")
+  if (isTRUE(is.finite(d) && d >= 1)) {
+    return(list(df = d, method = "satterthwaite", var_mean = NULL))
+  }
+  list(df = .ddf_containment(model), method = "containment", var_mean = NULL)
+}
+
+## Kenward-Roger pieces, computed ONCE per call: the unadjusted REML covariance
+## V0 = vcov(model) and the KR-adjusted covariance Vadj = pbkrtest::vcovAdj()
+## (kept with its "P"/"W" attributes, which Lb_ddf() needs), plus Vadj as a
+## plain matrix for the contrast variance. Errors (never falls back) when
+## pbkrtest is missing or vcovAdj() fails.
+.kr_parts <- function(model) {
+  if (!requireNamespace("pbkrtest", quietly = TRUE)) {
+    stop("ci_df = \"kenward-roger\" requires the 'pbkrtest' package, which is ",
+         "not installed. Install it, or use the default ci_df = ",
+         "\"satterthwaite\".", call. = FALSE)
+  }
+  vadj <- tryCatch(pbkrtest::vcovAdj(model), error = function(e) NULL)
+  if (is.null(vadj)) {
+    stop("The Kenward-Roger df could not be computed for this model; use the ",
+         "default ci_df = \"satterthwaite\".", call. = FALSE)
+  }
+  list(V0 = stats::vcov(model), Vadj = vadj, Vadj_mat = as.matrix(vadj))
 }
 
 ## Binding for testthat::local_mocked_bindings(): lets the tests mask

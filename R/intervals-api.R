@@ -20,8 +20,13 @@
 #'   observed-information covariance of the variance components, falling back to
 #'   the SAS-style containment df --- e.g. `A - 1` for a one-way or nested
 #'   design, `min(A, B) - 1` for a crossed one --- when it is unavailable, as on
-#'   a singular fit) or `"kenward-roger"` (requires \pkg{pbkrtest} and errors if
-#'   it is not installed; never a silent fallback). The df source is reported in
+#'   a singular fit) or `"kenward-roger"` (Kenward & Roger 1997 as implemented
+#'   in \pkg{pbkrtest}: the standard error uses the KR-adjusted covariance
+#'   `pbkrtest::vcovAdj()` and the df is the KR df, `pbkrtest::Lb_ddf()`;
+#'   requires \pkg{pbkrtest} and errors if it is not installed --- never a
+#'   silent fallback). SAS PROC MIXED `DDFM=KR` can differ on unbalanced data:
+#'   in the package's checks it reported the Satterthwaite df with an adjusted
+#'   standard error. The df source is reported in
 #'   `attr(., "diagnostics")$df_method`. Random-slope models use their own
 #'   generalized Satterthwaite df and reject `"kenward-roger"`.
 #' @return An `lmm_interval_control` list (passed to a verb's `control`

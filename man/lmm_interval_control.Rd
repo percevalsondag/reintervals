@@ -21,8 +21,13 @@ random-intercept models: \code{"satterthwaite"} (default; Satterthwaite with the
 observed-information covariance of the variance components, falling back to
 the SAS-style containment df --- e.g. \code{A - 1} for a one-way or nested
 design, \code{min(A, B) - 1} for a crossed one --- when it is unavailable, as on
-a singular fit) or \code{"kenward-roger"} (requires \pkg{pbkrtest} and errors if
-it is not installed; never a silent fallback). The df source is reported in
+a singular fit) or \code{"kenward-roger"} (Kenward & Roger 1997 as implemented
+in \pkg{pbkrtest}: the standard error uses the KR-adjusted covariance
+\code{pbkrtest::vcovAdj()} and the df is the KR df, \code{pbkrtest::Lb_ddf()};
+requires \pkg{pbkrtest} and errors if it is not installed --- never a
+silent fallback). SAS PROC MIXED \code{DDFM=KR} can differ on unbalanced data:
+in the package's checks it reported the Satterthwaite df with an adjusted
+standard error. The df source is reported in
 \code{attr(., "diagnostics")$df_method}. Random-slope models use their own
 generalized Satterthwaite df and reject \code{"kenward-roger"}.}
 }

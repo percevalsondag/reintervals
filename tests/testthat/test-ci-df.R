@@ -62,12 +62,18 @@ test_that("non-singular fits use Satterthwaite; singular fits fall back to conta
 test_that("Kenward-Roger is used only on request and reported as such", {
   skip_if_not_installed("lme4")
   skip_if_not_installed("pbkrtest")
+  ## df AND SE: the KR df must be paired with the KR-adjusted covariance
+  ## (vcovAdj), not the unadjusted vcov(). The SAS-fixture designs are covered in
+  ## test-oracle-sas-ci.R; this adds the crossed design and the hk_assay one-way.
   for (nm in c("oneway_ok", "nested_ok", "crossed_ok")) {
     cs <- ci_cases()[[nm]]
     fm <- fit(cs[[1]], cs[[2]])
     k <- ci_lmm(fm, control = lmm_interval_control(ci_df = "kenward-roger"))
     expect_identical(diag_of(k)$df_method, "kenward-roger", info = nm)
     expect_equal(diag_of(k)$df, pbkrtest::get_Lb_ddf(fm, 1), info = nm)
+    se_k <- (k$upper - k$lower) / 2 / stats::qt(0.975, diag_of(k)$df)
+    expect_equal(se_k, sqrt(as.matrix(pbkrtest::vcovAdj(fm))[1, 1]),
+                 tolerance = 1e-8, info = nm)
     expect_identical(diag_of(ci_lmm(fm))$df_method, "satterthwaite", info = nm)  # default
   }
 })

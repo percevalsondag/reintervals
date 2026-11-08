@@ -62,8 +62,9 @@
 #' `attr(., "diagnostics")$route_reason`. The random-intercept confidence
 #' interval uses a Satterthwaite df, falling back to the SAS-style containment
 #' df (`A - 1` one-way or nested, `min(A, B) - 1` crossed) when that df is
-#' unavailable; Kenward-Roger df only on request
-#' (`lmm_interval_control(ci_df = "kenward-roger")`).
+#' unavailable; Kenward-Roger only on request
+#' (`lmm_interval_control(ci_df = "kenward-roger")`: the KR df with the
+#' KR-adjusted covariance from \pkg{pbkrtest}).
 #'
 #' **One-sided intervals** (`sides = "lower"` / `"upper"`) are available from
 #' every verb. CI, PI, and new-group mean keep the two-sided center, variance,

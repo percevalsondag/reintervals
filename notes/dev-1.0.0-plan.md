@@ -26,7 +26,10 @@ NOTE a non-standard top-level directory.
 Note that the **tag `reml-mls` currently names two different things**: the
 random-slope closed-form TI (`ti_vfun`, ti-vfun.R:96) and the random-slope
 CI / PI / NGM t-intervals (`.vfun_interval`, slope-intervals.R:70). Only the first is
-an MLS construction. A1 needs a decision on this (see A1.4).
+an MLS construction. Decided: the CI / PI / NGM t-intervals become `"reml"`, and
+`"reml-mls"` remains only as the deprecated/defunct TI name (A1.3b). A1 does not
+depend on A2: phase 0 validated one-sided GPQ at the 0.2.0 machinery with M = 20000
+(A1.2).
 
 ---
 
@@ -74,21 +77,33 @@ Tests that exercise it:
   slope-oracle.R:29).
 - test-intervals-api.R:103 (core column contract on every engine), :130.
 
-### A1.2 The blocking dependency
+### A1.2 One-sided default: resolved by phase 0 (no longer blocked by A2)
 
-The 0.2.0 one-sided random-slope TI default *is* `reml-mls` on every fit
-(dispatch.R:212-214), because one-sided GPQ under-covered near the boundary in
-validation (dispatch.R:206-209: worst cell 0.928). If the `reml-mls` TI goes away,
-one-sided random-slope TIs need another default. Options:
-1. GPQ one-sided, after A2 hardening, re-validated in the simstudy (the 0.928 cell
-   has to be shown fixed or explained);
-2. keep the one-sided `reml-mls` limit as an explicit exception (only works with
-   option (b) below);
-3. classed `unsupported` error for one-sided random-slope TIs until a validated
-   arm exists.
+The 0.2.0 one-sided random-slope TI default is `reml-mls` on every fit
+(dispatch.R:212-214). The reason given was that one-sided GPQ under-covered near the
+boundary in W3 (dispatch.R:206-209: worst cell 0.928).
 
-**A1 cannot be finalised before A2 lands and the one-sided GPQ re-run is in.** This
-decides the implementation order (section 9).
+The phase-0 study (`~/dev/reintervals-simstudy/phase0/REPORT.md`, simstudy commit
+d20b954, pre-registration `phase0/PREREG.md`) re-ran one-sided GPQ in the W3 regime
+against reintervals 0.2.0 @ a73e8b7. Its pre-registered outcome is **A: GPQ
+passes**:
+- GPQ at M = 20000 passes all 6 side × target combinations (lower / two.sided /
+  upper × obs / bm, 65 cells each). The worst coverage is 0.9405.
+- The W3 0.928 cell (t0 = 12, P = 0.90, lower) reproduced exactly on the W3 seeds
+  (928/1000; the W3 gate passed 8/8). On 5000 fresh replicates it covered
+  0.9512-0.9520 at every M (10000 / 20000 / 50000).
+- Seed coupling, M and singularity were each ruled out as causes; the 0.928 does
+  not reproduce on fresh replicates.
+
+Consequence: under A1, one-sided random-slope TIs default to GPQ (`auto` → `gpq`
+for every random-slope TI, both targets, all sides). They run at the 0.2.0 GPQ
+machinery with M = 20000, which is what phase 0 validated. A2 is a hardening pass
+(CRN, fixed seed, MC error, classed errors). It is not a precondition: A1 can land
+before or after A2. If A2 lands first, re-check that its draw-order change does not
+move phase-0 coverage, by running the phase-0 harness against the A2 build. Only the
+default `M` matters for A1: `lmm_interval_control(M = )` is 10000 in 0.2.0
+(intervals-api.R:34), so A1 must raise it to 20000 (shared with A2 step 4), or else
+document that the validated configuration is M = 20000.
 
 ### A1.3 What `vfun_extract` must keep for the random-slope CI / PI / NGM
 
@@ -118,6 +133,28 @@ dropping them changes the container contract and every fixture in
 `slope_oracle.rds`. **Recommendation: keep both fields under either option**;
 removing them saves little and costs a fixture regeneration.
 
+### A1.3b Tag rename (decided; applies under either option)
+
+The random-slope CI / PI / NGM t-intervals (`.vfun_interval`, tag at
+slope-intervals.R:70) become **method `"reml"`**. `"reml-mls"` survives only as the
+name of the deprecated/defunct random-slope closed-form TI (`ti_vfun`,
+ti-vfun.R:96).
+
+Sites to change:
+- the tag at slope-intervals.R:70;
+- the coverage-verb `method` check at intervals-api.R:368 (`ok <- "reml"` for
+  slope models; `method = "reml-mls"` on a slope CI/PI/NGM becomes an error naming
+  `"reml"`);
+- docs at intervals-api.R:199, 211-213, 226, 333-334, 365; reintervals-package.R:27-31,
+  51-54; README.Rmd:101, 113-114; vignettes/choosing-an-interval.Rmd:39, 47,
+  64-65, 173; vignettes/getting-started.Rmd:140-142;
+- tests at test-intervals-api.R:68 (provenance) and :103 (column contract),
+  test-slope-intervals.R:77, and any `expect_identical(.., "reml-mls")` on
+  CI/PI/NGM rows.
+
+This is a user-visible output change (the `method` column), so it needs a NEWS
+entry.
+
 ### A1.4 Option (a): defunct
 
 Change:
@@ -125,7 +162,8 @@ Change:
   saying why (the failure regimes; see A1.6) and pointing to `method = "gpq"`.
 - dispatch.R:148-162: delete the `closed` engine; `auto` → `gpq` for every
   random-slope TI.
-- dispatch.R:212-214: replace with the A1.2 decision.
+- dispatch.R:212-214: delete the `one_sided_closed` override (A1.2: one-sided goes
+  to GPQ).
 - dispatch.R:220-233, 245-249: delete the per-t0 closed/df_bad split; the slope
   path becomes "GPQ for all t0". `route_reason` collapses to
   `group_mean_target` / `method` / a new `default_gpq`, or is dropped.
@@ -137,15 +175,15 @@ Change:
 - Docs: every site listed in A1.1.
 
 What it leaves in the code: all of `vfun_extract` except that `n_E`/`nu_e`/`target`
-lose their only consumer; `.vfun_interval` and its `reml-mls` tag for CI/PI/NGM.
-**The tag clash then gets worse**: `reml-mls` would survive only on intervals that
-are not MLS. Recommend renaming the CI/PI/NGM tag (e.g. `reml-t`) in the same
-step. That is a user-visible output change, so it needs a NEWS entry.
+lose their only consumer; `.vfun_interval` with its new `"reml"` tag (A1.3b).
+`"reml-mls"` remains only as the string recognised by `match.arg` (dispatch.R:372)
+so that the defunct error can fire.
 
 Cost: about -150 lines of R, about 10 test blocks rewritten or removed, all doc
-tables. Risk: **high**. It changes the default numbers for every random-slope
-TI (two-sided non-singular and all one-sided), and the one-sided default has no
-validated replacement yet.
+tables. Risk: **medium-high**. It changes the default numbers for every
+random-slope TI (two-sided non-singular and all one-sided) to GPQ, which phase 0
+validated (A1.2). It also removes the only way to reproduce a 0.2.0 random-slope
+closed-form TI.
 
 ### A1.5 Option (b): deprecated
 
@@ -153,8 +191,8 @@ Change:
 - dispatch.R:385-391: `reml-mls` still maps to `closed`, but first emits a
   `reintervals_warning_deprecated` naming the failure regimes.
 - dispatch.R:158-160: `auto` never returns `closed`.
-- dispatch.R:212-214: the A1.2 decision (in option b, the forced `reml-mls`
-  one-sided limit stays reachable).
+- dispatch.R:212-214: delete the `auto` one-sided override (one-sided goes to GPQ,
+  A1.2); the forced `reml-mls` one-sided limit (ti-vfun.R:88) stays reachable.
 - dispatch.R:224-233: the df_bad rerouting stays (it only applies when the user
   forces `reml-mls`; at present it requires `engine == "auto"`, so it would never
   fire. Decide whether a forced `reml-mls` should still drop to GPQ on df failure;
@@ -173,16 +211,27 @@ Cost: about 30 changed lines plus docs. Risk: **medium**. Default numbers change
 exactly as in (a); the old interval stays reproducible for audit (useful for GxP
 users who validated against 0.2.0). Removal moves to 1.1/2.0.
 
-**Recommendation: (b) for 1.0.0.** Same default behaviour as (a), and a
-reproducible path for 0.2.0 results.
+**Decision: PENDING (Percy).** Options (a) and (b) have the same default
+behaviour; (b) also keeps a reproducible path for 0.2.0 results. The earlier
+recommendation for (b) stands as input, not as a decision.
 
 ### A1.6 Failure regimes for the error/warning text
 
-From the code only: (i) batch-mean target, non-singular breakdown about 0.89
-coverage at small tau² (dispatch.R:10-12; already not served); (ii) singular fits
-and (iii) unavailable Satterthwaite df for nu_G/nu_e (dispatch.R:216-219). The 1.0.0
-regimes that motivate removal (observable target) have to come **from the
-simstudy results**. They are not in this repo and are not filled in here.
+Source: the decision memo (v4), random-slope closed-form TI, observation target.
+- **One-sided:** coverage 0.916-0.934 in the residual-dominant regime at an
+  extrapolated t0.
+- **Two-sided, when forced** (`method = "reml-mls"`): coverage 0.84-0.93.
+
+Message sketch (either class):
+"method = \"reml-mls\" (the REML closed-form MLS tolerance interval for
+random-slope models) under-covers: one-sided 0.916-0.934 when the residual
+variance dominates and t0 is extrapolated; two-sided 0.84-0.93 where it was
+forced. Use method = \"gpq\" (the default)."
+
+Already known from the code, for completeness: the batch-mean target was never
+served by the closed form (non-singular breakdown about 0.89, dispatch.R:10-12).
+Before writing the final message text, cite the memo by path and version in the
+NEWS entry.
 
 ---
 
@@ -298,9 +347,29 @@ Plan:
 
 Tests: test-ci-df.R:62-73 checks the df only (`expect_equal(diag_of(k)$df,
 pbkrtest::get_Lb_ddf(fm, 1))`), so it passes both before and after the fix, which
-is why the bug went unnoticed. Add `test-oracle-sas-ngm.R` cases asserting the KR
-**SE and limits** against the SAS `##MEAN ... KR` lines (OW_BAL, OW_UNBAL,
-NEST_BAL, FS_BAL, FS_UNBAL).
+is why the bug went unnoticed. (Original plan: assert the KR SE and limits against
+the SAS `##MEAN ... KR` lines on all five fits. Superseded by decision (a) below.)
+
+**Implemented on `dev`, with a finding and a decision (Percy: option a).**
+Fix: `.kr_parts()` computes `vcovAdj()` once per call; `.ci_ddf()` returns the KR
+df from `pbkrtest::Lb_ddf(l, vcov, vcovAdj)` (= `get_Lb_ddf`, which cannot take a
+precomputed Vadj) together with `var_mean = l Vadj l'`; `intervals_lmm` uses that
+`var_mean` for the KR CI rows.
+
+Finding: against the SAS `##MEAN` lines (fixtures `tests/testthat/fixtures/sas_ngm/`),
+Satterthwaite matches on all 13 rows (worst SE 1.9e-6 relative, df 3.9e-5 absolute).
+SAS DDFM=KR, however, reports the **Satterthwaite df unchanged** in every row, with
+only the SE adjusted. On OW_UNBAL its adjusted SE also differs from pbkrtest's:
+SE 0.5217893 (reintervals = pbkrtest) vs 0.5210774 (SAS), 1.4e-3 relative; df 4.783
+vs 5.150. The cause of the SE difference has not been established.
+
+Decision (a): `"kenward-roger"` in reintervals means Kenward & Roger (1997) as
+implemented in pbkrtest (`vcovAdj()` SE, `Lb_ddf()` df). SAS DDFM=KR is not the KR
+oracle. Tests (`test-oracle-sas-ci.R`): Satterthwaite vs SAS on every row; KR SE vs
+SAS on the balanced fits only (OW_BAL, NEST_BAL, FS_BAL); KR SE and df vs pbkrtest
+on all five fits at 1e-8 (the pairing guard); the OW_UNBAL difference is pinned as a
+documented SAS difference. Documented in roxygen, the vignettes, and NEWS (Bug
+fixes).
 
 Dependency: pbkrtest stays in Suggests (DESCRIPTION:37). `vcovAdj`/`Lb_ddf`
 are exported by pbkrtest; check the minimum version that exports `Lb_ddf` and
@@ -557,8 +626,8 @@ so the distinction is visible. Size: all CSV/txt, well under 100 KB. Check the
 ## 9. Dependencies and proposed order
 
 ```
-A5 (conditions helpers) ──┬──> A2 (GPQ: classed time-point error) ──┬──> A1 (needs one-sided GPQ re-validation)
-                          │                                         └──> B slope_ngm = "gpq"
+A5 (conditions helpers) ──┬──> A2 (GPQ: classed time-point error) ───> B slope_ngm = "gpq"
+                          ├──> A1 (deprecated/defunct class; NOT blocked by A2: phase 0 outcome A)
                           ├──> A3 (KR vcovAdj; dependency error class) ──> B ci_df / slope_ci_df KR
                           ├──> A4 (mls_rule; numerical error class) ──> B ngm Gv guard
 T (oracle scaffolding) ───┴── needed as the acceptance gate for A3, A4, B (SAS fixtures)
@@ -571,20 +640,24 @@ defaults unchanged unless stated):
    add the SAS part1 fixtures and parser. No R/ changes. (Low risk.)
 2. **A5 helpers + inventory fixes** that change no numbers (classes, carrying
    `pi_df_fallback`/`df_fallback` into the diagnostics, #15 newdata check, #20).
-3. **A3** KR vcovAdj. Gate: SAS `##MEAN KR` SE/limits.
+3. **A3** KR vcovAdj. **Done on `dev`** (decision a). Gates: KR vs pbkrtest
+   (SE + df, 1e-8) on all five SAS fits; KR SE vs SAS on the balanced fits only.
 4. **A4** `.mls_upper` + TBG. Gate: bit-identity on 5.2/5.3/4.4 + negative-k case.
 5. **A2** GPQ hardening (CRN, pivots/eval split, default seed, M = 20000, MC error,
    time-point class). **Changes the GPQ numbers** (NEWS).
 6. **B plumbing**: control passed down, diagnostics carry the arm; then arms one at
    a time (`ci_df = "containment"`, `pi_df`, `slope_ci_df`, `ngm`, `slope_ngm`),
    each with its oracle or a reference test and a one-sided check (C).
-7. **Simstudy one-sided GPQ re-run** (outside this repo) → A1.2 decision.
-8. **A1** (option b recommended): `auto` stops choosing `closed`, deprecation
-   warning, tag rename for the RS CI/PI/NGM. **Changes the default RS TI numbers**
-   (NEWS, vignettes, README tables).
+7. ~~Simstudy one-sided GPQ re-run~~: done (phase 0, outcome A; A1.2).
+8. **A1** (defunct vs deprecated: PENDING, Percy): `auto` routes every random-slope
+   TI to GPQ with M = 20000, the `reml-mls` TI is defunct or deprecated, and the
+   RS CI/PI/NGM tag becomes `"reml"`. **Changes the default RS TI numbers** (NEWS,
+   vignettes, README tables). Can be scheduled independently of step 5 (A2); if A2
+   lands first, re-run the phase-0 harness against the A2 build.
 9. Step 13 (simstudy) chooses the defaults for the B arms; flip the defaults in one
    commit with NEWS.
 
-Risk summary: A1 high (default change, open one-sided question); A2 medium (all GPQ
-numbers move); A5 medium churn / zero numeric change; A4 low-medium; A3 low; B low
-while the defaults are unchanged; T low.
+Risk summary: A1 medium-high (default change to a validated GPQ; defunct vs
+deprecated pending); A2 medium (all GPQ numbers move); A5 medium churn / zero
+numeric change; A4 low-medium; A3 low (done); B low while the defaults are
+unchanged; T low.

@@ -159,7 +159,8 @@ interval, balanced or not.
 On the random-intercept path the confidence interval uses a Satterthwaite df,
 falling back to the SAS-style containment df (`A - 1` one-way or nested,
 `min(A, B) - 1` crossed) when that is unavailable; Kenward-Roger df are used only
-on request (`lmm_interval_control(ci_df = "kenward-roger")`). The df source is in
+on request (`lmm_interval_control(ci_df = "kenward-roger")`: the KR df with the
+standard error from the KR-adjusted covariance, as in pbkrtest). The df source is in
 `attr(., "diagnostics")$df_method`.
 
 `method = "auto"` (the default) picks the engine in the table. Any other value
