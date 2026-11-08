@@ -9,8 +9,23 @@
 #' Tuning controls for the interval engines
 #'
 #' Tuning knobs only --- the RNG seed and Monte-Carlo size used when the
-#' GPQ algorithm runs, and the denominator-df rule of the random-intercept
-#' confidence interval. Algorithm *selection* is the `method` argument, not this.
+#' GPQ algorithm runs, and the degrees-of-freedom rules of the confidence and
+#' prediction intervals. Algorithm *selection* is the `method` argument, not this.
+#'
+#' @section Validation arms:
+#' The non-default values of `ci_df`, `slope_ci_df` and `pi_df` are validation
+#' arms: their coverage is under evaluation in the 1.0.0 validation study, and
+#' the defaults are the validated rules. Applying a non-default arm signals a
+#' warning of class `reintervals_warning_unvalidated` on every call (muffle it
+#' by class), except `ci_df = "kenward-roger"` on random-intercept models,
+#' supported since 0.2.0. Each option applies to one model structure and verb:
+#' `ci_df` to [ci_lmm()] on random-intercept models (including the fixed-slope
+#' design), `slope_ci_df` to [ci_lmm()] on random-slope models, `pi_df` to
+#' [pi_lmm()] on random-intercept models. Elsewhere an option is a no-op, never
+#' an error, so one control object can be reused across models and verbs. The
+#' diagnostics of every confidence, prediction and new-group-mean interval
+#' record each option as `ci_df_rule`, `slope_ci_df_rule` and `pi_df_rule`: the
+#' value applied, or `"not_applicable"`; `df` is the df actually used.
 #'
 #' @param seed Optional integer seed for the GPQ draws (reproducibility / GxP
 #'   traceability). With the default `NULL`, one integer seed is drawn from the
@@ -49,18 +64,50 @@
 #'   silent fallback). SAS PROC MIXED `DDFM=KR` can differ on unbalanced data:
 #'   in the package's checks it reported the Satterthwaite df with an adjusted
 #'   standard error. The df source is reported in
-#'   `attr(., "diagnostics")$df_method`. Random-slope models use their own
-#'   generalized Satterthwaite df and reject `"kenward-roger"`.
+#'   `attr(., "diagnostics")$df_method`. A validation arm (see below):
+#'   `"containment"`, the containment df alone (the rank rule above: the
+#'   smallest random-stratum df, each fixed-effect column that is constant
+#'   within a factor's levels costing one df there --- `A - 1` one-way and
+#'   nested, `A - 2` with one between-group covariate, `min(A, B) - 1` crossed,
+#'   `K - 1` for the fixed-slope design), with the unadjusted standard error.
+#'   Not applied to random-slope models (see `slope_ci_df`).
+#' @param slope_ci_df Denominator-df rule for the confidence interval
+#'   ([ci_lmm()]) on random-slope models: `"hessian-satterthwaite"` (default;
+#'   the generalized Satterthwaite df from the observed-information covariance
+#'   of the variance components, falling back to `K - 2`, `K` lots, when it is
+#'   unavailable; reported as `df_rule = "satterthwaite"` / `"containment"`).
+#'   Validation arms: `"kenward-roger"` (\pkg{pbkrtest} `vcovAdj()` +
+#'   `Lb_ddf()` on the random-slope fit; the standard error uses the
+#'   KR-adjusted covariance; requires \pkg{pbkrtest}) and `"k-minus-1"`
+#'   (`K - 1` with the unadjusted standard error: the exact df for a balanced
+#'   random-coefficient model, Chow & Shao 1991). `df_rule` reports the arm.
+#'   Not applied to random-intercept models (see `ci_df`).
+#' @param pi_df Denominator-df rule for the prediction interval ([pi_lmm()]) on
+#'   random-intercept models: `"francq-satterthwaite"` (default; the Francq et
+#'   al. 2019 generalized Satterthwaite df, with the containment df as its
+#'   singular-fit fallback) or the validation arm `"containment"` (the same
+#'   variance with the containment df of `ci_df = "containment"`). There is no
+#'   Kenward-Roger prediction interval: KR adjusts fixed-effect contrasts only,
+#'   and the prediction variance includes estimated variance components. Not
+#'   applied to random-slope models, whose prediction interval is unchanged.
 #' @return An `lmm_interval_control` list (passed to a verb's `control`
-#'   argument); a list with elements `seed`, `M`, and `ci_df`.
+#'   argument); a list with elements `seed`, `M`, `ci_df`, `slope_ci_df` and
+#'   `pi_df`.
 #' @seealso [ci_lmm()], [ti_lmm()], [ti_gpq_raw()].
 #' @examples
 #' lmm_interval_control(seed = 1, M = 5000)
 #' lmm_interval_control(ci_df = "kenward-roger")
+#' lmm_interval_control(slope_ci_df = "k-minus-1", pi_df = "containment")
 #' @export
 lmm_interval_control <- function(seed = NULL, M = 20000L,
-                                 ci_df = c("satterthwaite", "kenward-roger")) {
-  ci_df <- match.arg(ci_df)
+                                 ci_df = c("satterthwaite", "kenward-roger",
+                                           "containment"),
+                                 slope_ci_df = c("hessian-satterthwaite",
+                                                 "kenward-roger", "k-minus-1"),
+                                 pi_df = c("francq-satterthwaite", "containment")) {
+  ci_df       <- match.arg(ci_df)
+  slope_ci_df <- match.arg(slope_ci_df)
+  pi_df       <- match.arg(pi_df)
   if (!is.null(seed) && (!is.numeric(seed) || length(seed) != 1L || is.na(seed) ||
                            abs(seed) > .Machine$integer.max)) {
     .abort("`seed` must be NULL or a single number in the integer range.",
@@ -74,8 +121,64 @@ lmm_interval_control <- function(seed = NULL, M = 20000L,
            "uses 20 MC sections of at least 100 draws each).",
            class = "reintervals_error_input")
   }
-  structure(list(seed = seed, M = as.integer(M), ci_df = ci_df),
+  structure(list(seed = seed, M = as.integer(M), ci_df = ci_df,
+                 slope_ci_df = slope_ci_df, pi_df = pi_df),
             class = "lmm_interval_control")
+}
+
+## ---- validation arms (step-13 options) ------------------------------------
+## The df arms of lmm_interval_control(), with their validated defaults. Each
+## arm applies to one (model structure, verb) cell; anywhere else it is a no-op,
+## recorded as "not_applicable" in the diagnostics field `<option>_rule`, so one
+## control object can be reused across a simulation grid. B2 adds the
+## new-group-mean arm here the same way (option ngm_method, field ngm_arm).
+.df_arms <- list(
+  ci_df       = list(default = "satterthwaite", rule = "ci_df_rule",
+                     ## the 0.2.0 options, which do not warn
+                     no_warn = c("satterthwaite", "kenward-roger")),
+  slope_ci_df = list(default = "hessian-satterthwaite", rule = "slope_ci_df_rule",
+                     no_warn = "hessian-satterthwaite"),
+  pi_df       = list(default = "francq-satterthwaite", rule = "pi_df_rule",
+                     no_warn = "francq-satterthwaite")
+)
+
+## The arm value of `opt` from a control object, or its default when the
+## control predates the option (a hand-built list).
+.arm_value <- function(control, opt) {
+  v <- control[[opt]]
+  if (is.null(v)) .df_arms[[opt]]$default else v
+}
+
+## Which arms apply to this model and verb: named character, option -> value
+## for the applied arms only.
+.applied_arms <- function(model, kind, control) {
+  rs <- .has_random_slope(model)
+  opts <- if (kind == "CI") (if (rs) "slope_ci_df" else "ci_df")
+          else if (kind == "PI" && !rs) "pi_df"
+          else character(0)
+  stats::setNames(vapply(opts, function(o) .arm_value(control, o), ""), opts)
+}
+
+## Diagnostics fields for every arm: the applied value or "not_applicable".
+.arm_rules <- function(applied) {
+  out <- lapply(names(.df_arms), function(o)
+    if (o %in% names(applied)) applied[[o]] else "not_applicable")
+  stats::setNames(out, vapply(.df_arms, function(a) a$rule, ""))
+}
+
+## One reintervals_warning_unvalidated per call for each applied non-default arm
+## (not once per session: simulations muffle it by class).
+.warn_unvalidated <- function(applied) {
+  for (o in names(applied)) {
+    a <- .df_arms[[o]]
+    if (applied[[o]] %in% a$no_warn) next
+    .warn(sprintf(paste0("%s = \"%s\" is a validation arm: its coverage is being ",
+                         "evaluated for reintervals 1.0.0. The validated default is ",
+                         "%s = \"%s\"."), o, applied[[o]], o, a$default),
+          class = "reintervals_warning_unvalidated",
+          data = list(option = o, value = applied[[o]]))
+  }
+  invisible(NULL)
 }
 
 ## alpha / level as a mutually-exclusive pair.
@@ -152,7 +255,8 @@ lmm_interval_control <- function(seed = NULL, M = 20000L,
                  "singular", "boundary", "vg_floored", "tau2_med", "s2e_med",
                  "frac_boundary", "K", "df_resid", "phi1", "c_resid", "n_E",
                  "df_method", "route_reason", "df_rule", "W", "mls_bound",
-                 "n_na_draws", "mc_se_lower", "mc_se_upper")
+                 "n_na_draws", "mc_se_lower", "mc_se_upper", "ci_df_rule",
+                 "slope_ci_df_rule", "pi_df_rule")
 
 ## The output unifier. Maps any engine's native frame to the single tidy
 ## contract; relabels only, never recomputes. Universal columns, in order:
@@ -194,7 +298,8 @@ lmm_interval_control <- function(seed = NULL, M = 20000L,
 
   ## diagnostics -> attribute (off the core shape, still retrievable)
   diag <- list()
-  for (cn in c("df", "df_method", "df_rule", "W", "se", "tau2_med", "s2e_med",
+  for (cn in c("df", "df_method", "df_rule", "ci_df_rule", "slope_ci_df_rule",
+               "pi_df_rule", "W", "se", "tau2_med", "s2e_med",
                "frac_boundary", "K", "df_resid", "phi1", "c_resid",
                "route_reason", "mls_bound", "n_na_draws", "mc_se_lower",
                "mc_se_upper")) {
@@ -251,7 +356,9 @@ print.lmm_interval <- function(x, ...) {
 #'   `"ems-mls"`, `"anova-mls"` (new-group mean only), `"reml"` (random-slope
 #'   models) forces that engine and errors if it is incompatible with the model.
 #' @param control An [lmm_interval_control()] object (the GPQ `seed` and `M`,
-#'   and the confidence-interval df rule `ci_df`).
+#'   and the df rules `ci_df`, `slope_ci_df` and `pi_df`; an option that does
+#'   not apply to the model or verb is ignored and recorded as
+#'   `"not_applicable"` in the diagnostics).
 #'
 #' @return An `lmm_interval` object (a data frame), one row per evaluation point,
 #'   with columns, in order:
@@ -463,9 +570,12 @@ new_group_mean_lmm <- function(model, newdata = NULL, alpha = NULL, level = NULL
             data = list(n_top_levels = n_top))
     }
   }
+  applied <- .applied_arms(model, kind, control)
+  .warn_unvalidated(applied)
   out <- .interval_lmm(model, newdata = newdata, kind = kind, level = level,
-                       sides = sides,
-                       ci_df = if (is.null(control$ci_df)) "satterthwaite" else control$ci_df)
+                       sides = sides, control = control)
+  ## the df arm of every option: the value applied here, or "not_applicable"
+  for (r in names(rules <- .arm_rules(applied))) out[[r]] <- rules[[r]]
   tag <- if (.has_random_slope(model)) NULL else "ems-mls"   # slope row already tagged
   .unify_intervals(out, model, kind = kind, method_tag = tag)
 }

@@ -140,3 +140,15 @@ test_that("A2 (g): ti_gpq_raw() returns the same diagnostics as the ti_lmm() GPQ
     expect_equal(c(b$lower, b$upper), c(a$lower, a$upper))
   }
 })
+
+test_that("A5 leftover: zero pooled within-lot SSE warns (limitation class) and still computes", {
+  set.seed(1)
+  d <- expand.grid(t = c(0, 3, 6, 9), lot = factor(1:5))
+  d$y <- 100 + rnorm(5)[d$lot] + (-0.5 + rnorm(5, sd = 0.1)[d$lot]) * d$t   # exact lines
+  expect_warning(g <- ti_gpq_raw(d$y, d$t, d$lot, t0 = 6, control = ctl2k),
+                 class = "reintervals_warning_limitation")
+  expect_true(is.finite(g$lower) && is.finite(g$upper))
+  ## ordinary data do not warn
+  d$y <- d$y + rnorm(nrow(d), sd = 0.2)
+  expect_no_warning(ti_gpq_raw(d$y, d$t, d$lot, t0 = 6, control = ctl2k))
+})

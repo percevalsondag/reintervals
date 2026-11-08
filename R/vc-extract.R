@@ -188,7 +188,8 @@
 ## variance belong together (Kenward & Roger 1997; SAS DDFM=KR reports the
 ## adjusted SE). Pass `kr` (from .kr_parts()) to reuse one vcovAdj() across rows.
 .ci_ddf <- function(model, Lrow, theta = NULL, ci_df = NULL,
-                    df_method = c("satterthwaite", "kenward-roger"), kr = NULL) {
+                    df_method = c("satterthwaite", "kenward-roger", "containment"),
+                    kr = NULL) {
   if (!is.null(ci_df)) return(list(df = as.numeric(ci_df), method = "user",
                                    var_mean = NULL))
   df_method <- match.arg(df_method)
@@ -205,6 +206,10 @@
     var_kr <- as.numeric(l %*% kr$Vadj_mat %*% t(l))
     return(list(df = ddf, method = "kenward-roger", var_mean = var_kr))
   }
+  ## ci_df = "containment": the containment df with the unadjusted l C11 l'
+  if (df_method == "containment") {
+    return(list(df = .ddf_containment(model), method = "containment", var_mean = NULL))
+  }
   if (is.null(theta)) theta <- .theta_cov(model)
   d <- .ci_ddf_satterthwaite(model, Lrow, theta)
   if (isTRUE(is.finite(d) && d >= 1)) {
@@ -218,16 +223,19 @@
 ## (kept with its "P"/"W" attributes, which Lb_ddf() needs), plus Vadj as a
 ## plain matrix for the contrast variance. Errors (never falls back) when
 ## pbkrtest is missing or vcovAdj() fails.
-.kr_parts <- function(model) {
+.kr_parts <- function(model, option = "ci_df") {
+  dflt <- if (option == "slope_ci_df") "hessian-satterthwaite" else "satterthwaite"
   if (!requireNamespace("pbkrtest", quietly = TRUE)) {
-    .abort("ci_df = \"kenward-roger\" requires the 'pbkrtest' package, which is ",
-           "not installed. Install it, or use the default ci_df = ",
-           "\"satterthwaite\".", class = "reintervals_error_dependency")
+    .abort(sprintf(paste0("%s = \"kenward-roger\" requires the 'pbkrtest' package, ",
+                          "which is not installed. Install it, or use the default ",
+                          "%s = \"%s\"."), option, option, dflt),
+           class = "reintervals_error_dependency")
   }
   vadj <- tryCatch(pbkrtest::vcovAdj(model), error = function(e) NULL)
   if (is.null(vadj)) {
-    .abort("The Kenward-Roger df could not be computed for this model; use the ",
-           "default ci_df = \"satterthwaite\".", class = "reintervals_error_numerical")
+    .abort(sprintf(paste0("The Kenward-Roger df could not be computed for this ",
+                          "model; use the default %s = \"%s\"."), option, dflt),
+           class = "reintervals_error_numerical")
   }
   list(V0 = stats::vcov(model), Vadj = vadj, Vadj_mat = as.matrix(vadj))
 }

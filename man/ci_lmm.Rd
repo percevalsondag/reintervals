@@ -32,7 +32,9 @@ interval keeps the two-sided interval's center, variance, and df and uses
 models) forces that engine and errors if it is incompatible with the model.}
 
 \item{control}{An \code{\link[=lmm_interval_control]{lmm_interval_control()}} object (the GPQ \code{seed} and \code{M},
-and the confidence-interval df rule \code{ci_df}).}
+and the df rules \code{ci_df}, \code{slope_ci_df} and \code{pi_df}; an option that does
+not apply to the model or verb is ignored and recorded as
+\code{"not_applicable"} in the diagnostics).}
 }
 \value{
 An \code{lmm_interval} object (a data frame), one row per evaluation point,

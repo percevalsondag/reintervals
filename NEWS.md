@@ -51,6 +51,30 @@
 
 ## New features
 
+* **Degrees-of-freedom validation arms** in `lmm_interval_control()`, for the
+  1.0.0 validation study. The defaults are unchanged and remain the validated
+  rules; every non-default value below is a validation arm whose coverage is
+  under evaluation, and applying one signals `reintervals_warning_unvalidated`
+  on every call (muffle it by class).
+  - `ci_df = "containment"` (random-intercept CI): the containment df alone
+    (the rank rule of the existing fallback) with the unadjusted standard
+    error. `ci_df = "kenward-roger"` is unchanged and does not warn (a 0.2.0
+    option).
+  - `slope_ci_df` (random-slope CI), new: `"hessian-satterthwaite"` (default,
+    the current df with its `K - 2` fallback), `"kenward-roger"` (pbkrtest
+    `vcovAdj()` + `Lb_ddf()` on the random-slope fit, with the KR-adjusted
+    standard error) and `"k-minus-1"` (`K - 1`, `K` lots, with the unadjusted
+    standard error).
+  - `pi_df` (random-intercept PI), new: `"francq-satterthwaite"` (default) and
+    `"containment"` (the same variance with the containment df). There is no
+    Kenward-Roger prediction interval.
+
+  Each option applies to one model structure and verb and is otherwise a
+  no-op, so one control object can be reused across models. The diagnostics of
+  every CI, PI and new-group mean record `ci_df_rule`, `slope_ci_df_rule` and
+  `pi_df_rule`: the arm applied, or `"not_applicable"`. Consequently
+  `ci_df = "kenward-roger"` on a random-slope model is now ignored (it was an
+  error); the random-slope Kenward-Roger arm is `slope_ci_df = "kenward-roger"`.
 * **GPQ reproducibility contract.** Every GPQ interval (`ti_lmm()` random-slope
   route and `ti_gpq_raw()`) records `gpq_seed`, the integer seed actually used,
   and `rng_kind`, the `RNGkind()` triple in effect, in
@@ -116,6 +140,11 @@
   exceed 1% of the draws.
 
 ## Other changes
+
+* The GPQ tolerance interval warns (`reintervals_warning_limitation`) when the
+  pooled within-lot residual sum of squares is zero (every lot's data on a
+  straight line): the residual-variance pivot is then degenerate and the
+  interval reflects only the between-lot variance.
 
 * Every error and warning is now a classed condition: errors inherit from
   `reintervals_error` (`_input`, `_unsupported`, `_design`, `_method`, `_data`,

@@ -7,7 +7,9 @@
 lmm_interval_control(
   seed = NULL,
   M = 20000L,
-  ci_df = c("satterthwaite", "kenward-roger")
+  ci_df = c("satterthwaite", "kenward-roger", "containment"),
+  slope_ci_df = c("hessian-satterthwaite", "kenward-roger", "k-minus-1"),
+  pi_df = c("francq-satterthwaite", "containment")
 )
 }
 \arguments{
@@ -50,21 +52,66 @@ requires \pkg{pbkrtest} and errors if it is not installed --- never a
 silent fallback). SAS PROC MIXED \code{DDFM=KR} can differ on unbalanced data:
 in the package's checks it reported the Satterthwaite df with an adjusted
 standard error. The df source is reported in
-\code{attr(., "diagnostics")$df_method}. Random-slope models use their own
-generalized Satterthwaite df and reject \code{"kenward-roger"}.}
+\code{attr(., "diagnostics")$df_method}. A validation arm (see below):
+\code{"containment"}, the containment df alone (the rank rule above: the
+smallest random-stratum df, each fixed-effect column that is constant
+within a factor's levels costing one df there --- \code{A - 1} one-way and
+nested, \code{A - 2} with one between-group covariate, \code{min(A, B) - 1} crossed,
+\code{K - 1} for the fixed-slope design), with the unadjusted standard error.
+Not applied to random-slope models (see \code{slope_ci_df}).}
+
+\item{slope_ci_df}{Denominator-df rule for the confidence interval
+(\code{\link[=ci_lmm]{ci_lmm()}}) on random-slope models: \code{"hessian-satterthwaite"} (default;
+the generalized Satterthwaite df from the observed-information covariance
+of the variance components, falling back to \code{K - 2}, \code{K} lots, when it is
+unavailable; reported as \code{df_rule = "satterthwaite"} / \code{"containment"}).
+Validation arms: \code{"kenward-roger"} (\pkg{pbkrtest} \code{vcovAdj()} +
+\code{Lb_ddf()} on the random-slope fit; the standard error uses the
+KR-adjusted covariance; requires \pkg{pbkrtest}) and \code{"k-minus-1"}
+(\code{K - 1} with the unadjusted standard error: the exact df for a balanced
+random-coefficient model, Chow & Shao 1991). \code{df_rule} reports the arm.
+Not applied to random-intercept models (see \code{ci_df}).}
+
+\item{pi_df}{Denominator-df rule for the prediction interval (\code{\link[=pi_lmm]{pi_lmm()}}) on
+random-intercept models: \code{"francq-satterthwaite"} (default; the Francq et
+al. 2019 generalized Satterthwaite df, with the containment df as its
+singular-fit fallback) or the validation arm \code{"containment"} (the same
+variance with the containment df of \code{ci_df = "containment"}). There is no
+Kenward-Roger prediction interval: KR adjusts fixed-effect contrasts only,
+and the prediction variance includes estimated variance components. Not
+applied to random-slope models, whose prediction interval is unchanged.}
 }
 \value{
 An \code{lmm_interval_control} list (passed to a verb's \code{control}
-argument); a list with elements \code{seed}, \code{M}, and \code{ci_df}.
+argument); a list with elements \code{seed}, \code{M}, \code{ci_df}, \code{slope_ci_df} and
+\code{pi_df}.
 }
 \description{
 Tuning knobs only --- the RNG seed and Monte-Carlo size used when the
-GPQ algorithm runs, and the denominator-df rule of the random-intercept
-confidence interval. Algorithm \emph{selection} is the \code{method} argument, not this.
+GPQ algorithm runs, and the degrees-of-freedom rules of the confidence and
+prediction intervals. Algorithm \emph{selection} is the \code{method} argument, not this.
 }
+\section{Validation arms}{
+
+The non-default values of \code{ci_df}, \code{slope_ci_df} and \code{pi_df} are validation
+arms: their coverage is under evaluation in the 1.0.0 validation study, and
+the defaults are the validated rules. Applying a non-default arm signals a
+warning of class \code{reintervals_warning_unvalidated} on every call (muffle it
+by class), except \code{ci_df = "kenward-roger"} on random-intercept models,
+supported since 0.2.0. Each option applies to one model structure and verb:
+\code{ci_df} to \code{\link[=ci_lmm]{ci_lmm()}} on random-intercept models (including the fixed-slope
+design), \code{slope_ci_df} to \code{\link[=ci_lmm]{ci_lmm()}} on random-slope models, \code{pi_df} to
+\code{\link[=pi_lmm]{pi_lmm()}} on random-intercept models. Elsewhere an option is a no-op, never
+an error, so one control object can be reused across models and verbs. The
+diagnostics of every confidence, prediction and new-group-mean interval
+record each option as \code{ci_df_rule}, \code{slope_ci_df_rule} and \code{pi_df_rule}: the
+value applied, or \code{"not_applicable"}; \code{df} is the df actually used.
+}
+
 \examples{
 lmm_interval_control(seed = 1, M = 5000)
 lmm_interval_control(ci_df = "kenward-roger")
+lmm_interval_control(slope_ci_df = "k-minus-1", pi_df = "containment")
 }
 \seealso{
 \code{\link[=ci_lmm]{ci_lmm()}}, \code{\link[=ti_lmm]{ti_lmm()}}, \code{\link[=ti_gpq_raw]{ti_gpq_raw()}}.

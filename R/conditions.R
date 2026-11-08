@@ -30,6 +30,8 @@
 #   |                                   interval is still returned unchanged
 #   +- reintervals_warning_deprecated   reserved: deprecated method names
 #   +- reintervals_warning_mc           reserved: Monte-Carlo error above threshold
+#   +- reintervals_warning_unvalidated  a non-default validation arm (lmm_interval_control)
+#                                       was applied; its coverage is under evaluation
 # =============================================================================
 
 .reintervals_condition_parents <- c(
@@ -52,7 +54,8 @@
   reintervals_warning_singular   = "reintervals_warning",
   reintervals_warning_limitation = "reintervals_warning",
   reintervals_warning_deprecated = "reintervals_warning",
-  reintervals_warning_mc         = "reintervals_warning"
+  reintervals_warning_mc         = "reintervals_warning",
+  reintervals_warning_unvalidated = "reintervals_warning"
 )
 
 ## Package-level state for once-per-session warnings (flags keyed by name).

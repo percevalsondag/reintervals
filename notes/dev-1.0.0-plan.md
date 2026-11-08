@@ -637,31 +637,75 @@ later item use the helpers.
 
 ---
 
-## B. Candidate arms as `lmm_interval_control()` options (plan only)
+## B. Candidate arms as `lmm_interval_control()` options
+
+**B1 status: DONE on `dev` (H1, H2, H6; Percy's decisions of 2026-11-08).** Not
+committed at the time of writing.
+- Options (the table below is updated to match): `ci_df = c("satterthwaite",
+  "kenward-roger", "containment")` random-intercept CI; `slope_ci_df =
+  c("hessian-satterthwaite", "kenward-roger", "k-minus-1")` random-slope CI;
+  `pi_df = c("francq-satterthwaite", "containment")` random-intercept PI.
+- Containment rules (step-0 answers):
+  - 0(a) random intercept, CI and PI fallback and the `"containment"` arms:
+    `.ddf_containment()` = `max(1, min over random terms of .stratum_df())`, the
+    rank rule, coarsest term first; a fixed column constant within a factor's
+    levels costs one df in that stratum. One-way `A - 1` (`A - 2` with one
+    between-group covariate; a within-group covariate costs the residual),
+    nested `A - 1`, crossed `min(A, B) - 1`, fixed slope `K - 1`.
+  - 0(b) random slope, the `"hessian-satterthwaite"` fallback
+    (`.vfun_df_containment`, unchanged): F and G `B - k_re = K - 2`; T `K - 2`
+    when `V_G / V_T >= 0.5`, else the residual df `n - p - 2K`. The
+    `"k-minus-1"` arm (`K - 1`) is deliberately separate; the fallback label
+    `df_rule = "containment"` is unchanged.
+- Kenward-Roger on random slopes: `.kr_parts()` (A3) reused; df and SE from the
+  same KR computation. Phase-0 finding reproduced on balanced sleepstudy UN:
+  KR df = K - 1 = 17 at t0 = 0, 5, 9, 20, SE ratio KR/unadjusted 1 (1e-15). It
+  does NOT hold on the `||` fit (KR df 18.19, 24.65, 19.60, 17.04): K - 1 is
+  exact for the unstructured balanced random-coefficient model only.
+- No-op rule: an option on a model or verb it does not apply to is ignored, never
+  an error; every CI / PI / NGM row records `ci_df_rule`, `slope_ci_df_rule`,
+  `pi_df_rule` (the arm applied, or `"not_applicable"`); `df` is the df used;
+  `df_rule` / `df_method` unchanged. The 0.2.0 error for `ci_df =
+  "kenward-roger"` on a random-slope CI is gone (now a no-op).
+  `.df_arms` / `.applied_arms()` / `.arm_rules()` (intervals-api.R) hold the
+  table, so B2 adds `ngm_method` (field `ngm_arm`) as one entry.
+- `reintervals_warning_unvalidated` once per call per applied non-default arm,
+  except `ci_df = "kenward-roger"` on a random intercept (0.2.0 option).
+- **H6 arm (iii) dropped** (Percy, 2026-11-08, per prereg §7 item 7):
+  Kenward-Roger adjusts the variance and df of fixed-effect linear combinations
+  only; the PI variance V_F + sigma2_T includes estimated variance components,
+  for which KR defines no df, so a KR PI is not a defined published method.
+- Tests: test-df-arms.R (defaults pinned on the clean A2 commit before the
+  edits; containment / K - 1 recompute from qt(); KR on UN, `||`, unbalanced;
+  warnings; no-ops). A5 leftover done too: zero pooled within-lot SSE in
+  `.gpq_prepare` warns (`reintervals_warning_limitation`; zero to round-off,
+  `sse <= 1e-12 * total SS`).
 
 Current control: intervals-api.R:34-45 (`seed`, `M`, `ci_df`). Only `ci_df`
 reaches the engines (intervals-api.R:395-397 → slope-intervals.R:192-201 →
 intervals-lmm.R:45-47). **Plumbing change shared by all arms:** pass the whole
 `control` object down `.coverage_verb → .interval_lmm → intervals_lmm / .ngm_ri`
 rather than single fields, and write the arm that ran into the diagnostics
-(`df_method`, `df_rule`, `ngm_rule`), so the step-13 simulations can read it off
-every row.
+(`ci_df_rule`, `slope_ci_df_rule`, `pi_df_rule`; B2: `ngm_arm`), so the
+step-13 simulations can read it off every row. (Done in B1 for the df arms: the
+verbs pass the whole `control` to `.interval_lmm`.)
 
 Names: keep the 0.2.0 exported `ci_df` (it is on CRAN; same values), add the rest
 with a scope prefix. All defaults reproduce 0.2.0 exactly until step 13 decides.
 
 | Option | Values | Default (= 0.2.0) | Hook |
 |---|---|---|---|
-| `ci_df` (RI CI) | `"satterthwaite"`, `"kenward-roger"`, `"containment"` | `"satterthwaite"` (with its containment fallback) | `.ci_ddf` vc-extract.R:185-207: add a `containment` branch returning `.ddf_containment` (vc-extract.R:272) directly; `match.arg` sites intervals-api.R:35-36, slope-intervals.R:195/201, intervals-lmm.R:47/52. KR depends on A3. |
-| `slope_ci_df` (RS CI) | `"hessian-satterthwaite"`, `"kenward-roger"`, `"k-minus-1"` | `"hessian-satterthwaite"` (`rF`, vfun-extract.R:319, with containment fallback) | `vfun_extract` gains a CI-df argument (vfun-extract.R:266-269, 313-319). `k-minus-1` = `parsed$B - 1` (note: today's containment uses `B - k_re`, vfun-extract.R:49; it is a different rule). KR needs `pbkrtest::vcovAdj` and the adjusted `V_F` (vfun-extract.R:290 uses `parsed$vcov_beta`, vfun-extract.R:197), so A3's helper is reused. Remove the KR rejection slope-intervals.R:204-208. |
-| `pi_df` (RI PI) | `"francq-satterthwaite"`, `"containment"`, `"kenward-roger"` | `"francq-satterthwaite"` (with the containment fallback, vc-extract.R:104-111) | `.theta_cov` vc-extract.R:73-119 (or a thin wrapper choosing `df_pi`); consumed at intervals-lmm.R:65, 93. `kenward-roger` is **not defined** for a new-observation PI (KR gives df for fixed-effect contrasts); keep it as a reserved value that raises `reintervals_error_unsupported` until a definition is pinned. |
-| `ngm` (RI NGM) | `"current"` (2a-2e as in `.ngm_ri`), `"satterthwaite-broad"` (SAS DDFM=SATTERTH broad-inference new-group prediction), `"hts"` (Higgins-Thompson-Spiegelhalter), `"classical-pi"` | `"current"` | `.ngm_ri` slope-intervals.R:105-186: route before the 2a/2b branch (slope-intervals.R:126) and before the EMS branch (slope-intervals.R:150). `value_rows` (slope-intervals.R:112-124) is shared by all arms. `satterthwaite-broad` reuses `.theta_cov` (Hessian, vc-extract.R:73) plus a gradient of the new-group variance (pattern: `.ci_ddf_satterthwaite` vc-extract.R:219-235). Oracle: SAS part1 `##NGM ... SATTERTH`. HTS and classical-pi formulas to be pinned in their step spec. |
+| `ci_df` (RI CI) **[B1 done]** | `"satterthwaite"`, `"kenward-roger"`, `"containment"` | `"satterthwaite"` (with its containment fallback) | `.ci_ddf` vc-extract.R:185-207: add a `containment` branch returning `.ddf_containment` (vc-extract.R:272) directly; `match.arg` sites intervals-api.R:35-36, slope-intervals.R:195/201, intervals-lmm.R:47/52. KR depends on A3. |
+| `slope_ci_df` (RS CI) **[B1 done]** | `"hessian-satterthwaite"`, `"kenward-roger"`, `"k-minus-1"` | `"hessian-satterthwaite"` (`rF`, vfun-extract.R:319, with containment fallback) | `vfun_extract` gains a CI-df argument (vfun-extract.R:266-269, 313-319). `k-minus-1` = `parsed$B - 1` (note: today's containment uses `B - k_re`, vfun-extract.R:49; it is a different rule). KR needs `pbkrtest::vcovAdj` and the adjusted `V_F` (vfun-extract.R:290 uses `parsed$vcov_beta`, vfun-extract.R:197), so A3's helper is reused. Remove the KR rejection slope-intervals.R:204-208. |
+| `pi_df` (RI PI) **[B1 done]** | `"francq-satterthwaite"`, `"containment"` | `"francq-satterthwaite"` (with the containment fallback, vc-extract.R:104-111) | `intervals_lmm(pi_method = )` replaces `df_pi` with `.ddf_containment()`. No Kenward-Roger value, not even reserved: H6 arm (iii) dropped (see B1 status). |
+| `ngm_method` (RI NGM; B2, diagnostics field `ngm_arm`) | `"current"` (2a-2e as in `.ngm_ri`), `"satterthwaite-broad"` (SAS DDFM=SATTERTH broad-inference new-group prediction), `"hts"` (Higgins-Thompson-Spiegelhalter), `"classical-pi"` | `"current"` | `.ngm_ri` slope-intervals.R:105-186: route before the 2a/2b branch (slope-intervals.R:126) and before the EMS branch (slope-intervals.R:150). `value_rows` (slope-intervals.R:112-124) is shared by all arms. `satterthwaite-broad` reuses `.theta_cov` (Hessian, vc-extract.R:73) plus a gradient of the new-group variance (pattern: `.ci_ddf_satterthwaite` vc-extract.R:219-235). Oracle: SAS part1 `##NGM ... SATTERTH`. HTS and classical-pi formulas to be pinned in their step spec. |
 | `slope_ngm` (RS NGM) | `"current"` (`mu ± t(nu_G) sqrt(V_F + V_G)`), `"gpq"` (generalized prediction interval), `"fv-anova"` (lot-line PI on per-lot fitted values) | `"current"` | slope-intervals.R:218-221 (kind `new_group_mean`). `gpq` reuses A2's `.gpq_pivots` (the theta/tau² GPQs, gpq.R:116-133), drawing a new-lot value `Rtheta + Z' sqrt(Rtau2)`; it **depends on A2**. `fv-anova` reuses the per-batch OLS fitted values `NY` (gpq.R:99-100), so factor `.batch_ols()` out of gpq.R:73-91 first. Oracle: SAS part1 `RS_*` NGM lines (RS_UN_BAL, RS_VC_BAL; RS_UN_UNBAL is singular, boundary case only, per the oracle README) and part2 once it has been run (`ngm_sas_check_part2.results.txt` does not exist yet). |
 
-`lmm_interval_control` validation (intervals-api.R:36-44) gets one `match.arg` per
-option. Applying an option to a model it does not concern (e.g. `slope_ngm` on a
-random-intercept fit) is a no-op, recorded in the diagnostics; it is not an
-error, so one control object can be reused across a simulation grid.
+`lmm_interval_control` validation gets one `match.arg` per option. Applying an
+option to a model or verb it does not concern (e.g. `slope_ngm` on a
+random-intercept fit) is a no-op, recorded in the diagnostics as
+`"not_applicable"`; it is not an error, so one control object can be reused
+across a simulation grid (decided 2026-11-08, implemented in B1).
 
 ---
 
@@ -785,8 +829,10 @@ defaults unchanged unless stated):
    seed instead of a default seed, MC SE by MC sections, M >= 2000, time-point
    guard). **Changed the GPQ numbers** at every t0 after the first (NEWS).
 6. **B plumbing**: control passed down, diagnostics carry the arm; then arms one at
-   a time (`ci_df = "containment"`, `pi_df`, `slope_ci_df`, `ngm`, `slope_ngm`),
-   each with its oracle or a reference test and a one-sided check (C).
+   a time (`ci_df = "containment"`, `pi_df`, `slope_ci_df`, `ngm_method`,
+   `slope_ngm`), each with its oracle or a reference test and a one-sided check
+   (C). **B1 done on `dev`** (`ci_df`, `slope_ci_df`, `pi_df`; H1, H2, H6); B2
+   (`ngm_method`, `slope_ngm`; H3, H4) next.
 7. ~~Simstudy one-sided GPQ re-run~~: done (phase 0, outcome A; A1.2).
 8. **A1** **Done on `dev`** (option a, defunct): every random-slope TI is GPQ at
    M = 20000, `reml-mls` errors, and the RS CI/PI/NGM tag is `"reml"`. **Changed

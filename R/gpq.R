@@ -141,8 +141,18 @@
     bhat[, k] <- bk
     sse <- sse + sum((yk - Zk %*% bk)^2)    # within-batch residual SS
   }
-  list(K = K, n = n, df_resid = df_resid, ZtZi = ZtZi, bhat = bhat,
-       sse = as.numeric(sse))
+  sse <- as.numeric(sse)
+  ## every lot's data on its own straight line: the residual-variance pivot
+  ## sse / U is then 0 in every draw. "Zero" is zero to round-off (relative to
+  ## the total sum of squares), since the per-lot OLS fit leaves ~1e-28 residues
+  ## even on exactly linear data.
+  if (sse <= 1e-12 * max(sum((y - mean(y))^2), .Machine$double.xmin)) {
+    .warn("The pooled within-lot residual sum of squares is zero (every lot's ",
+          "data lie on a straight line), so the residual-variance pivot is ",
+          "degenerate and the interval reflects only the between-lot variance.",
+          class = "reintervals_warning_limitation")
+  }
+  list(K = K, n = n, df_resid = df_resid, ZtZi = ZtZi, bhat = bhat, sse = sse)
 }
 
 ## The M pivot draws, once per call, in the fixed order U, Q, Z.

@@ -65,6 +65,8 @@
   fb  <- attr(comp, "df_fallback")
   rule <- if (is.null(fb) || !key %in% names(fb)) NA_character_
           else if (isFALSE(fb[[key]])) "satterthwaite" else "containment"
+  ## a non-default slope_ci_df arm replaced the CI df: report the arm
+  if (kind == "CI" && !is.null(attr(comp, "ci_arm"))) rule <- attr(comp, "ci_arm")
   ## A non-finite or non-positive df (only reachable from a hand-built container;
   ## vfun_extract always returns a finite df) used to be replaced by 1e6, i.e. a
   ## normal quantile. It now takes the slope engine's own containment df, the
@@ -225,21 +227,19 @@
 .interval_lmm <- function(model, newdata = NULL,
                           kind = c("CI", "PI", "new_group_mean"),
                           level = 0.95, sides = c("two.sided", "lower", "upper"),
-                          ci_df = c("satterthwaite", "kenward-roger")) {
+                          control = lmm_interval_control()) {
   if (!inherits(model, "lmerMod")) {
     .abort("`model` must be a fitted `lmerMod` (an lmer fit).",
            class = "reintervals_error_input")
   }
   kind  <- match.arg(kind)
   sides <- match.arg(sides)
-  ci_df <- match.arg(ci_df)
+  ## df arms (lmm_interval_control): each option is read only where it applies
+  ci_df       <- .arm_value(control, "ci_df")
+  slope_ci_df <- .arm_value(control, "slope_ci_df")
+  pi_df       <- .arm_value(control, "pi_df")
 
   if (.has_random_slope(model)) {
-    if (kind == "CI" && ci_df == "kenward-roger") {
-      .abort("ci_df = \"kenward-roger\" applies to random-intercept models; the ",
-             "random-slope confidence interval uses its own generalized ",
-             "Satterthwaite df.", class = "reintervals_error_method")
-    }
     fe <- lme4::fixef(model)
     time_var <- setdiff(names(fe), "(Intercept)")
     if (length(time_var) != 1L) {
@@ -249,8 +249,13 @@
     }
     t0s <- if (is.null(newdata)) stats::model.frame(model)[[time_var]][1] else
       newdata[[time_var]]
+    ## slope_ci_df arms other than the default replace the CI df (and, for
+    ## Kenward-Roger, the variance) of the container; PI / NGM are unaffected.
+    arm <- if (kind == "CI") slope_ci_df else "hessian-satterthwaite"
+    kr  <- if (arm == "kenward-roger") .kr_parts(model, option = "slope_ci_df") else NULL
     rows <- lapply(t0s, function(t0) {
       comp <- vfun_extract(model, t0 = t0)
+      if (arm != "hessian-satterthwaite") comp <- .slope_ci_arm(comp, model, arm, kr)
       .vfun_interval(comp, kind = kind, level = level, sides = sides)
     })
     out <- do.call(rbind, rows); rownames(out) <- NULL
@@ -262,8 +267,38 @@
     return(.ngm_ri(model, newdata = newdata, level = level, sides = sides))
   }
   out <- intervals_lmm(model, newdata = newdata, level = level, conf = level,
-                       which = kind, ci_method = ci_df)
+                       which = kind, ci_method = ci_df, pi_method = pi_df)
   .one_sided_t(out, level = level, sides = sides)
+}
+
+## Random-slope CI df arm (slope_ci_df) applied to a vfun_components container
+## at its t0: replaces dfs["F"] and, for Kenward-Roger, var_mean, and marks the
+## F df source with the arm (attr "ci_arm", read by .vfun_interval as df_rule).
+##   "k-minus-1"     df = K - 1 (K = number of lots), the unadjusted V_F: the
+##                   exact df for balanced random-coefficient models (GLS =
+##                   mean of the per-lot OLS lines; Chow & Shao 1991).
+##   "kenward-roger" pbkrtest::Lb_ddf with the KR-adjusted covariance
+##                   pbkrtest::vcovAdj(); V_F = l' Vadj l (A3 pairing).
+.slope_ci_arm <- function(comp, model, arm, kr = NULL) {
+  if (arm == "k-minus-1") {
+    comp$dfs[["F"]] <- max(1, attr(comp, "containment")$B - 1)
+  } else if (arm == "kenward-roger") {
+    fe <- lme4::fixef(model)                 # (Intercept), time: l = (1, t0)
+    l <- matrix(ifelse(names(fe) == "(Intercept)", 1, comp$t0), nrow = 1L)
+    ddf <- tryCatch(pbkrtest::Lb_ddf(l, kr$V0, kr$Vadj), error = function(e) NA_real_)
+    if (!isTRUE(is.finite(ddf) && ddf > 0)) {
+      .abort("The Kenward-Roger df could not be computed for this model; use the ",
+             "default slope_ci_df = \"hessian-satterthwaite\".",
+             class = "reintervals_error_numerical")
+    }
+    comp$dfs[["F"]] <- ddf
+    comp$var_mean   <- as.numeric(l %*% kr$Vadj_mat %*% t(l))
+  } else {
+    .abort("Internal: unknown slope_ci_df arm '", arm, "'.",
+           class = "reintervals_error_internal")
+  }
+  attr(comp, "ci_arm") <- arm
+  comp
 }
 
 ## One-sided EMS CI / PI: t_{1 - alpha} on the existing symmetric t pivot (same

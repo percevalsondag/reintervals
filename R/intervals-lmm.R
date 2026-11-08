@@ -46,13 +46,16 @@
 #' @noRd
 intervals_lmm <- function(model, newdata = NULL, level = 0.95, conf = 0.95,
                           which = c("CI", "PI"), ci_df = NULL,
-                          ci_method = c("satterthwaite", "kenward-roger")) {
+                          ci_method = c("satterthwaite", "kenward-roger",
+                                        "containment"),
+                          pi_method = c("francq-satterthwaite", "containment")) {
   if (!inherits(model, "lmerMod")) {
     .abort("`model` must be a fitted `lmerMod` (an lmer fit).",
            class = "reintervals_error_input")
   }
   which <- match.arg(which, c("CI", "PI"), several.ok = TRUE)
   ci_method <- match.arg(ci_method)
+  pi_method <- match.arg(pi_method)
   fx <- .fixed(model, newdata)
   ## theta (observed information) is needed for the PI df and for the default
   ## Satterthwaite CI df; a Kenward-Roger or overridden CI-only call skips it.
@@ -94,6 +97,10 @@ intervals_lmm <- function(model, newdata = NULL, level = 0.95, conf = 0.95,
   }
   if ("PI" %in% which) {
     ## ci df is irrelevant to the PI; the container carries a placeholder
+    ## pi_df = "containment": the same variance (V_F + sigma2_T), with the
+    ## containment df (.ddf_containment, the rank rule) in place of the Francq
+    ## generalized-Satterthwaite df and its fallback.
+    if (pi_method == "containment") theta$df_pi <- .ddf_containment(model)
     pis <- lapply(seq_len(nr), function(i) pi_newobs(make_comp(i, Inf), level = level))
     blocks$PI <- cbind(base, data.frame(
       type = "PI",
@@ -109,7 +116,9 @@ intervals_lmm <- function(model, newdata = NULL, level = 0.95, conf = 0.95,
   rownames(out) <- NULL
   if ("PI" %in% which) {
     attr(out, "components") <- theta$components
-    attr(out, "pi_df_fallback") <- isTRUE(theta$pi_df_fallback)
+    ## the singular-fit df guard is a property of the default (Francq) df only
+    attr(out, "pi_df_fallback") <- if (pi_method == "containment") NA else
+      isTRUE(theta$pi_df_fallback)
   }
   ## set whether or not theta was computed (a CI-only call skips .theta_cov), so
   ## the CI reports lme4::isSingular() like the PI / new-group-mean / TI.

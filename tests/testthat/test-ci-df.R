@@ -93,10 +93,17 @@ test_that("results are identical with pbkrtest masked; KR then errors instead of
                "requires the 'pbkrtest' package")
 })
 
-test_that("ci_df = 'kenward-roger' is rejected for random-slope models", {
+## B1 (Percy, 2026-11-08): an option on a model it does not apply to is a
+## no-op, never an error (one control object across a simulation grid). Until
+## B1, ci_df = "kenward-roger" on a random-slope model was an error; the
+## random-slope KR arm is slope_ci_df = "kenward-roger" (test-df-arms.R).
+test_that("ci_df = 'kenward-roger' is a no-op on random-slope models", {
   skip_if_not_installed("lme4")
   fs <- fit(Reaction ~ Days + (Days | Subject), lme4::sleepstudy)
-  expect_error(ci_lmm(fs, newdata = data.frame(Days = 5),
-                      control = lmm_interval_control(ci_df = "kenward-roger")),
-               "applies to random-intercept models")
+  nd <- data.frame(Days = 5)
+  expect_no_warning(a <- ci_lmm(fs, newdata = nd,
+                                control = lmm_interval_control(ci_df = "kenward-roger")))
+  b <- ci_lmm(fs, newdata = nd)
+  expect_identical(a, b)
+  expect_identical(attr(a, "diagnostics")$ci_df_rule, "not_applicable")
 })
