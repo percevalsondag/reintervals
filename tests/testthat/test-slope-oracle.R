@@ -24,8 +24,9 @@ test_that("A2 (CI gate): slope constructors reproduce oracle to 1e-9 (committed 
   build <- list(
     CI    = function(comp) .vfun_interval(comp, "CI"),
     PI    = function(comp) .vfun_interval(comp, "PI"),
-    CInew = function(comp) .vfun_interval(comp, "new_group_mean"),
-    TI    = function(comp) ti_vfun(comp, content = 0.99, conf = 0.95)
+    CInew = function(comp) .vfun_interval(comp, "new_group_mean")
+    ## the TI rows of slope_oracle.rds belong to the removed closed-form TI
+    ## (ti_vfun, "reml-mls", 1.0.0) and are no longer checked
   )
 
   for (case in names(comps)) {

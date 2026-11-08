@@ -36,8 +36,9 @@ between the verbs (full mapping in \code{vignette("choosing-an-interval")};
 design tags in \link{reintervals-models}). Engines: \code{"ems-mls"}
 (expected-mean-square / modified large-sample), \code{"anova-mls"} (unweighted
 lot-mean ANOVA: Montes et al. with a fixed slope, Hoffman & Kringle without
-one), \code{"reml-mls"} (REML closed form), \code{"gpq"} (generalized pivotal quantity,
-Monte Carlo).
+one), \code{"reml"} (REML-based t-interval, random-slope CI / PI / new-group
+mean), \code{"gpq"} (generalized pivotal quantity, Monte Carlo; every random-slope
+tolerance interval).
 \tabular{lllll}{
 \strong{model / situation} \tab \strong{CI} \tab \strong{PI} \tab \strong{TI} \tab
 \strong{new-group mean} \cr
@@ -57,18 +58,13 @@ random intercept + fixed slope, clean balanced \tab \code{ems-mls} \tab
 random intercept + fixed slope, single-observation / staggered \tab
 \code{ems-mls} (warns with single-observation lots) \tab \code{ems-mls} (warns
 likewise) \tab \code{anova-mls} \tab \code{anova-mls} \cr
-random slope, future-observation, non-singular \tab \code{reml-mls} \tab
-\code{reml-mls} \tab \code{reml-mls} \tab \code{reml-mls} \cr
-random slope, singular fit or TI Satterthwaite df unavailable \tab
-\code{reml-mls} \tab \code{reml-mls} \tab \code{gpq} \tab \code{reml-mls} \cr
-random slope, batch-mean (\code{over = "group_mean"}, TI only) \tab --- \tab
---- \tab \code{gpq} \tab --- \cr
+random slope (any fit, singular included) \tab \code{reml} \tab \code{reml} \tab
+\code{gpq} (both \code{over} targets, all sides) \tab \code{reml} \cr
 }
-The random-slope tolerance interval switches to GPQ when the fit is
-singular or, at a given \code{t0}, when the closed form's Satterthwaite df for the
-between-group or residual variance is unavailable (including when the
-variance-component covariance is not positive definite); the reason is in
-\code{attr(., "diagnostics")$route_reason}. The random-intercept confidence
+Every random-slope tolerance interval is GPQ (Monte Carlo; default
+\code{M = 20000}, the validated size). The REML closed-form tolerance interval
+(\code{method = "reml-mls"}) was removed in 1.0.0 because it under-covers.
+The random-intercept confidence
 interval uses a Satterthwaite df, falling back to the SAS-style containment
 df (\code{A - 1} one-way or nested, \code{min(A, B) - 1} crossed) when that df is
 unavailable; Kenward-Roger only on request
@@ -78,10 +74,9 @@ KR-adjusted covariance from \pkg{pbkrtest}).
 \strong{One-sided intervals} (\code{sides = "lower"} / \code{"upper"}) are available from
 every verb. CI, PI, and new-group mean keep the two-sided center, variance,
 and df with \verb{t_\{1 - alpha\}}. One-sided tolerance limits: \code{anova-mls} uses
-Hoffman's (2010) one-sided limit; \code{ems-mls} and random-slope models
-(\code{reml-mls}, the default on every fit) use the package's extension of
-Hoffman's limit to the Francq and REML closed-form bounds, validated by
-simulation. See \link{reintervals-models}.
+Hoffman's (2010) one-sided limit; \code{ems-mls} uses the package's extension of
+Hoffman's limit to the Francq bound, validated by simulation; random-slope
+models use the one-sided GPQ limit. See \link{reintervals-models}.
 
 \strong{Scope.} General fixed effects are supported for random-intercept
 models; random-slope models are supported for a single continuous covariate (the

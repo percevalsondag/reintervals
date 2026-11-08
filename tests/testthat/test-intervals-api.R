@@ -68,8 +68,17 @@ test_that("lmm_predict dispatches to the verbs and gates P/over to tolerance", {
 test_that("the four verbs carry harmonised provenance (method/design/grouping)", {
   skip_if_not_installed("lme4")
   fs <- slope_fit()
-  ci  <- ci_lmm(fs, newdata = data.frame(Days = 5))
-  expect_identical(ci$method, "reml-mls")
+  nd <- data.frame(Days = 5)
+  ci  <- ci_lmm(fs, newdata = nd)
+  ## 1.0.0 tag rename: the random-slope CI / PI / NGM t-intervals are "reml"
+  expect_identical(ci$method, "reml")
+  expect_identical(pi_lmm(fs, newdata = nd)$method, "reml")
+  expect_identical(new_group_mean_lmm(fs, newdata = nd)$method, "reml")
+  for (v in list(ci_lmm, pi_lmm, new_group_mean_lmm)) {
+    expect_identical(v(fs, newdata = nd, method = "reml")$method, "reml")
+    expect_error(v(fs, newdata = nd, method = "reml-mls"), '"reml"',
+                 class = "reintervals_error_method")
+  }
   expect_identical(ci$design, "random_slope_correlated")
   expect_true(is.na(attr(ci, "grouping")))
   # EMS verb: ems-mls + random_intercept + grouping
@@ -95,7 +104,6 @@ test_that("slope interval rows surface the vg_floored flag (FALSE in the normal 
   skip_if_not_installed("lme4")
   comp <- vfun_extract(slope_fit(), t0 = 5)
   expect_false(isTRUE(attr(comp, "vg_floored")))        # PD Sigma -> V_G >= 0
-  expect_false(ti_vfun(comp)$vg_floored)
   expect_false(.vfun_interval(comp, "new_group_mean")$vg_floored)
 })
 
@@ -110,7 +118,8 @@ test_that("every verb on every engine returns the identical core column contract
                    new_group_mean_lmm(m))
   verbs_sl <- list(ci_lmm(fs, newdata = data.frame(Days = 5)),
                    pi_lmm(fs, newdata = data.frame(Days = 5)),
-                   ti_lmm(fs, newdata = data.frame(Days = 5), P = 0.99),
+                   ti_lmm(fs, newdata = data.frame(Days = 5), P = 0.99,   # GPQ; contract
+                          control = lmm_interval_control(seed = 1, M = 2000)),  # test, small M
                    new_group_mean_lmm(fs, newdata = data.frame(Days = 5)))
   for (x in c(verbs_ri, verbs_sl)) {
     expect_s3_class(x, "lmm_interval")

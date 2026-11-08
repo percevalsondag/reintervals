@@ -1,7 +1,8 @@
 # dispatch through the public verb ti_lmm.
 # Checks: (1) EMS numeric core unchanged through ti_lmm; (2) the
-# vc-extract random-slope stop() still fires direct; (3) target-aware slope
-# routing via the pure .choose_slope_engine matrix; (4) M1-overlap routing
+# vc-extract random-slope stop() still fires direct; (3) every random-slope
+# tolerance interval is GPQ (1.0.0: the closed form reml-mls is defunct); (4)
+# M1-overlap routing
 # (balanced -> EMS, single-obs -> anova-mls oracle); (5) the EMS and slope df fallbacks stay distinct; plus the
 # harmonized provenance (method/design/grouping) and over/P/method args.
 
@@ -48,28 +49,41 @@ test_that("the vc-extract random-slope stop() still EXISTS and fires direct; dis
   fs <- slope_fit()
   expect_error(vc_extract(fs), "random-intercept")
   expect_error(.ti_ems(fs), "random-intercept")
-  expect_error(ti_lmm(fs, newdata = data.frame(Days = 0)), NA)    # does not error
+  expect_error(ti_lmm(fs, newdata = data.frame(Days = 0),          # does not error
+                      control = lmm_interval_control(seed = 1, M = 2000)), NA)  # small M: not an oracle
 })
 
-# ---- (3) target-aware routing: the (target x singular) decision matrix --------
-test_that("(target x singular) routing matrix: batch-mean -> GPQ always; future-obs -> closed/gpq by singularity", {
-  expect_identical(.choose_slope_engine("observable", FALSE, "auto"), "closed")
-  expect_identical(.choose_slope_engine("observable", TRUE,  "auto"), "gpq")
-  expect_identical(.choose_slope_engine("true_value", FALSE, "auto"), "gpq")  # non-singular too
-  expect_identical(.choose_slope_engine("true_value", TRUE,  "auto"), "gpq")
-  expect_identical(.choose_slope_engine("observable", FALSE, "gpq"),    "gpq")
-  expect_identical(.choose_slope_engine("observable", TRUE,  "closed"), "closed")
-  expect_error(.choose_slope_engine("true_value", FALSE, "closed"), "batch-mean")
+# ---- (3) random slope -> GPQ for every target / side / fit --------------------
+# These are routing tests, not oracles: M = 2000 keeps them fast (the validated
+# default is M = 20000).
+test_that("every random-slope TI is GPQ: both targets x all sides, non-singular and singular", {
+  skip_if_not_installed("lme4")
+  ctl <- lmm_interval_control(seed = 3, M = 2000L)        # routing test, not an oracle
+  set.seed(11); d <- expand.grid(time = c(0, 3, 6, 9, 12), batch = factor(1:6))
+  d$y <- 100 - 2 * d$time + rnorm(nrow(d))                 # no between-batch variation
+  fz <- suppressWarnings(suppressMessages(lme4::lmer(y ~ time + (time | batch), data = d)))
+  fits <- list(nonsingular = slope_fit(), singular = fz)
+  nds  <- list(nonsingular = data.frame(Days = c(0, 5)), singular = data.frame(time = c(0, 6)))
+  for (f in names(fits)) for (ov in c("observation", "group_mean"))
+    for (sd in c("two.sided", "lower", "upper")) {
+      out <- ti_lmm(fits[[f]], newdata = nds[[f]], over = ov, sides = sd, control = ctl)
+      info <- paste(f, ov, sd)
+      expect_identical(out$method, c("gpq", "gpq"), info = info)
+      expect_identical(attr(out, "diagnostics")$route_reason, c("auto", "auto"), info = info)
+      expect_identical(out$sides, c(sd, sd), info = info)
+      if (sd != "upper") expect_true(all(is.finite(out$lower)), info = info)
+      if (sd != "lower") expect_true(all(is.finite(out$upper)), info = info)
+    }
 })
 
-test_that("slope future-obs (non-singular) routes to the REML closed form (reml-mls)", {
+test_that("slope future-obs (non-singular) routes to GPQ, one row per t0", {
   skip_if_not_installed("lme4")
   fs <- slope_fit()
-  skip_if(lme4::isSingular(fs), "sleepstudy slope fit landed singular here")
-  out <- ti_lmm(fs, newdata = data.frame(Days = c(0, 5)), P = 0.99)
+  out <- ti_lmm(fs, newdata = data.frame(Days = c(0, 5)), P = 0.99,
+                control = lmm_interval_control(seed = 1, M = 2000L))   # not an oracle
   expect_equal(nrow(out), 2L)
   expect_equal(out$Days, c(0, 5))        # eval column named by the actual covariate
-  expect_true(all(out$method == "reml-mls"))
+  expect_true(all(out$method == "gpq"))
   expect_true(all(out$design == "random_slope_correlated"))
   expect_true(all(is.finite(out$lower)) && all(out$upper > out$lower))
 })
@@ -83,17 +97,20 @@ test_that("slope batch-mean (over = group_mean) routes to GPQ even when non-sing
   expect_true(is.finite(out$lower) && out$upper > out$lower)
 })
 
-test_that("method override: force gpq on future-obs; refuse reml-mls + batch-mean", {
+test_that("method override: gpq is forceable; reml-mls is defunct; EMS methods are rejected", {
   skip_if_not_installed("lme4")
   fs <- slope_fit()
-  forced <- ti_lmm(fs, newdata = data.frame(Days = 5), method = "gpq",
-                   control = lmm_interval_control(seed = 7, M = 2000L))
+  ctl <- lmm_interval_control(seed = 7, M = 2000L)          # not an oracle
+  forced <- ti_lmm(fs, newdata = data.frame(Days = 5), method = "gpq", control = ctl)
+  auto   <- ti_lmm(fs, newdata = data.frame(Days = 5), control = ctl)
   expect_equal(forced$method, "gpq")
-  expect_error(
-    ti_lmm(fs, newdata = data.frame(Days = 5), over = "group_mean",
-           method = "reml-mls"),
-    "batch-mean"
-  )
+  expect_identical(attr(forced, "diagnostics")$route_reason, "method")
+  expect_equal(c(forced$lower, forced$upper), c(auto$lower, auto$upper))  # same engine, same seed
+  for (ov in c("observation", "group_mean")) {
+    expect_error(ti_lmm(fs, newdata = data.frame(Days = 5), over = ov, method = "reml-mls"),
+                 class = "reintervals_error_defunct")
+  }
+  expect_error(ti_lmm(fit_52(), method = "reml-mls"), class = "reintervals_error_defunct")
   # an EMS-only algorithm on a slope model is rejected
   expect_error(ti_lmm(fs, newdata = data.frame(Days = 5), method = "ems-mls"),
                "not available")
@@ -160,7 +177,7 @@ test_that("EMS and slope df fallbacks are distinct functions (not shared)", {
   expect_identical(.vfun_df_containment(parsed, w_between = 0), max(1, 26 - 2 - 11))
 })
 
-test_that("a non-singular random-slope fit with an unavailable Satterthwaite df routes the TI to gpq", {
+test_that("a non-singular random-slope fit with an unavailable Satterthwaite df: TI is GPQ, slope NGM reports containment", {
   skip_if_not_installed("lme4")
   skip_on_cran()   # the fit sits near the variance-component boundary (the
                    # mechanism behind the df failure), so its singular /
@@ -169,44 +186,34 @@ test_that("a non-singular random-slope fit with an unavailable Satterthwaite df 
   # = 0.10, 20 batches, rep 1084, seed = MASTER_SEED + 100000 * k + rep with k = 3
   # (the coverage study's DGP, scripts/coverage_reml.R). Non-singular by
   # lme4::isSingular(), yet the Hessian of Cov(phi) is unusable, so the
-  # Satterthwaite df of nu_G and nu_e fall back to containment.
+  # Satterthwaite df of nu_G falls back to containment.
   set.seed(20261026L + 100000L * 3L + 1084L)
   d <- expand.grid(time = c(0, 3, 6, 9, 12), batch = factor(1:20))
   b0 <- rnorm(20, 0, 3); b1 <- rnorm(20, 0, 0.10)
   d$y <- 100 - 2 * d$time + b0[d$batch] + b1[d$batch] * d$time + rnorm(nrow(d), 0, 2)
   fm <- suppressWarnings(suppressMessages(lme4::lmer(y ~ time + (time | batch), data = d)))
   expect_false(lme4::isSingular(fm))
-  expect_true(all(attr(vfun_extract(fm, t0 = 12), "df_fallback")[c("G", "e")]))
+  expect_true(attr(vfun_extract(fm, t0 = 12), "df_fallback")[["G"]])
 
   nd <- data.frame(time = c(6, 12)); ctl <- lmm_interval_control(seed = 1, M = 2000)
-  x <- ti_lmm(fm, nd, P = 0.99, control = ctl)
+  x <- ti_lmm(fm, nd, P = 0.99, control = ctl)              # not an oracle
   expect_identical(x$method, c("gpq", "gpq"))
-  expect_identical(attr(x, "diagnostics")$route_reason, c("df_unavailable", "df_unavailable"))
-  g <- ti_lmm(fm, nd, P = 0.99, method = "gpq", control = ctl)
-  expect_equal(c(x$lower, x$upper), c(g$lower, g$upper))
-  expect_identical(attr(g, "diagnostics")$route_reason, c("method", "method"))
-  # forcing the closed form is still honored
-  r <- ti_lmm(fm, nd, P = 0.99, method = "reml-mls")
-  expect_identical(r$method, c("reml-mls", "reml-mls"))
+  expect_identical(attr(x, "diagnostics")$route_reason, c("auto", "auto"))
+  ngm <- new_group_mean_lmm(fm, nd)
+  expect_identical(ngm$method, c("reml", "reml"))
+  expect_identical(attr(ngm, "diagnostics")$df_rule, c("containment", "containment"))
 })
 
-test_that("route_reason: closed form on a healthy fit, singular -> gpq, batch-mean -> gpq", {
+test_that("route_reason is 'auto' for every dispatched random-slope TI and 'method' when gpq is forced", {
   skip_if_not_installed("lme4")
   fs <- suppressMessages(lme4::lmer(Reaction ~ Days + (Days | Subject), data = lme4::sleepstudy))
-  x <- ti_lmm(fs, newdata = data.frame(Days = 5))
-  expect_identical(x$method, "reml-mls")
-  expect_identical(attr(x, "diagnostics")$route_reason, "none")
-  ctl <- lmm_interval_control(seed = 1, M = 2000)
+  ctl <- lmm_interval_control(seed = 1, M = 2000)           # not an oracle
+  x  <- ti_lmm(fs, newdata = data.frame(Days = 5), control = ctl)
   gm <- ti_lmm(fs, newdata = data.frame(Days = 5), over = "group_mean", control = ctl)
-  expect_identical(attr(gm, "diagnostics")$route_reason, "group_mean_target")
-  set.seed(11)
-  d <- expand.grid(time = c(0, 3, 6, 9, 12), batch = factor(1:6))
-  d$y <- 100 - 2 * d$time + rnorm(nrow(d))                 # no between-batch variation
-  fz <- suppressWarnings(suppressMessages(lme4::lmer(y ~ time + (time | batch), data = d)))
-  skip_if_not(lme4::isSingular(fz))
-  z <- ti_lmm(fz, newdata = data.frame(time = 6), control = ctl)
-  expect_identical(z$method, "gpq")
-  expect_identical(attr(z, "diagnostics")$route_reason, "singular")
+  fo <- ti_lmm(fs, newdata = data.frame(Days = 5), method = "gpq", control = ctl)
+  expect_identical(attr(x,  "diagnostics")$route_reason, "auto")
+  expect_identical(attr(gm, "diagnostics")$route_reason, "auto")
+  expect_identical(attr(fo, "diagnostics")$route_reason, "method")
 })
 
 test_that(".is_pd_cov accepts a PD covariance and rejects indefinite / singular / malformed ones", {
@@ -220,7 +227,7 @@ test_that(".is_pd_cov accepts a PD covariance and rejects indefinite / singular 
   expect_false(.is_pd_cov(matrix(c(1, NA, NA, 1), 2)))
 })
 
-test_that("an indefinite Cov(phi) is unavailable: containment df at every t0 and the TI routes to gpq", {
+test_that("an indefinite Cov(phi) is unavailable: containment df at every t0 (TI is GPQ regardless)", {
   skip_if_not_installed("lme4")
   skip_on_cran()   # near-boundary fit (the mechanism): status could flip with lme4 jitter
   # One of the 7 E3 fits whose Satterthwaite df failed at one t0 only, because
@@ -239,10 +246,10 @@ test_that("an indefinite Cov(phi) is unavailable: containment df at every t0 and
   for (t0 in c(6, 12)) {
     cp <- vfun_extract(fm, t0 = t0)
     expect_null(cp$cov)
-    expect_true(all(attr(cp, "df_fallback")[c("G", "e")]), info = t0)
+    expect_true(attr(cp, "df_fallback")[["G"]], info = t0)
   }
   x <- ti_lmm(fm, data.frame(time = c(6, 12)), P = 0.99,
-              control = lmm_interval_control(seed = 1, M = 2000))
+              control = lmm_interval_control(seed = 1, M = 2000))   # not an oracle
   expect_identical(x$method, c("gpq", "gpq"))
-  expect_identical(attr(x, "diagnostics")$route_reason, c("df_unavailable", "df_unavailable"))
+  expect_identical(attr(x, "diagnostics")$route_reason, c("auto", "auto"))
 })

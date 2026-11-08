@@ -32,15 +32,12 @@
 #'     a `cov`.}
 #'   \item{`mean`, `var_mean`}{The per-`t0` mean-line scalars `mu(t0) = x0'beta`
 #'     and `V_F(t0) = x0' Vbeta x0`.}
-#'   \item{`V_G`, `V_T`, `n_E`}{The quadratic-form payload at `t0`:
-#'     `V_G(t0) = z0' Sigma z0` (between-batch variance, residual excluded),
-#'     `V_T = V_G + s2e` (future-observation variance), and the effective sample
-#'     size `n_E = content_var / V_F`, where the content variance is `V_T`
-#'     for the observable target and `V_G` for the true-value target (`Inf`
-#'     when `V_F = 0`).}
+#'   \item{`V_G`, `V_T`}{The quadratic-form payload at `t0`:
+#'     `V_G(t0) = z0' Sigma z0` (between-batch variance, residual excluded) and
+#'     `V_T = V_G + s2e` (future-observation variance).}
 #'   \item{`dfs`}{Named numeric of the Satterthwaite / containment degrees of
-#'     freedom (e.g. the mean-line, future-obs, between, and residual df). `Inf`
-#'     allowed; values positive.}
+#'     freedom (from `vfun_extract()`: `F` mean line, `T` future observation,
+#'     `G` between-group). `Inf` allowed; values positive.}
 #'   \item{`t0`}{The single time point at which the payload is evaluated.}
 #'   \item{`singular`}{`lme4::isSingular()` flag --- the fit is *exactly*
 #'     degenerate (a variance component on the boundary at zero).}
@@ -63,7 +60,6 @@
 #'   raw (it can be negative at a non-PD / boundary `Sigma`, because it is the
 #'   raw quadratic form --- PSD-ness is guarded upstream at the fit).
 #' @param V_T Numeric scalar `V_T(t0) = V_G + s2e`. Finite; carried raw.
-#' @param n_E Numeric scalar effective sample size (> 0; `Inf` allowed).
 #' @param dfs Named numeric vector of degrees of freedom (positive; `Inf`
 #'   allowed; no `NA`).
 #' @param t0 Numeric scalar time point.
@@ -87,17 +83,16 @@
 #'   mean = 98.5, var_mean = 0.12,
 #'   V_G = 2.0 + 2 * 24 * -0.05 + 24^2 * 0.01,   # z0' Sigma z0 at t0 = 24
 #'   V_T = (2.0 + 2 * 24 * -0.05 + 24^2 * 0.01) + 0.7,
-#'   n_E = 30,
-#'   dfs = c(F = 8, T = 6.4, G = 5.1, e = 40),
+#'   dfs = c(F = 8, T = 6.4, G = 5.1),
 #'   t0 = 24
 #' )
 #' vc
 #' @noRd
-vfun_components <- function(type, phi, mean, var_mean, V_G, V_T, n_E, dfs,
+vfun_components <- function(type, phi, mean, var_mean, V_G, V_T, dfs,
                             t0, cov = NULL, singular = FALSE, boundary = FALSE) {
   validate_vfun_components(
     type = type, phi = phi, cov = cov, mean = mean, var_mean = var_mean,
-    V_G = V_G, V_T = V_T, n_E = n_E, dfs = dfs, t0 = t0, singular = singular,
+    V_G = V_G, V_T = V_T, dfs = dfs, t0 = t0, singular = singular,
     boundary = boundary
   )
 }
@@ -117,7 +112,7 @@ vfun_components <- function(type, phi, mean, var_mean, V_G, V_T, n_E, dfs,
 ## sign rules are the whole point (see the class doc):
 ## variances (s2_*) must be non-negative, the covariance s01 is unrestricted.
 validate_vfun_components <- function(type, phi, cov, mean, var_mean,
-                                     V_G, V_T, n_E, dfs, t0, singular,
+                                     V_G, V_T, dfs, t0, singular,
                                      boundary = FALSE) {
   ## --- type --------------------------------------------------------------
   if (!is.character(type) || length(type) != 1L ||
@@ -184,7 +179,7 @@ validate_vfun_components <- function(type, phi, cov, mean, var_mean,
     if (nonneg && (is.finite(x) && x < 0)) {
       .abort(sprintf("`%s` must be non-negative.", nm), class = "reintervals_error_input")
     }
-    if (!positive && nm != "n_E" && !is.finite(x)) {
+    if (!positive && !is.finite(x)) {
       .abort(sprintf("`%s` must be finite.", nm), class = "reintervals_error_input")
     }
     unname(x)
@@ -199,7 +194,6 @@ validate_vfun_components <- function(type, phi, cov, mean, var_mean,
   ## (permit the cause, forbid the effect), so don't add a floor here.
   V_G      <- .scalar(V_G, "V_G")                          # finite; may be < 0
   V_T      <- .scalar(V_T, "V_T")                          # finite; may be < 0
-  n_E      <- .scalar(n_E, "n_E", positive = TRUE)        # Inf allowed
   t0       <- .scalar(t0, "t0")
 
   ## --- dfs: same contract as re_components$dfs (positive, Inf ok, no NA) --
@@ -224,7 +218,7 @@ validate_vfun_components <- function(type, phi, cov, mean, var_mean,
   structure(
     list(type = type, phi = phi, cov = cov,
          mean = mean, var_mean = var_mean,
-         V_G = V_G, V_T = V_T, n_E = n_E,
+         V_G = V_G, V_T = V_T,
          dfs = dfs, t0 = t0, singular = singular, boundary = boundary),
     class = "vfun_components"
   )
@@ -243,8 +237,7 @@ print.vfun_components <- function(x, ...) {
       else sprintf("%d x %d", nrow(x$cov), ncol(x$cov)), "\n")
   cat("  @ t0     :", format(x$t0), "\n")
   cat("  mean     :", format(x$mean), " var_mean:", format(x$var_mean), "\n")
-  cat("  V_G      :", format(x$V_G), " V_T:", format(x$V_T),
-      " n_E:", format(x$n_E), "\n")
+  cat("  V_G      :", format(x$V_G), " V_T:", format(x$V_T), "\n")
   cat("  dfs      :",
       paste(names(x$dfs), signif(x$dfs, 4), sep = "=", collapse = ", "), "\n")
   invisible(x)

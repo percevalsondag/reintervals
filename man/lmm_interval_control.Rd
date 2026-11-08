@@ -6,7 +6,7 @@
 \usage{
 lmm_interval_control(
   seed = NULL,
-  M = 10000L,
+  M = 20000L,
   ci_df = c("satterthwaite", "kenward-roger")
 )
 }
@@ -14,7 +14,9 @@ lmm_interval_control(
 \item{seed}{Optional integer seed for the GPQ draws (reproducibility / GxP
 traceability). \code{NULL} uses the ambient RNG state.}
 
-\item{M}{Number of GPQ Monte-Carlo realizations. Default 10000.}
+\item{M}{Number of GPQ Monte-Carlo realizations. Default 20000, the size
+validated by simulation for the random-slope tolerance interval (one- and
+two-sided, both targets). Smaller values run faster but are not validated.}
 
 \item{ci_df}{Denominator-df rule for the confidence interval (\code{\link[=ci_lmm]{ci_lmm()}}) on
 random-intercept models: \code{"satterthwaite"} (default; Satterthwaite with the

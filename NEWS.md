@@ -2,6 +2,34 @@
 
 * Development towards 1.0.0.
 
+## Breaking changes
+
+* **`method = "reml-mls"` is defunct** for `ti_lmm()`: it signals an error of
+  class `reintervals_error_defunct`. The REML closed-form MLS tolerance
+  interval for random-slope models under-covers: one-sided 0.916-0.934 when the
+  residual variance dominates and `t0` is extrapolated, two-sided 0.84-0.93
+  where forced. Use `method = "gpq"` (the default; Oliva-Aviles & Hauser
+  2025). The internal closed-form constructor (`ti_vfun()`) is removed.
+* **Every random-slope tolerance interval is now GPQ**: both targets
+  (`over = "observation"` and `"group_mean"`), two- and one-sided, singular
+  fits included. In 0.2.0 the future-observation target used the closed form
+  on non-singular fits and for every one-sided interval, so **those numbers
+  change**. A simulation study (one-sided GPQ in the regime that had motivated
+  the closed-form one-sided default) validated GPQ at `M = 20000` for all six
+  side x target combinations (worst coverage 0.9405 for a nominal 0.95).
+  `attr(., "diagnostics")$route_reason` now takes the values `"auto"` and
+  `"method"` (the 0.2.0 values `"none"`, `"singular"`, `"df_unavailable"`
+  and `"group_mean_target"` described the closed-form routing, which no
+  longer exists).
+* **Tag rename:** the random-slope confidence, prediction and new-group-mean
+  intervals report `method = "reml"` (was `"reml-mls"`, the name of the
+  removed tolerance interval). Their numbers are unchanged. Passing
+  `method = "reml-mls"` to `ci_lmm()`, `pi_lmm()` or `new_group_mean_lmm()`
+  on a random-slope model errors and names `"reml"`.
+* **Default `M = 20000`** in `lmm_interval_control()` (was 10000), the GPQ
+  size validated by simulation. GPQ results at the default therefore change
+  (and take about twice as long).
+
 ## Bug fixes
 
 * `ci_lmm(control = lmm_interval_control(ci_df = "kenward-roger"))` paired the

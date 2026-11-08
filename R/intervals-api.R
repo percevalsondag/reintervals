@@ -14,7 +14,9 @@
 #'
 #' @param seed Optional integer seed for the GPQ draws (reproducibility / GxP
 #'   traceability). `NULL` uses the ambient RNG state.
-#' @param M Number of GPQ Monte-Carlo realizations. Default 10000.
+#' @param M Number of GPQ Monte-Carlo realizations. Default 20000, the size
+#'   validated by simulation for the random-slope tolerance interval (one- and
+#'   two-sided, both targets). Smaller values run faster but are not validated.
 #' @param ci_df Denominator-df rule for the confidence interval ([ci_lmm()]) on
 #'   random-intercept models: `"satterthwaite"` (default; Satterthwaite with the
 #'   observed-information covariance of the variance components, falling back to
@@ -36,7 +38,7 @@
 #' lmm_interval_control(seed = 1, M = 5000)
 #' lmm_interval_control(ci_df = "kenward-roger")
 #' @export
-lmm_interval_control <- function(seed = NULL, M = 10000L,
+lmm_interval_control <- function(seed = NULL, M = 20000L,
                                  ci_df = c("satterthwaite", "kenward-roger")) {
   ci_df <- match.arg(ci_df)
   if (!is.null(seed) && (!is.numeric(seed) || length(seed) != 1L || is.na(seed))) {
@@ -204,7 +206,7 @@ print.lmm_interval <- function(x, ...) {
 #' [new_group_mean_lmm()]). `ci_lmm()` gives a confidence interval for the mean
 #' response at `newdata`. It dispatches by random structure: random-intercept
 #' designs (including a fixed slope) use the expected-mean-square engine;
-#' random-slope designs use the REML closed form. See [reintervals] and
+#' random-slope designs use a REML-based t-interval (`"reml"`). See [reintervals] and
 #' `vignette("choosing-an-interval")` for the engine map, [reintervals-models]
 #' for the design tags, and [lmm_predict()] for the unified entry point.
 #'
@@ -217,8 +219,8 @@ print.lmm_interval <- function(x, ...) {
 #'   interval keeps the two-sided interval's center, variance, and df and uses
 #'   `t_{1 - alpha}` in place of `t_{1 - alpha/2}`.
 #' @param method `"auto"` (default) chooses the algorithm by structure; one of
-#'   `"ems-mls"`, `"reml-mls"`, `"anova-mls"`, `"gpq"` forces that engine and
-#'   errors if it is incompatible with the model.
+#'   `"ems-mls"`, `"anova-mls"` (new-group mean only), `"reml"` (random-slope
+#'   models) forces that engine and errors if it is incompatible with the model.
 #' @param control An [lmm_interval_control()] object (the GPQ `seed` and `M`,
 #'   and the confidence-interval df rule `ci_df`).
 #'
@@ -231,7 +233,7 @@ print.lmm_interval <- function(x, ...) {
 #'       `lower`, `upper`;
 #'     \item `level` (the confidence, `1 - alpha`); `P` (content proportion ---
 #'       the value for `ti`, `NA` for the coverage intervals); `sides`;
-#'     \item `method` (the engine: `"ems-mls"`, `"reml-mls"`, `"anova-mls"`, or
+#'     \item `method` (the engine: `"ems-mls"`, `"anova-mls"`, `"reml"`, or
 #'       `"gpq"`); `design` (the route-independent model class, see
 #'       [reintervals-models]);
 #'     \item the per-row flags `singular`, `boundary`, `vg_floored`.
@@ -342,8 +344,8 @@ pi_lmm <- function(model, newdata = NULL, alpha = NULL, level = NULL,
 #'   \item crossed with interaction: the same `W`, with a Satterthwaite df in
 #'     which `V_F` is attached to the two main-effect terms
 #'     (`"satterthwaite-vf"`, `"ems-mls"`);
-#'   \item random slope: the REML closed form
-#'     \eqn{\mu(t_0) \pm t_{\nu_G}\sqrt{V_F + V_G}} (`"reml-mls"`).
+#'   \item random slope: the REML-based t-interval
+#'     \eqn{\mu(t_0) \pm t_{\nu_G}\sqrt{V_F + V_G}} (`"reml"`).
 #' }
 #' A design without a closed-form variance decomposition (two crossed factors
 #' without their interaction term, or four or more grouping factors) is an
@@ -374,10 +376,17 @@ new_group_mean_lmm <- function(model, newdata = NULL, alpha = NULL, level = NULL
 
 ## shared body for the three coverage verbs: dispatch via the engine entry
 ## (.interval_lmm) then stamp harmonized provenance. method tags: slope ->
-## "reml-mls" (already on the row); EMS -> "ems-mls".
+## "reml" (already on the row; "reml-mls" until 1.0.0); EMS -> "ems-mls".
 .coverage_verb <- function(model, newdata, kind, level, sides, method, control) {
+  if (identical(method, "reml-mls") && .has_random_slope(model)) {
+    .abort("method = \"reml-mls\" is no longer a method of the random-slope ",
+           "confidence, prediction and new-group-mean intervals: since 1.0.0 their ",
+           "method is \"reml\" (\"reml-mls\" named the removed closed-form ",
+           "tolerance interval). Use \"auto\" or \"reml\".",
+           class = "reintervals_error_method")
+  }
   if (!identical(method, "auto")) {
-    ok <- if (.has_random_slope(model)) "reml-mls"
+    ok <- if (.has_random_slope(model)) "reml"
           else if (kind == "new_group_mean" && .ngm_uses_anova(model)) "anova-mls"
           else "ems-mls"
     if (!method %in% ok) {

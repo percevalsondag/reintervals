@@ -36,8 +36,16 @@ library(lme4)
 |---|---|---|
 | `ems-mls` | Random-intercept designs and the balanced fixed-slope design (expected-mean-square / observed-information MLS); the new-group-mean interval on nested, crossed, and one-way-with-covariates designs. | Francq, Lin & Hoyer (2019) |
 | `anova-mls` | Single-observation / unbalanced fixed-slope (stability) tolerance intervals, and — without a covariate — the intercept-only one-way tolerance interval (unweighted group-mean ANOVA); the new-group-mean interval on every fixed-slope design and on the intercept-only one-way design. | Montes, Burdick & Leblond (2019); Hoffman & Kringle (2005) |
-| `reml-mls` | Random-slope closed-form intervals. | Graybill–Wang MLS two-component bound (Graybill & Wang 1980); generalized Satterthwaite df |
-| `gpq` | Random-slope batch-mean target, and random-slope tolerance intervals when the fit is singular or the closed form's Satterthwaite df is unavailable (generalized pivotal quantity, Monte-Carlo). | Oliva-Aviles & Hauser (2025) |
+| `reml` | Random-slope confidence, prediction, and new-group-mean intervals (REML-based t-intervals). | Generalized Satterthwaite df on the REML observed-information covariance |
+| `gpq` | Every random-slope tolerance interval: both targets (future observation, batch mean), two- and one-sided, singular fits included (generalized pivotal quantity, Monte-Carlo; default `M = 20000`). | Oliva-Aviles & Hauser (2025) |
+
+Until 0.2.0, random-slope tolerance intervals defaulted to a REML closed-form
+MLS interval (`method = "reml-mls"`). It was removed in 1.0.0 because it
+under-covers (one-sided 0.916–0.934 when the residual variance dominates and
+`t0` is extrapolated; two-sided 0.84–0.93 where forced); `method = "reml-mls"`
+now signals an error of class `reintervals_error_defunct`. The random-slope CI,
+PI, and new-group-mean intervals, which were tagged `"reml-mls"` too, are now
+tagged `"reml"`; their numbers did not change.
 
 The engine is chosen automatically from the model's structure; `method =` lets
 you pin it (within what is valid — see below).
@@ -60,9 +68,8 @@ B-within-A cell (nested), a new (a, b) cell (crossed), or a new lot at `t0`
 | Random intercept — ≥4 grouping factors (off-catalog) | `ems` | `ems` | **error** ^a^ | **error** ^a^ |
 | Random intercept + fixed slope — clean balanced | `ems` | `ems` | `ems` | **`anova`** ^h^ |
 | Random intercept + fixed slope — single-obs / staggered / unbalanced | `ems` ^b^ | `ems` ^b^ | **`anova`** ^c^ | **`anova`** ^h^ |
-| Random slope — non-singular, future-observation target | `reml` | `reml` | `reml` | `reml` |
-| Random slope — non-singular, batch-mean target (`over = "group_mean"`) | — ^d^ | — ^d^ | **`gpq`** | — ^d^ |
-| Random slope — singular fit, or TI Satterthwaite df unavailable | `reml` ^e^ | `reml` ^e^ | **`gpq`** ^e^ | `reml` ^e^ |
+| Random slope — future-observation target, any fit | `reml` ^e^ | `reml` ^e^ | **`gpq`** ^e^ | `reml` ^e^ |
+| Random slope — batch-mean target (`over = "group_mean"`) | — ^d^ | — ^d^ | **`gpq`** | — ^d^ |
 | Random slope + ≥2 fixed effects | **error** ^f^ | **error** ^f^ | **error** ^f^ | **error** ^f^ |
 
 ^a^ These designs have no closed-form variance decomposition, so `ti_lmm()`
@@ -83,14 +90,12 @@ designs, `new_group_mean_lmm()` gives an interval for a new batch's mean — it 
 available for random-intercept, fixed-slope, and random-slope models. The
 coverage verbs carry no batch-mean target.
 
-^e^ For a singular random-slope fit, the tolerance interval switches to the GPQ
-engine (the closed form's batch-mean/singular behavior is not validated); CI, PI,
-and CI_new stay on the closed form, flagged `singular`. The tolerance interval
-also switches to GPQ, at a given `t0`, on a non-singular fit whose Satterthwaite
-df for the between-group or residual variance is unavailable (the closed form's
-containment fallback fired; such fits sit near the variance-component
-boundary). `attr(., "diagnostics")$route_reason` reports `"singular"` or
-`"df_unavailable"`.
+^e^ Every random-slope tolerance interval is GPQ, singular fits included;
+`attr(., "diagnostics")$route_reason` is `"auto"` (or `"method"` when
+`method = "gpq"` is passed). CI, PI, and CI_new use the REML-based t-interval
+(`reml`), flagged `singular` on a singular fit; when the Satterthwaite df of
+their variance is unavailable they use the slope engine's containment df,
+reported in `attr(., "diagnostics")$df_rule`.
 
 ^f^ Random-slope support is limited to a single continuous covariate (`~ 1 + x`)
 in this version — time in the stability use case, but any continuous predictor works.
@@ -139,13 +144,13 @@ Every verb accepts `sides = "lower"` or `"upper"`.
 | CI, PI, new-group mean (all engines) | same center, variance, and df as the two-sided interval, with `t_{1-alpha}` | available |
 | TI, `anova-mls` (Hoffman-Kringle one-way; Montes fixed slope) | Hoffman's (2010) one-sided limit: `Yhat ∓ (z_P sqrt(U) + z_{1-alpha} sqrt(Vhat(Yhat)))` with the two-sided MLS bound `U` | available (published: Hoffman 2010; Montes et al. 2019) |
 | TI, `ems-mls` (Francq) | the same structure with Francq's MLS bound on the total variance and `Vhat = V_F` | available (the package's extension of Hoffman 2010, validated by simulation) |
-| TI, random slope | the same structure with the REML closed form's bound and `Vhat = V_F` (`reml-mls`), on every fit including singular ones | available (the package's extension of Hoffman 2010, validated by simulation); `method = "gpq"` can be forced but under-covered near the variance-component boundary in validation |
+| TI, random slope | the one-sided GPQ limit: the lower or upper beta-quantile of the generalized pivotal quantity (`gpq`), on every fit including singular ones | available (Oliva-Aviles & Hauser 2025; validated by simulation at `M = 20000`, both targets) |
 
 ## Choosing the method by hand
 
 By default `method = "auto"` selects the one engine valid for your model. For
 most models there is no alternative — requesting a different engine errors. Only
-three cases offer a genuine choice, all for tolerance intervals:
+two cases offer a genuine choice, both for tolerance intervals:
 
 - **Intercept-only one-way TI** (`y ~ 1 + (1 | g)`, one grouping factor, no
   covariates): default `"anova-mls"` (Hoffman & Kringle 2005, balanced or
@@ -158,10 +163,9 @@ three cases offer a genuine choice, all for tolerance intervals:
   single-observation / unbalanced one (validated for that structure); forcing
   `"ems-mls"` there takes the path flagged as anti-conservative, so it's mainly
   for comparison.
-- **Random-slope TI (future-observation target):** default `"reml-mls"` (closed
-  form) on a non-singular fit; `"gpq"` (Monte-Carlo) is also valid and becomes the
-  default automatically when the fit is singular. For the batch-mean target, only
-  `"gpq"` is available.
+
+For a random-slope tolerance interval `"gpq"` is the only engine (`"auto"` and
+`"gpq"` are equivalent); `"reml-mls"` is defunct.
 
 ## Worked examples
 
@@ -174,20 +178,24 @@ ci_lmm(fm, newdata = data.frame(Days = 5))
 ti_lmm(fm, newdata = data.frame(Days = 5), P = 0.99)
 ```
 
-A random-slope model — the verbs use the `reml-mls` closed form:
+A random-slope model — the CI, PI, and new-group-mean intervals use the
+REML-based t-interval (`reml`):
 
 ```{r ex-slope}
 fs <- lmer(Reaction ~ Days + (Days | Subject), data = sleepstudy)
 ci_lmm(fs, newdata = data.frame(Days = 5))
 ```
 
-The batch-mean tolerance interval on the same slope model uses GPQ (Monte-Carlo
-set a seed for reproducibility):
+Its tolerance intervals use GPQ (Monte-Carlo: set a seed for reproducibility),
+for both targets. The default `M = 20000` is the validated size; `M = 2000`
+here only keeps the vignette fast to build:
 
 ```{r ex-gpq}
+ctl <- lmm_interval_control(seed = 1, M = 2000)
+ti_lmm(fs, newdata = data.frame(Days = 5), P = 0.99, control = ctl)
+ti_lmm(fs, newdata = data.frame(Days = 5), P = 0.99, sides = "lower", control = ctl)
 ti_lmm(fs, newdata = data.frame(Days = 5), P = 0.99,
-       over = "group_mean",
-       control = lmm_interval_control(seed = 1, M = 20000))
+       over = "group_mean", control = ctl)
 ```
 
 ## Limitations in this version

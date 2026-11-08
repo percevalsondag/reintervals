@@ -247,19 +247,17 @@
 #'   slope), `y ~ time + (1 + time | g)` (correlated random slope), or
 #'   `y ~ time + (1 | g) + (0 + time | g)` (independent random slope).
 #' @param t0 A single time point at which to evaluate the payload.
-#' @param target `"observable"` (default; content variance `V_T = V_G + s2e`,
-#'   the future-observation target) or `"true_value"` (content variance `V_G`,
-#'   the batch-mean target). Selects which content variance the effective sample
-#'   size `n_E` is formed from; recorded as `attr(., "target")`.
 #' @param df_method `"satterthwaite"` (default; generalized Satterthwaite with a
 #'   containment fallback on degenerate df) or `"containment"` (integer df).
 #' @param boundary_tol A component is flagged near-boundary if below this
 #'   fraction of total variance. Default `1e-4`.
 #'
-#' @return A `vfun_components` object at `t0`, with `attr(., "target")` set and
-#'   `attr(., "df_fallback")`, a logical vector over `F`, `T`, `G`, `e` that is
-#'   `TRUE` where the Satterthwaite df was unavailable and the containment df was
-#'   used (`NA` when `df_method = "containment"`).
+#' @return A `vfun_components` object at `t0`, with `attr(., "df_fallback")`, a
+#'   logical vector over `F`, `T`, `G` that is `TRUE` where the Satterthwaite df
+#'   was unavailable and the containment df was used (`NA` when
+#'   `df_method = "containment"`). It carries what the random-slope CI / PI /
+#'   new-group-mean intervals need (the slope tolerance interval is GPQ, which
+#'   works from the raw data, not from this container).
 #' @seealso `vfun_components()`, `vc_extract()` (the EMS path).
 #' @examples
 #' fm <- lme4::lmer(Reaction ~ Days + (1 + Days | Subject),
@@ -267,10 +265,8 @@
 #' vfun_extract(fm, t0 = 5)
 #' @noRd
 vfun_extract <- function(model, t0,
-                         target = c("observable", "true_value"),
                          df_method = c("satterthwaite", "containment"),
                          boundary_tol = 1e-4) {
-  target    <- match.arg(target)
   df_method <- match.arg(df_method)
   if (!is.numeric(t0) || length(t0) != 1L || !is.finite(t0))
     .abort("`t0` must be a single finite numeric value (the container holds one ",
@@ -301,14 +297,11 @@ vfun_extract <- function(model, t0,
   vg <- .floor_vg(.vfun_value_VG(type, phi, t0), t0)
   V_G <- vg$value
   V_T <- V_G + s2e
-  content_var <- if (target == "observable") V_T else V_G
-  n_E <- if (V_F > 0) content_var / V_F else Inf
 
   ## df pieces, aligned to phi ordering, with the Satterthwaite->containment
   ## fallback (SAFEGUARD 3).
   gVG <- .vfun_grad_VG(type, t0)[names(phi)]
   gVT <- .vfun_grad_VT(type, t0)[names(phi)]
-  gVe <- stats::setNames(as.numeric(names(phi) == "s2e"), names(phi))
   grad_vF <- numDeriv::grad(function(p) parsed$vF_fun(p, x0), phi)
 
   ## Each returns c(df, fell_back): fell_back = 1 when the Satterthwaite df was
@@ -322,20 +315,17 @@ vfun_extract <- function(model, t0,
   rF <- resolve_df(V_F, grad_vF, w_between = 1)
   rT <- resolve_df(V_T, gVT, w_between = if (V_T > 0) V_G / V_T else 0)
   rG <- resolve_df(V_G, gVG, w_between = 1)
-  re <- resolve_df(s2e, gVe, w_between = 0)
-  nu_F <- rF[1]; nu_T <- rT[1]; nu_G <- rG[1]; nu_e <- re[1]
+  nu_F <- rF[1]; nu_T <- rT[1]; nu_G <- rG[1]
 
   out <- vfun_components(
     type = type, phi = phi, cov = cov,
     mean = mu, var_mean = V_F,
-    V_G = V_G, V_T = V_T, n_E = n_E,
-    dfs = c(F = nu_F, T = nu_T, G = nu_G, e = nu_e),
+    V_G = V_G, V_T = V_T,
+    dfs = c(F = nu_F, T = nu_T, G = nu_G),
     t0 = t0, singular = sing, boundary = isTRUE(vc$boundary)
   )
-  attr(out, "target") <- target
   attr(out, "vg_floored") <- vg$floored
-  attr(out, "df_fallback") <- c(F = rF[2] == 1, T = rT[2] == 1, G = rG[2] == 1,
-                                e = re[2] == 1)
+  attr(out, "df_fallback") <- c(F = rF[2] == 1, T = rT[2] == 1, G = rG[2] == 1)
   ## design sizes for .vfun_df_containment(), so a container whose df is later
   ## found non-finite can reuse the same containment rule (.vfun_interval)
   attr(out, "containment") <- parsed[c("B", "k_re", "n", "p")]

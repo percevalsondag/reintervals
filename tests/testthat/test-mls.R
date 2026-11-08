@@ -85,10 +85,12 @@ test_that("mls_bound reaches the diagnostics of every MLS tolerance interval", {
   expect_identical(attr(fe, "diagnostics")$mls_bound, "graybill-wang")
   fh <- ti_lmm(lme4::lmer(conc ~ 1 + (1 | run), data = hk_assay))     # HK anova-mls
   expect_identical(attr(fh, "diagnostics")$mls_bound, "graybill-wang")
+  ## the random-slope TI is GPQ (no MLS bound): mls_bound is NA there
   fs <- suppressWarnings(lme4::lmer(Reaction ~ Days + (1 + Days | Subject),
                                     data = lme4::sleepstudy))
-  fr <- ti_lmm(fs, newdata = data.frame(Days = 5))                     # reml-mls
-  expect_identical(attr(fr, "diagnostics")$mls_bound, "graybill-wang")
+  fr <- ti_lmm(fs, newdata = data.frame(Days = 5),
+               control = lmm_interval_control(seed = 1, M = 2000))  # not an oracle
+  expect_null(attr(fr, "diagnostics")$mls_bound)
 })
 
 test_that("crossed NGM df: an undefined Satterthwaite term falls back to containment, never NaN", {

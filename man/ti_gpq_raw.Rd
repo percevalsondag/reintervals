@@ -47,10 +47,9 @@ A data frame, one row per \code{t0}: \code{method = "gpq"}, \code{time}, \code{e
 The Oliva-Aviles & Hauser (2025) generalized-pivotal-
 quantity tolerance interval for the random-intercept + random-slope stability
 model, from raw \verb{(y, time, batch)} vectors without a fitted \code{lmer} model. The
-fit-based dispatcher \code{\link[=ti_lmm]{ti_lmm()}} routes random-slope designs here automatically
-(singular fits, fits whose closed-form Satterthwaite df is unavailable at a
-given \code{t0}, and the batch-mean target \code{over = "group_mean"}); use
-\code{ti_gpq_raw()} directly when you have data but no model object.
+fit-based dispatcher \code{\link[=ti_lmm]{ti_lmm()}} uses it for every random-slope tolerance
+interval (both targets, all sides); use \code{ti_gpq_raw()} directly when you have
+data but no model object.
 }
 \examples{
 fm <- lme4::lmer(Reaction ~ Days + (1 + Days | Subject), data = lme4::sleepstudy)

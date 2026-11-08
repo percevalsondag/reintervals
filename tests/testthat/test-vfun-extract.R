@@ -10,16 +10,15 @@ test_that("builds a valid, populated vfun_components from an M2c fit", {
                 s2_0 = 2.0, s2_1 = 0.01, s01 = -0.05, s2e = 0.7, seed = 3)
   fm <- suppressWarnings(lme4::lmer(y ~ time + (1 + time | batch), data = d,
                                     REML = TRUE, control = lc))
-  ve <- vfun_extract(fm, t0 = 24, target = "observable")
+  ve <- vfun_extract(fm, t0 = 24)
 
   expect_s3_class(ve, "vfun_components")
   expect_identical(ve$type, "M2c")
   expect_identical(names(ve$phi), c("s2_0", "s01", "s2_1", "s2e"))
   expect_true(all(is.finite(c(ve$mean, ve$var_mean, ve$V_G, ve$V_T))))
-  expect_true(ve$n_E > 0)
   expect_true(all(is.finite(ve$dfs)) && all(ve$dfs > 0))
-  expect_identical(names(ve$dfs), c("F", "T", "G", "e"))
-  expect_identical(attr(ve, "target"), "observable")
+  expect_identical(names(ve$dfs), c("F", "T", "G"))           # nu_e was TI-only (1.0.0)
+  expect_null(ve$n_E)
   # healthy fit -> a 4x4 Cov(phi) reconstructed from the Hessian
   expect_true(is.matrix(ve$cov) && all(dim(ve$cov) == 4L))
 })
@@ -45,12 +44,12 @@ test_that("ORACLE: balanced M1 matches the Montes route exactly (REML == ANOVA)"
                 s2_0 = 2.0, s2_1 = 0, s01 = 0, s2e = 0.7, seed = 11)
   fm <- suppressWarnings(lme4::lmer(y ~ time + (1 | batch), data = d,
                                     REML = TRUE, control = lc))
-  ve <- vfun_extract(fm, t0 = 12, target = "observable")
+  ve <- vfun_extract(fm, t0 = 12)
   mr <- montes_ref(d$y, d$time, d$batch, t0 = 12)
   # on balanced data the REML and ANOVA/MLS routes coincide
   expect_equal(ve$V_T,      mr$Vhat_Y,    tolerance = 1e-4)
   expect_equal(ve$var_mean, mr$Vhat_Yhat, tolerance = 1e-4)
-  expect_equal(ve$n_E,      mr$n_E,       tolerance = 1e-4)
+  expect_equal(ve$V_T / ve$var_mean, mr$n_E, tolerance = 1e-4)   # Montes n_E = V_T / V_F
 })
 
 test_that("ORACLE: montes_ref reproduces MBL Appendix A published TI", {
@@ -62,15 +61,15 @@ test_that("ORACLE: montes_ref reproduces MBL Appendix A published TI", {
   expect_equal(mr$U,    10.820, tolerance = 0.01)
 })
 
-test_that("MBL (unbalanced + single-obs lots): n_E matches Montes; variances REML-narrower", {
+test_that("MBL (unbalanced + single-obs lots): V_T / V_F matches Montes n_E; variances REML-narrower", {
   skip_if_not_installed("lme4")
   d <- mbl_appendix_a
   fm <- suppressWarnings(lme4::lmer(Y ~ Month + (1 | Lot), data = d,
                                     REML = TRUE, control = lc))
-  ve <- vfun_extract(fm, t0 = 12, target = "observable")
+  ve <- vfun_extract(fm, t0 = 12)
   mr <- montes_ref(d$Y, d$Month, d$Lot, t0 = 12)
   # the scale-invariant ratio agrees closely with the oracle ...
-  expect_equal(ve$n_E, mr$n_E, tolerance = 0.01)            # ~0.2% in practice
+  expect_equal(ve$V_T / ve$var_mean, mr$n_E, tolerance = 0.01)   # ~0.2% in practice
   # ... while the variance scale is REML-narrower (REML-narrower, ~2-3%):
   expect_lt(ve$V_T, mr$Vhat_Y)                              # narrower, not equal
   expect_lt(abs(ve$V_T - mr$Vhat_Y) / mr$Vhat_Y, 0.05)
@@ -105,19 +104,6 @@ test_that("boundary flag: healthy fit with negative s01 is NOT flagged near-boun
   expect_lt(vh$phi[["s01"]], 0)            # negative covariance present, but not flagged
   # the flag the fit produces is exactly what the pure predicate says
   expect_identical(vh$boundary, .vfun_is_boundary(vh$phi, 1e-4))
-})
-
-test_that("target selects which content variance n_E is formed from", {
-  skip_if_not_installed("lme4")
-  d <- vfun_sim(B = 12, times = c(0, 3, 6, 9, 12, 18, 24),
-                s2_0 = 2.0, s2_1 = 0.01, s01 = -0.05, s2e = 0.7, seed = 3)
-  fm <- suppressWarnings(lme4::lmer(y ~ time + (1 + time | batch), data = d,
-                                    REML = TRUE, control = lc))
-  vo <- vfun_extract(fm, t0 = 24, target = "observable")
-  vt <- vfun_extract(fm, t0 = 24, target = "true_value")
-  expect_equal(vo$n_E, vo$V_T / vo$var_mean)
-  expect_equal(vt$n_E, vt$V_G / vt$var_mean)
-  expect_identical(attr(vt, "target"), "true_value")
 })
 
 test_that("singular fit: cov is NULL and df falls back to containment (finite)", {

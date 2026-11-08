@@ -70,6 +70,7 @@ ti_lmm(fm, newdata = data.frame(Days = 5), P = 0.99)
 #> <lmm_interval> ti  (method = ems-mls, design = random_intercept_fixed_slope)
 #>  Days type estimate    lower    upper level    P     sides singular boundary vg_floored
 #>     5   ti 303.7415 142.9097 464.5734  0.95 0.99 two.sided    FALSE       NA         NA
+#> diagnostics: mls_bound  (see attr(., "diagnostics"))
 ```
 
 Every verb returns the same `lmm_interval` data frame, so confidence,
@@ -97,8 +98,9 @@ between the verbs (full mapping in `?reintervals` and
 `vignette("choosing-an-interval")`). Engines: `"ems-mls"`
 (expected-mean-square / modified large-sample), `"anova-mls"`
 (unweighted lot-mean ANOVA: Montes et al. with a fixed slope, Hoffman &
-Kringle without one), `"reml-mls"` (REML closed form), `"gpq"`
-(generalized pivotal quantity, Monte Carlo).
+Kringle without one), `"reml"` (REML-based t-interval for the
+random-slope CI, PI and new-group mean), `"gpq"` (generalized pivotal
+quantity, Monte Carlo; every random-slope tolerance interval).
 
 | Model / situation | CI | PI | TI | New-group mean |
 |----|----|----|----|----|
@@ -109,16 +111,18 @@ Kringle without one), `"reml-mls"` (REML closed form), `"gpq"`
 | random intercept, crossed without interaction or 4+ grouping factors | `ems-mls` | `ems-mls` | error | error |
 | random intercept + fixed slope, clean balanced | `ems-mls` | `ems-mls` | `ems-mls` | `anova-mls` |
 | random intercept + fixed slope, single-observation / staggered | `ems-mls` (warns with single-observation lots) | `ems-mls` (warns likewise) | `anova-mls` | `anova-mls` |
-| random slope, future-observation, non-singular | `reml-mls` | `reml-mls` | `reml-mls` | `reml-mls` |
-| random slope, singular fit or TI Satterthwaite df unavailable | `reml-mls` | `reml-mls` | `gpq` (two-sided TI; one-sided stays `reml-mls`) | `reml-mls` |
+| random slope, future-observation (any fit) | `reml` | `reml` | `gpq` | `reml` |
 | random slope, batch-mean (`over = "group_mean"`, TI only) | — | — | `gpq` | — |
 
-GPQ is used for the two-sided random-slope TI when the fit is singular
-or the closed form’s Satterthwaite df is unavailable. One-sided
-intervals (`sides = "lower"` / `"upper"`) are available from every verb;
-one-sided tolerance limits use Hoffman’s (2010) limit for `anova-mls`
-and the package’s validated extension of it for `ems-mls` and random
-slopes, where `reml-mls` is used on every fit.
+Every random-slope tolerance interval is GPQ (Oliva-Aviles & Hauser
+2025), two- and one-sided, both targets, singular fits included; the
+default `M = 20000` is the size validated by simulation. The REML
+closed-form tolerance interval (`method = "reml-mls"`) was removed in
+1.0.0 because it under-covers. One-sided intervals (`sides = "lower"` /
+`"upper"`) are available from every verb; one-sided tolerance limits use
+Hoffman’s (2010) limit for `anova-mls`, the package’s validated
+extension of it for `ems-mls`, and the one-sided GPQ limit for random
+slopes.
 
 **Scope:** general fixed effects are supported for random-intercept
 models; random-slope models are supported for a **single continuous

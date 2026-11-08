@@ -1,7 +1,9 @@
 # =============================================================================
-# Slope-engine CI / PI / new-group-mean interval constructors. The TI branch is
-# ti_vfun(); these are the three coverage-based interval branches for the slope
-# models, the closed-form analogues of the EMS ci_mean / pi_newobs:
+# Slope-engine CI / PI / new-group-mean interval constructors (method "reml"):
+# the three coverage-based interval branches for the slope models, the
+# REML-based analogues of the EMS ci_mean / pi_newobs. (The slope tolerance
+# interval is GPQ, gpq.R; the closed-form `ti_vfun` / "reml-mls" TI was removed
+# in 1.0.0.)
 #
 #   CI              : mu +/- t(nu_F) * sqrt(V_F)
 #   PI              : mu +/- t(nu_T) * sqrt(V_F + V_T)        (V_T = V_G + s2e)
@@ -12,7 +14,7 @@
 # All inputs are already on the vfun_components container (mean, var_mean = V_F,
 # V_G, V_T, dfs[c("F","T","G")]); vfun_extract computes those df with the same
 # resolve_df (Satterthwaite -> containment) logic, so these constructors are
-# pure arithmetic off the container -- method-pure, no lme4, exactly like ti_vfun.
+# pure arithmetic off the container -- method-pure, no lme4.
 #
 # These constructors are validated against the external Montes/GPQ-source oracle
 # (test-slope-oracle.R) on committed components.
@@ -92,7 +94,7 @@
     lower = if (sides == "upper") -Inf else mu - hw,
     upper = if (sides == "lower")  Inf else mu + hw,
     se = se, level = level, df = nu, df_rule = rule, sides = sides,
-    design = comp$type, method = "reml-mls",        # harmonized engine tag
+    design = comp$type, method = "reml",            # harmonized engine tag
     singular = isTRUE(comp$singular), boundary = isTRUE(comp$boundary),
     vg_floored = isTRUE(attr(comp, "vg_floored")),  # V_G<0 floored at this t0
     stringsAsFactors = FALSE
@@ -248,7 +250,7 @@
     t0s <- if (is.null(newdata)) stats::model.frame(model)[[time_var]][1] else
       newdata[[time_var]]
     rows <- lapply(t0s, function(t0) {
-      comp <- vfun_extract(model, t0 = t0, target = "observable")
+      comp <- vfun_extract(model, t0 = t0)
       .vfun_interval(comp, kind = kind, level = level, sides = sides)
     })
     out <- do.call(rbind, rows); rownames(out) <- NULL

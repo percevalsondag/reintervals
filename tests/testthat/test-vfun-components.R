@@ -10,8 +10,8 @@ mk_m2c <- function(s01 = -0.05, ...) {
     type = "M2c",
     phi  = c(s2_0 = s2_0, s01 = s01, s2_1 = s2_1, s2e = s2e),
     mean = 98.5, var_mean = 0.12,
-    V_G = vg, V_T = vg + s2e, n_E = 30,
-    dfs = c(F = 8, T = 6.4, G = 5.1, e = 40), t0 = t0
+    V_G = vg, V_T = vg + s2e,
+    dfs = c(F = 8, T = 6.4, G = 5.1), t0 = t0
   )
   modifyList(args, list(...))
 }
@@ -63,14 +63,14 @@ test_that("negative VARIANCE components are REJECTED (not truncated)", {
 test_that("M1 and M2i canonical phi layouts validate", {
   m1 <- vfun_components(
     type = "M1", phi = c(s2_0 = 0.5, s2e = 0.5),
-    mean = 100, var_mean = 0.05, V_G = 0.5, V_T = 1.0, n_E = 20,
+    mean = 100, var_mean = 0.05, V_G = 0.5, V_T = 1.0,
     dfs = c(F = 5, T = 7), t0 = 12
   )
   expect_identical(m1$type, "M1")
 
   m2i <- vfun_components(
     type = "M2i", phi = c(s2_0 = 0.5, s2_1 = 0.01, s2e = 0.5),
-    mean = 100, var_mean = 0.05, V_G = 0.5, V_T = 1.0, n_E = 20,
+    mean = 100, var_mean = 0.05, V_G = 0.5, V_T = 1.0,
     dfs = c(F = 5, T = 7, G = 6), t0 = 12
   )
   expect_identical(m2i$type, "M2i")
@@ -90,7 +90,7 @@ test_that("phi names/order must match the type", {
   )
   expect_error(
     vfun_components(type = "BOGUS", phi = c(s2_0 = 1, s2e = 1),
-                    mean = 0, var_mean = 0, V_G = 0, V_T = 0, n_E = 1,
+                    mean = 0, var_mean = 0, V_G = 0, V_T = 0,
                     dfs = c(F = 1), t0 = 0),
     "single recognized model code"
   )
@@ -109,13 +109,13 @@ test_that("cov: NULL allowed, dimension and symmetry enforced", {
   expect_true(vc$singular)
 })
 
-test_that("scalar payload rules: var_mean>=0 enforced; V_G/V_T finite (signed); n_E>0 with Inf ok", {
+test_that("scalar payload rules: var_mean>=0 enforced; V_G/V_T finite (signed)", {
   expect_error(do.call(vfun_components, mk_m2c(var_mean = -0.01)), "non-negative")  # V_F structural
   # V_G/V_T are signed carriers now: a negative value is ACCEPTED (not an error)
   expect_s3_class(do.call(vfun_components, mk_m2c(V_G = -1, V_T = -0.3)), "vfun_components")
-  expect_error(do.call(vfun_components, mk_m2c(n_E = 0)), "positive")
-  # n_E = Inf (V_F = 0 limit) is allowed
-  expect_s3_class(do.call(vfun_components, mk_m2c(n_E = Inf)), "vfun_components")
+  expect_error(do.call(vfun_components, mk_m2c(V_T = Inf)), "finite")
+  # n_E was a closed-form-TI field; the container no longer has it (1.0.0)
+  expect_error(do.call(vfun_components, mk_m2c(n_E = 30)), "unused argument")
 })
 
 test_that("dfs contract: named, positive, no NA, Inf allowed", {

@@ -55,11 +55,10 @@
 #'   \item Tolerance intervals, `ems-mls` (Francq): the same structure with
 #'     Francq's MLS bound on the total variance and `Vhat = V_F` --- the
 #'     package's extension of Hoffman (2010), validated by simulation.
-#'   \item Tolerance intervals, random slope: Hoffman's structure with the
-#'     REML closed form's bound and `Vhat = V_F` (`reml-mls`), on every fit
-#'     including singular ones --- the package's extension of Hoffman (2010),
-#'     validated by simulation. `method = "gpq"` is available but under-covered
-#'     near the variance-component boundary in validation.
+#'   \item Tolerance intervals, random slope: the one-sided GPQ limit
+#'     (Oliva-Aviles & Hauser 2025), the lower or upper beta-quantile of the
+#'     generalized pivotal quantity, on every fit including singular ones
+#'     (validated by simulation at `M = 20000`, both targets).
 #' }
 #' @references Hoffman D (2010). One-sided tolerance limits for balanced and
 #'   unbalanced random effects models. *Technometrics* 52(3):303-312.

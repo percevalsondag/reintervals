@@ -35,6 +35,30 @@ depend on A2: phase 0 validated one-sided GPQ at the 0.2.0 machinery with M = 20
 
 ## A1. `reml-mls` (random-slope closed-form TI)
 
+**Status: DONE on `dev` — option (a) DEFUNCT (Percy, 2026-11-07).**
+- `method = "reml-mls"` on `ti_lmm()` → `reintervals_error_defunct` with the A1.6
+  text (`.reml_mls_defunct()`, dispatch.R). It stays in `match.arg` only so the
+  error can fire; it fires for random-intercept models too.
+- Every random-slope TI → GPQ (`.ti_slope_path`: one `.gpq_core` call over all
+  t0). Deleted: `.choose_slope_engine`, the one-sided closed override, the
+  per-t0 closed/df_bad split, the GPQ/closed column alignment, R/ti-vfun.R.
+  `route_reason` keeps two values, `"auto"` / `"method"` (dispatcher-chosen vs
+  `method = "gpq"`); it is kept so code reading the field still finds it.
+- **Deviation from A1.3's recommendation (keep `n_E`, `dfs["e"]`):** step 3 said
+  to remove code whose only consumer was the closed-form TI, so `vfun_extract`
+  loses `target`, `n_E` and `nu_e`, and `vfun_components` loses `n_E`. The committed
+  `slope_oracle.rds` containers still carry those fields; `.vfun_interval` never
+  reads them, so no regeneration was needed. The extraction oracle checks against
+  Montes `n_E` now compare `V_T / V_F`, the same identity.
+- Tag rename (A1.3b): `.vfun_interval` → `"reml"`; `method = "reml-mls"` on a
+  slope CI/PI/NGM → `reintervals_error_method` naming `"reml"`.
+- Default `M = 20000` (`lmm_interval_control`, `.gpq_core`). Non-oracle GPQ calls in
+  examples, tests and the vignette pass `M = 2000` with a comment; the A1 GPQ
+  oracle test (test-gpq.R) is unchanged.
+- Docs: roxygen, both vignettes, README.Rmd + README.md (re-knit), NEWS "Breaking
+  changes".
+
+
 ### A1.1 Every code path that computes it or routes to it
 
 Computation:
@@ -211,9 +235,7 @@ Cost: about 30 changed lines plus docs. Risk: **medium**. Default numbers change
 exactly as in (a); the old interval stays reproducible for audit (useful for GxP
 users who validated against 0.2.0). Removal moves to 1.1/2.0.
 
-**Decision: PENDING (Percy).** Options (a) and (b) have the same default
-behaviour; (b) also keeps a reproducible path for 0.2.0 results. The earlier
-recommendation for (b) stands as input, not as a decision.
+**Decision: (a) defunct (Percy, 2026-11-07).** Implemented; see the A1 status.
 
 ### A1.6 Failure regimes for the error/warning text
 
@@ -687,6 +709,10 @@ tests/testthat/
   test-oracle-oliva-hauser2025.R  tau² exact (moved from test-gpq.R:13) + skip() for any interval values
 ```
 
+tests/testthat/fixtures slope_oracle.rds carries fields no longer read after A1
+(n_E, target, dfs['e'], the TI rows); regenerate or strip at step T and record
+provenance.
+
 Rules: each oracle file reads only `inst/extdata/oracles`, calls only exported
 verbs (plus the method-pure constructors, where the paper prints the components),
 and states its tolerance next to the printed precision. Copy the SAS fixtures (the
@@ -724,11 +750,10 @@ defaults unchanged unless stated):
    a time (`ci_df = "containment"`, `pi_df`, `slope_ci_df`, `ngm`, `slope_ngm`),
    each with its oracle or a reference test and a one-sided check (C).
 7. ~~Simstudy one-sided GPQ re-run~~: done (phase 0, outcome A; A1.2).
-8. **A1** (defunct vs deprecated: PENDING, Percy): `auto` routes every random-slope
-   TI to GPQ with M = 20000, the `reml-mls` TI is defunct or deprecated, and the
-   RS CI/PI/NGM tag becomes `"reml"`. **Changes the default RS TI numbers** (NEWS,
-   vignettes, README tables). Can be scheduled independently of step 5 (A2); if A2
-   lands first, re-run the phase-0 harness against the A2 build.
+8. **A1** **Done on `dev`** (option a, defunct): every random-slope TI is GPQ at
+   M = 20000, `reml-mls` errors, and the RS CI/PI/NGM tag is `"reml"`. **Changed
+   the default RS TI numbers.** If A2 (step 5) changes the GPQ draw order, re-run
+   the phase-0 harness against the A2 build.
 9. Step 13 (simstudy) chooses the defaults for the B arms; flip the defaults in one
    commit with NEWS.
 

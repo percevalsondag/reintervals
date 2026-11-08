@@ -28,8 +28,8 @@ interval keeps the two-sided interval's center, variance, and df and uses
 \verb{t_\{1 - alpha\}} in place of \verb{t_\{1 - alpha/2\}}.}
 
 \item{method}{\code{"auto"} (default) chooses the algorithm by structure; one of
-\code{"ems-mls"}, \code{"reml-mls"}, \code{"anova-mls"}, \code{"gpq"} forces that engine and
-errors if it is incompatible with the model.}
+\code{"ems-mls"}, \code{"anova-mls"} (new-group mean only), \code{"reml"} (random-slope
+models) forces that engine and errors if it is incompatible with the model.}
 
 \item{control}{An \code{\link[=lmm_interval_control]{lmm_interval_control()}} object (the GPQ \code{seed} and \code{M},
 and the confidence-interval df rule \code{ci_df}).}
@@ -44,7 +44,7 @@ with columns, in order:
 \code{lower}, \code{upper};
 \item \code{level} (the confidence, \code{1 - alpha}); \code{P} (content proportion ---
 the value for \code{ti}, \code{NA} for the coverage intervals); \code{sides};
-\item \code{method} (the engine: \code{"ems-mls"}, \code{"reml-mls"}, \code{"anova-mls"}, or
+\item \code{method} (the engine: \code{"ems-mls"}, \code{"anova-mls"}, \code{"reml"}, or
 \code{"gpq"}); \code{design} (the route-independent model class, see
 \link{reintervals-models});
 \item the per-row flags \code{singular}, \code{boundary}, \code{vg_floored}.
@@ -62,7 +62,7 @@ One of the four interval verbs (\code{\link[=ci_lmm]{ci_lmm()}}, \code{\link[=pi
 \code{\link[=new_group_mean_lmm]{new_group_mean_lmm()}}). \code{ci_lmm()} gives a confidence interval for the mean
 response at \code{newdata}. It dispatches by random structure: random-intercept
 designs (including a fixed slope) use the expected-mean-square engine;
-random-slope designs use the REML closed form. See \link{reintervals} and
+random-slope designs use a REML-based t-interval (\code{"reml"}). See \link{reintervals} and
 \code{vignette("choosing-an-interval")} for the engine map, \link{reintervals-models}
 for the design tags, and \code{\link[=lmm_predict]{lmm_predict()}} for the unified entry point.
 }

@@ -35,14 +35,14 @@ one. \code{level} is \code{1 - alpha}; default \code{alpha = 0.05}.}
 
 \item{sides}{\code{"two.sided"} (default), \code{"lower"}, or \code{"upper"}. One-sided
 tolerance limits: \code{anova-mls} uses Hoffman's (2010) one-sided limit;
-\code{ems-mls} and random-slope models (\code{reml-mls}, the default on every fit)
-use the package's extension of it, validated by simulation. See
-\link{reintervals-models}.}
+\code{ems-mls} uses the package's extension of it, validated by simulation;
+random-slope models use the one-sided GPQ limit. See \link{reintervals-models}.}
 
 \item{method}{\code{"auto"} (default) chooses the algorithm by structure; one of
-\code{"ems-mls"}, \code{"reml-mls"}, \code{"anova-mls"}, \code{"gpq"} forces it and errors if
-incompatible with the model. \code{"anova-mls"} is available for fixed-slope
-models and for intercept-only one-way models (Hoffman-Kringle).}
+\code{"ems-mls"}, \code{"anova-mls"}, \code{"gpq"} forces it and errors if incompatible
+with the model. \code{"anova-mls"} is available for fixed-slope models and for
+intercept-only one-way models (Hoffman-Kringle); \code{"gpq"} for random-slope
+models. \code{"reml-mls"} is defunct (removed in 1.0.0) and errors.}
 
 \item{control}{\code{\link[=lmm_interval_control]{lmm_interval_control()}} tuning (GPQ seed / M).}
 }
@@ -56,7 +56,7 @@ with columns, in order:
 \code{lower}, \code{upper};
 \item \code{level} (the confidence, \code{1 - alpha}); \code{P} (content proportion ---
 the value for \code{ti}, \code{NA} for the coverage intervals); \code{sides};
-\item \code{method} (the engine: \code{"ems-mls"}, \code{"reml-mls"}, \code{"anova-mls"}, or
+\item \code{method} (the engine: \code{"ems-mls"}, \code{"anova-mls"}, \code{"reml"}, or
 \code{"gpq"}); \code{design} (the route-independent model class, see
 \link{reintervals-models});
 \item the per-row flags \code{singular}, \code{boundary}, \code{vg_floored}.

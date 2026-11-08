@@ -3,15 +3,13 @@
 # model's random structure, its fixed-effect structure, the requested target,
 # and the flag:
 #
-#   * any random slope present -> SLOPE path, target-aware:
-#       - future-observation: closed-form MLS (ti_vfun) when the fit is
-#         non-singular; GPQ when singular, and also (per t0) when the
-#         Satterthwaite df of nu_G or nu_e is unavailable (containment fallback).
-#       - batch-mean: GPQ always. The closed form has a verified non-singular
-#         breakdown for this target (~0.89 coverage at small tau^2), so it is
-#         never used here, singular or not.
-#     The `method` argument can pin the algorithm; the default is the
-#     target-aware auto above.
+#   * any random slope present -> GPQ (Oliva-Aviles & Hauser 2025), for both
+#     targets (future observation, batch mean), every side, singular or not.
+#     The REML closed-form MLS interval (`reml-mls`) was removed in 1.0.0: it
+#     under-covers (one-sided 0.916-0.934 when the residual variance dominates
+#     and t0 is extrapolated; two-sided 0.84-0.93 where forced), and the
+#     phase-0 study validated one-sided GPQ at M = 20000 in the regime that had
+#     motivated the closed-form default (outcome A, simstudy d20b954).
 #
 #   * random intercept + a single fixed slope:
 #       - balanced -> EMS engine: exact, paper-anchored.
@@ -32,9 +30,10 @@
 # Each engine keeps its own singular guard (they do different jobs; not unified):
 #   * EMS path  -> reintervals' Hessian -> stratum containment df guard (the
 #     PI-width guard pinned by test-singular-guard.R).
-#   * slope path -> the guard carried by vfun_extract (its own
-#     Satterthwaite -> containment df fallback + singular/boundary flags) plus
-#     the singular -> GPQ engine switch in .choose_slope_engine().
+#   * slope path -> the tolerance interval is GPQ, which has no df to fall back
+#     on; the slope CI / PI / new-group mean keep the guard carried by
+#     vfun_extract (its own Satterthwaite -> containment df fallback +
+#     singular/boundary flags).
 #
 # The df fallback is also not shared: the EMS fallback (.ddf_containment,
 # vc-extract.R) and the slope fallback (.vfun_df_containment, vfun-extract.R)
@@ -140,30 +139,10 @@
     length(lme4::getME(model, "cnms")) == 1L
 }
 
-## Target-aware slope-engine selection (the GPQ routing policy).
-## Returns "closed" or "gpq"; errors only on the one unsafe forced combination.
-## Pure function of (target, singular, engine) so the (target x singular) routing
-## matrix is testable without a fit. The singular-vs-closed routing rule is
-## exercised directly.
-.choose_slope_engine <- function(target, singular, engine) {
-  if (engine == "closed" && target == "true_value") {
-    .abort("The closed form has no validated batch-mean (true_value) variant; it ",
-           "is precisely the route the dispatcher avoids for batch-mean (verified ",
-           "non-singular breakdown). Use engine = \"gpq\" or ",
-           "\"auto\".", class = "reintervals_error_method")
-  }
-  switch(engine,
-    gpq    = "gpq",
-    closed = "closed",
-    auto   = if (target == "true_value") "gpq"           # batch-mean: GPQ always
-             else if (singular)          "gpq"           # future-obs: GPQ if singular
-             else                        "closed"        # future-obs: closed otherwise
-  )
-}
-
-## Normalize .gpq_core output to the slope-path row schema (matches ti_vfun's
-## columns so a dispatch call returns one uniform frame; the cross-engine output contract is handled at the unify step). `boundary` is NA: the GPQ method has no fitted-
-## boundary notion (frac_boundary is an internal MC diagnostic, not reported).
+## Normalize .gpq_core output to the slope-path row schema (the cross-engine
+## output contract is handled at the unify step). `boundary` is NA: the GPQ
+## method has no fitted-boundary notion (frac_boundary is an internal MC
+## diagnostic, reported in the diagnostics).
 .gpq_rows <- function(g, design, sides, singular) {
   data.frame(
     time = g$time, type = "TI", estimate = g$estimate,
@@ -179,11 +158,18 @@
   )
 }
 
-## slope-engine route (random slope present): pick the engine target-aware, then
-## run it at each requested time point. Keeps the slope engine's own singular/df
-## handling; never touches the EMS guard.
+## Random-slope tolerance interval: GPQ at every requested time point, for
+## both targets and all sides (one .gpq_core call over all t0). `forced` is TRUE
+## when the user passed method = "gpq"; it only sets route_reason.
+##
+## route_reason now has two values: "auto" (the dispatcher chose GPQ, which it
+## always does for a random slope) and "method" (method = "gpq" was passed).
+## The 0.2.0 values ("none", "singular", "df_unavailable", "group_mean_target")
+## described why the closed form was or was not used; with the closed form
+## gone there is no per-t0 or per-fit choice left to report. The field is kept
+## so code reading attr(., "diagnostics")$route_reason still finds it.
 .ti_slope_path <- function(model, newdata, content, conf, target, sides,
-                           engine, seed, M) {
+                           forced, seed, M) {
   fe <- lme4::fixef(model)
   time_var <- setdiff(names(fe), "(Intercept)")
   if (length(time_var) != 1L) {
@@ -200,60 +186,28 @@
   }
 
   singular <- isTRUE(tryCatch(lme4::isSingular(model), error = function(e) NA))
-  chosen   <- .choose_slope_engine(target, singular, engine)
-  design   <- .slope_design(model)
-  ## One-sided TIs (future-observation target): Hoffman's (2010) limit on the
-  ## REML closed form, on EVERY fit -- singular and df-unavailable fits
-  ## included. The validation study (W3) validated it on all fits (worst cell
-  ## 0.962), whereas the one-sided GPQ limit under-covered on near-boundary
-  ## singular fits at the edge of the time range (worst 0.928); so the
-  ## singular / df-unavailable re-routing below applies to two-sided TIs only.
-  ## method = "gpq" stays available when forced. The batch-mean target keeps
-  ## GPQ (the closed form does not serve it).
-  one_sided_closed <- engine == "auto" && sides != "two.sided" &&
-    target == "observable"
-  if (one_sided_closed) chosen <- "closed"
-
-  ## Per-t0 route. Under the default (engine = "auto", future-observation target,
-  ## non-singular fit) the closed form is also abandoned for GPQ at any t0 where
-  ## the Satterthwaite df of nu_G or nu_e -- the two df the closed-form TI uses
-  ## -- is unavailable and vfun_extract() fell back to containment.
-  comps <- NULL
-  if (chosen == "closed") {
-    comps <- lapply(t0s, function(t0) vfun_extract(model, t0 = t0, target = target))
-  }
-  df_bad <- if (is.null(comps) || engine != "auto" || one_sided_closed)
-    rep(FALSE, length(t0s)) else
-    vapply(comps, function(cp) any(attr(cp, "df_fallback")[c("G", "e")] %in% TRUE),
-           logical(1))
-  use_gpq <- chosen == "gpq" | df_bad
-  reason <- if (engine != "auto") rep("method", length(t0s))
-            else if (target == "true_value") rep("group_mean_target", length(t0s))
-            else if (one_sided_closed) rep("none", length(t0s))
-            else if (singular) rep("singular", length(t0s))
-            else ifelse(df_bad, "df_unavailable", "none")
-
-  rows <- vector("list", length(t0s))
-  if (any(use_gpq)) {
-    yts <- .model_yts(model, time_var)
-    c_resid <- if (target == "observable") 1 else 0       # future-obs vs batch-mean
-    g <- .gpq_core(yts$y, yts$time, yts$batch, t0 = t0s[use_gpq],
-                    content = content, conf = conf, sides = sides,
-                    c_resid = c_resid, M = M, seed = seed)
-    gr <- .gpq_rows(g, design = design, sides = sides, singular = singular)
-    rows[use_gpq] <- split(gr, seq_len(nrow(gr)))
-  }
-  ## closed-form MLS (observable target). true_value never reaches here: auto
-  ## routes batch-mean to GPQ, and engine = "closed" + true_value already errored.
-  for (i in which(!use_gpq)) {
-    rows[[i]] <- ti_vfun(comps[[i]], content = content, conf = conf, sides = sides)
-  }
-  ## GPQ and closed-form rows carry different audit columns; align on the union.
-  cols <- unique(unlist(lapply(rows, names)))
-  rows <- lapply(rows, function(r) { for (cn in setdiff(cols, names(r))) r[[cn]] <- NA; r[cols] })
-  out <- do.call(rbind, rows); rownames(out) <- NULL
-  out$route_reason <- reason
+  yts <- .model_yts(model, time_var)
+  c_resid <- if (target == "observable") 1 else 0       # future-obs vs batch-mean
+  g <- .gpq_core(yts$y, yts$time, yts$batch, t0 = t0s,
+                 content = content, conf = conf, sides = sides,
+                 c_resid = c_resid, M = M, seed = seed)
+  out <- .gpq_rows(g, design = .slope_design(model), sides = sides,
+                   singular = singular)
+  rownames(out) <- NULL
+  out$route_reason <- if (forced) "method" else "auto"
   out
+}
+
+## method = "reml-mls" (the random-slope REML closed-form MLS tolerance
+## interval) was removed in 1.0.0. The coverage figures are from the decision
+## memo (v4), random-slope closed form, observation target.
+.reml_mls_defunct <- function() {
+  .abort("method = \"reml-mls\" was removed in reintervals 1.0.0: the REML ",
+         "closed-form MLS tolerance interval for random-slope models under-covers ",
+         "(one-sided 0.916-0.934 when the residual variance dominates and t0 is ",
+         "extrapolated; two-sided 0.84-0.93 where forced). Use method = \"gpq\" ",
+         "(the default; Oliva-Aviles & Hauser 2025).",
+         class = "reintervals_error_defunct")
 }
 
 ## Fixed-slope single-obs / staggered route -> the Montes ANOVA/MLS closed form.
@@ -272,25 +226,19 @@
 #' Tolerance interval for a linear mixed model
 #'
 #' One of the four interval verbs, and the dispatched tolerance interval. It
-#' classifies the fitted model and routes by random/fixed structure, the
-#' tolerance target (`over`), the singular flag, and (random slope) whether the
-#' closed form's Satterthwaite df is available, to the engine that is
-#' exact/validated for that case --- all transparently:
+#' classifies the fitted model and routes by random/fixed structure and the
+#' tolerance target (`over`) to the engine that is exact/validated for that
+#' case --- all transparently:
 #'
-#' * **Random slope.** `over = "observation"` uses the REML closed-form MLS
-#'   interval when the fit is non-singular and the GPQ interval when the fit is
-#'   singular or, at a given `t0`, when the Satterthwaite df of the closed form's
-#'   between-group or residual variance is unavailable (its containment fallback
-#'   fired); `over = "group_mean"` always uses GPQ. One-sided intervals
-#'   (`sides = "lower"` / `"upper"`, future-observation target) use Hoffman's
-#'   (2010) one-sided limit on the REML closed form on every fit, singular and
-#'   df-unavailable fits included (validated by simulation on all of them);
-#'   `method = "gpq"` remains available, but in the package's validation the
-#'   one-sided GPQ limit under-covered on near-boundary singular fits at the
-#'   edge of the observed time range (worst cell 0.928 for a nominal 0.95).
-#'   The reason is reported per row in `attr(., "diagnostics")$route_reason`
-#'   (`"none"`, `"singular"`, `"df_unavailable"`, `"group_mean_target"`, or
-#'   `"method"` when forced).
+#' * **Random slope.** The generalized-pivotal-quantity (GPQ) interval of
+#'   Oliva-Aviles & Hauser (2025), for both targets (`over = "observation"` and
+#'   `"group_mean"`), two-sided and one-sided, on every fit (singular included).
+#'   It is a Monte-Carlo interval: set `lmm_interval_control(seed = )` for
+#'   reproducibility; the default `M = 20000` is the size validated by
+#'   simulation. `attr(., "diagnostics")$route_reason` is `"auto"`, or
+#'   `"method"` when `method = "gpq"` was passed. The REML closed-form interval
+#'   (`method = "reml-mls"`) was removed in 1.0.0 because it under-covers; it
+#'   now signals an error of class `reintervals_error_defunct`.
 #' * **Random intercept + fixed slope.** Clean balanced -> EMS engine; single-
 #'   observation / staggered / unbalanced -> the Montes ANOVA/MLS closed form.
 #' * **Intercept-only one-way** (`y ~ 1 + (1 | g)`, one grouping factor, no
@@ -329,19 +277,22 @@
 #'   one. `level` is `1 - alpha`; default `alpha = 0.05`.
 #' @param sides `"two.sided"` (default), `"lower"`, or `"upper"`. One-sided
 #'   tolerance limits: `anova-mls` uses Hoffman's (2010) one-sided limit;
-#'   `ems-mls` and random-slope models (`reml-mls`, the default on every fit)
-#'   use the package's extension of it, validated by simulation. See
-#'   [reintervals-models].
+#'   `ems-mls` uses the package's extension of it, validated by simulation;
+#'   random-slope models use the one-sided GPQ limit. See [reintervals-models].
 #' @param method `"auto"` (default) chooses the algorithm by structure; one of
-#'   `"ems-mls"`, `"reml-mls"`, `"anova-mls"`, `"gpq"` forces it and errors if
-#'   incompatible with the model. `"anova-mls"` is available for fixed-slope
-#'   models and for intercept-only one-way models (Hoffman-Kringle).
+#'   `"ems-mls"`, `"anova-mls"`, `"gpq"` forces it and errors if incompatible
+#'   with the model. `"anova-mls"` is available for fixed-slope models and for
+#'   intercept-only one-way models (Hoffman-Kringle); `"gpq"` for random-slope
+#'   models. `"reml-mls"` is defunct (removed in 1.0.0) and errors.
 #' @param control [lmm_interval_control()] tuning (GPQ seed / M).
 #'
 #' @inherit ci_lmm return
 #' @seealso [ci_lmm()], [pi_lmm()], [new_group_mean_lmm()], [lmm_predict()],
 #'   [reintervals-models].
-#' @references Hoffman D (2010). One-sided tolerance limits for balanced and
+#' @references Oliva-Aviles C, Hauser P (2025). *Technometrics* 67(2):193-202.
+#'   \doi{10.1080/00401706.2024.2407324}
+#'
+#'   Hoffman D (2010). One-sided tolerance limits for balanced and
 #'   unbalanced random effects models. *Technometrics* 52(3):303-312.
 #'   \doi{10.1198/TECH.2010.09171}
 #'
@@ -355,12 +306,13 @@
 #' # random intercept + fixed slope (clean balanced) -> EMS engine
 #' fi <- lme4::lmer(Reaction ~ Days + (1 | Subject), data = lme4::sleepstudy)
 #' ti_lmm(fi, newdata = data.frame(Days = 0))
-#' # random slope, future-observation -> REML closed form
+#' # random slope -> GPQ (both targets). M = 2000 keeps the example fast; the
+#' # default M = 20000 is the validated size.
 #' fs <- lme4::lmer(Reaction ~ Days + (1 + Days | Subject), data = lme4::sleepstudy)
-#' ti_lmm(fs, newdata = data.frame(Days = 5))
-#' # random slope, batch-mean -> GPQ
+#' ti_lmm(fs, newdata = data.frame(Days = 5),
+#'        control = lmm_interval_control(seed = 1, M = 2000))
 #' ti_lmm(fs, newdata = data.frame(Days = 5), over = "group_mean",
-#'        control = lmm_interval_control(seed = 1))
+#'        control = lmm_interval_control(seed = 1, M = 2000))
 #' @export
 ti_lmm <- function(model, newdata = NULL, P = 0.95,
                    over = c("observation", "group_mean"),
@@ -370,7 +322,9 @@ ti_lmm <- function(model, newdata = NULL, P = 0.95,
   .assert_lmm(model)
   over   <- match.arg(over)
   sides  <- match.arg(sides)
+  ## "reml-mls" stays in the list only so the defunct error below can fire
   method <- match.arg(method, c("auto", "ems-mls", "reml-mls", "anova-mls", "gpq"))
+  if (method == "reml-mls") .reml_mls_defunct()
   ## boundary: public alpha/level -> internal `conf` (gamma); public `P` is the
   ## content proportion passed straight to the engines as `content`.
   conf   <- 1 - .resolve_alpha(alpha, level)
@@ -382,18 +336,16 @@ ti_lmm <- function(model, newdata = NULL, P = 0.95,
   M    <- control$M
   target <- if (over == "observation") "observable" else "true_value"
 
-  ## ---- random slope present -> target-aware slope path -----------------------
+  ## ---- random slope present -> GPQ (both targets, all sides) -----------------
   if (.has_random_slope(model)) {
-    engine <- switch(method,
-      auto       = "auto",
-      `reml-mls` = "closed",
-      gpq        = "gpq",
+    if (!method %in% c("auto", "gpq")) {
       .abort(sprintf("method = \"%s\" is not available for a %s model; use ",
                      method, .model_class(model)),
-             "\"auto\", \"reml-mls\", or \"gpq\".", class = "reintervals_error_method"))
+             "\"auto\" or \"gpq\".", class = "reintervals_error_method")
+    }
     out <- .ti_slope_path(model, newdata = newdata, content = P, conf = conf,
-                          target = target, sides = sides, engine = engine,
-                          seed = seed, M = M)
+                          target = target, sides = sides,
+                          forced = method == "gpq", seed = seed, M = M)
     return(.unify_intervals(out, model, kind = "ti", P_value = P))
   }
 
@@ -413,7 +365,7 @@ ti_lmm <- function(model, newdata = NULL, P = 0.95,
                    .model_class(model), avail), class = "reintervals_error_unsupported")
   }
 
-  if (method %in% c("reml-mls", "gpq")) {
+  if (method == "gpq") {
     .abort(sprintf("method = \"%s\" is not available for a %s model; use ",
                    method, .model_class(model)),
            "\"auto\", \"ems-mls\", or \"anova-mls\".", class = "reintervals_error_method")

@@ -35,14 +35,14 @@ one. \code{level} is \code{1 - alpha}; default \code{alpha = 0.05}.}
 
 \item{sides}{\code{"two.sided"} (default), \code{"lower"}, or \code{"upper"}. One-sided
 tolerance limits: \code{anova-mls} uses Hoffman's (2010) one-sided limit;
-\code{ems-mls} and random-slope models (\code{reml-mls}, the default on every fit)
-use the package's extension of it, validated by simulation. See
-\link{reintervals-models}.}
+\code{ems-mls} uses the package's extension of it, validated by simulation;
+random-slope models use the one-sided GPQ limit. See \link{reintervals-models}.}
 
 \item{method}{\code{"auto"} (default) chooses the algorithm by structure; one of
-\code{"ems-mls"}, \code{"reml-mls"}, \code{"anova-mls"}, \code{"gpq"} forces it and errors if
-incompatible with the model. \code{"anova-mls"} is available for fixed-slope
-models and for intercept-only one-way models (Hoffman-Kringle).}
+\code{"ems-mls"}, \code{"anova-mls"}, \code{"gpq"} forces it and errors if incompatible
+with the model. \code{"anova-mls"} is available for fixed-slope models and for
+intercept-only one-way models (Hoffman-Kringle); \code{"gpq"} for random-slope
+models. \code{"reml-mls"} is defunct (removed in 1.0.0) and errors.}
 
 \item{control}{\code{\link[=lmm_interval_control]{lmm_interval_control()}} tuning (GPQ seed / M).}
 }
@@ -56,7 +56,7 @@ with columns, in order:
 \code{lower}, \code{upper};
 \item \code{level} (the confidence, \code{1 - alpha}); \code{P} (content proportion ---
 the value for \code{ti}, \code{NA} for the coverage intervals); \code{sides};
-\item \code{method} (the engine: \code{"ems-mls"}, \code{"reml-mls"}, \code{"anova-mls"}, or
+\item \code{method} (the engine: \code{"ems-mls"}, \code{"anova-mls"}, \code{"reml"}, or
 \code{"gpq"}); \code{design} (the route-independent model class, see
 \link{reintervals-models});
 \item the per-row flags \code{singular}, \code{boundary}, \code{vg_floored}.
@@ -71,27 +71,21 @@ error \code{se}; and any GPQ / ANOVA intermediates);
 }
 \description{
 One of the four interval verbs, and the dispatched tolerance interval. It
-classifies the fitted model and routes by random/fixed structure, the
-tolerance target (\code{over}), the singular flag, and (random slope) whether the
-closed form's Satterthwaite df is available, to the engine that is
-exact/validated for that case --- all transparently:
+classifies the fitted model and routes by random/fixed structure and the
+tolerance target (\code{over}) to the engine that is exact/validated for that
+case --- all transparently:
 }
 \details{
 \itemize{
-\item \strong{Random slope.} \code{over = "observation"} uses the REML closed-form MLS
-interval when the fit is non-singular and the GPQ interval when the fit is
-singular or, at a given \code{t0}, when the Satterthwaite df of the closed form's
-between-group or residual variance is unavailable (its containment fallback
-fired); \code{over = "group_mean"} always uses GPQ. One-sided intervals
-(\code{sides = "lower"} / \code{"upper"}, future-observation target) use Hoffman's
-(2010) one-sided limit on the REML closed form on every fit, singular and
-df-unavailable fits included (validated by simulation on all of them);
-\code{method = "gpq"} remains available, but in the package's validation the
-one-sided GPQ limit under-covered on near-boundary singular fits at the
-edge of the observed time range (worst cell 0.928 for a nominal 0.95).
-The reason is reported per row in \code{attr(., "diagnostics")$route_reason}
-(\code{"none"}, \code{"singular"}, \code{"df_unavailable"}, \code{"group_mean_target"}, or
-\code{"method"} when forced).
+\item \strong{Random slope.} The generalized-pivotal-quantity (GPQ) interval of
+Oliva-Aviles & Hauser (2025), for both targets (\code{over = "observation"} and
+\code{"group_mean"}), two-sided and one-sided, on every fit (singular included).
+It is a Monte-Carlo interval: set \code{lmm_interval_control(seed = )} for
+reproducibility; the default \code{M = 20000} is the size validated by
+simulation. \code{attr(., "diagnostics")$route_reason} is \code{"auto"}, or
+\code{"method"} when \code{method = "gpq"} was passed. The REML closed-form interval
+(\code{method = "reml-mls"}) was removed in 1.0.0 because it under-covers; it
+now signals an error of class \code{reintervals_error_defunct}.
 \item \strong{Random intercept + fixed slope.} Clean balanced -> EMS engine; single-
 observation / staggered / unbalanced -> the Montes ANOVA/MLS closed form.
 \item \strong{Intercept-only one-way} (\code{y ~ 1 + (1 | g)}, one grouping factor, no
@@ -127,14 +121,18 @@ ti_lmm(fh, P = 0.95, level = 0.90)
 # random intercept + fixed slope (clean balanced) -> EMS engine
 fi <- lme4::lmer(Reaction ~ Days + (1 | Subject), data = lme4::sleepstudy)
 ti_lmm(fi, newdata = data.frame(Days = 0))
-# random slope, future-observation -> REML closed form
+# random slope -> GPQ (both targets). M = 2000 keeps the example fast; the
+# default M = 20000 is the validated size.
 fs <- lme4::lmer(Reaction ~ Days + (1 + Days | Subject), data = lme4::sleepstudy)
-ti_lmm(fs, newdata = data.frame(Days = 5))
-# random slope, batch-mean -> GPQ
+ti_lmm(fs, newdata = data.frame(Days = 5),
+       control = lmm_interval_control(seed = 1, M = 2000))
 ti_lmm(fs, newdata = data.frame(Days = 5), over = "group_mean",
-       control = lmm_interval_control(seed = 1))
+       control = lmm_interval_control(seed = 1, M = 2000))
 }
 \references{
+Oliva-Aviles C, Hauser P (2025). \emph{Technometrics} 67(2):193-202.
+\doi{10.1080/00401706.2024.2407324}
+
 Hoffman D (2010). One-sided tolerance limits for balanced and
 unbalanced random effects models. \emph{Technometrics} 52(3):303-312.
 \doi{10.1198/TECH.2010.09171}

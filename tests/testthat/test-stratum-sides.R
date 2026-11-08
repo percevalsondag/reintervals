@@ -91,32 +91,30 @@ test_that("one-sided 0.95 bound == two-sided 0.90 bound for CI / PI / new-group 
   }
 })
 
-test_that("one-sided TI routing: random slope -> reml-mls (Hoffman H) on every fit; gpq when forced", {
+test_that("one-sided TI routing: random slope -> gpq on every fit, singular included", {
   skip_if_not_installed("lme4")
   fs <- fit_q(Reaction ~ Days + (Days | Subject), lme4::sleepstudy)
-  nd <- data.frame(Days = c(2, 5)); ctl <- lmm_interval_control(seed = 1, M = 2000)
+  nd <- data.frame(Days = c(2, 5))
+  ctl <- lmm_interval_control(seed = 1, M = 2000)     # routing test, not an oracle
   for (s in c("lower", "upper")) {
-    r <- ti_lmm(fs, nd, P = 0.95, sides = s)
-    expect_identical(r$method, c("reml-mls", "reml-mls"))
-    expect_identical(dg(r)$route_reason, c("none", "none"))
+    r <- ti_lmm(fs, nd, P = 0.95, sides = s, control = ctl)
+    expect_identical(r$method, c("gpq", "gpq"))
+    expect_identical(dg(r)$route_reason, c("auto", "auto"))
+    expect_identical(r$sides, c(s, s))
     expect_true(all(r$lower < r$estimate & r$estimate < r$upper))
     g <- ti_lmm(fs, nd, P = 0.95, sides = s, method = "gpq", control = ctl)
-    expect_identical(g$method, c("gpq", "gpq"))
     expect_identical(dg(g)$route_reason, c("method", "method"))
-    expect_true(all(g$lower < g$estimate & g$estimate < g$upper))
+    expect_equal(c(g$lower, g$upper), c(r$lower, r$upper))        # same engine, same seed
   }
-  expect_identical(dg(ti_lmm(fs, nd, P = 0.95))$route_reason, c("none", "none"))   # two-sided unchanged
-  ## a singular random-slope fit: two-sided -> gpq ("singular"); one-sided stays reml-mls H
+  ## a singular random-slope fit: one-sided is GPQ too (0.2.0 kept reml-mls here)
   set.seed(11)
   d <- expand.grid(time = c(0, 3, 6, 9, 12), batch = factor(1:6))
   d$y <- 100 - 2 * d$time + rnorm(nrow(d))
   fz <- fit_q(y ~ time + (time | batch), d)
   skip_if_not(lme4::isSingular(fz))
-  expect_identical(ti_lmm(fz, data.frame(time = 6), control = ctl)$method, "gpq")
-  z <- ti_lmm(fz, data.frame(time = 6), sides = "lower")
-  expect_identical(z$method, "reml-mls")
-  expect_identical(dg(z)$route_reason, "none")
-  expect_true(z$lower < z$estimate)
+  z <- ti_lmm(fz, data.frame(time = 6), sides = "lower", control = ctl)
+  expect_identical(z$method, "gpq")
+  expect_true(z$lower < z$estimate && z$upper == Inf)
 })
 
 test_that("PI df on singular fits is the stratum containment df (A - 1; min(A, B) - 1)", {
@@ -167,12 +165,7 @@ test_that("one-sided TI on the ems-mls route (provisional): Hoffman's limit on t
   U <- sum(e$k * e$ms) + sqrt(sum(h^2 * e$k^2 * e$ms^2))
   VF <- unname(.fixed(fm, NULL)$var_fix)
   expect_equal(lo$estimate - lo$lower, qnorm(0.95) * sqrt(U) + qnorm(0.90) * sqrt(VF), tolerance = 1e-12)
-  fs <- fit_q(Reaction ~ Days + (Days | Subject), lme4::sleepstudy)      # reml-mls, forced
-  cp <- vfun_extract(fs, t0 = 5)
-  r <- ti_lmm(fs, data.frame(Days = 5), P = 0.95, level = 0.90, sides = "upper", method = "reml-mls")
-  HG <- cp$dfs[["G"]] / qchisq(0.10, cp$dfs[["G"]]) - 1; He <- cp$dfs[["e"]] / qchisq(0.10, cp$dfs[["e"]]) - 1
-  Uv <- cp$V_T + sqrt((HG * cp$V_G)^2 + (He * cp$phi[["s2e"]])^2)
-  expect_equal(r$upper - r$estimate, qnorm(0.95) * sqrt(Uv) + qnorm(0.90) * sqrt(cp$var_mean), tolerance = 1e-12)
+  ## (the reml-mls one-sided check that stood here was removed with the method, 1.0.0)
   fb <- fit_q(Y ~ Month + (1 | Lot), mbl_appendix_a)                     # Montes (anova-mls)
   up <- ti_lmm(fb, data.frame(Month = 12), P = 0.99, sides = "upper")
   expect_identical(up$method, "anova-mls")

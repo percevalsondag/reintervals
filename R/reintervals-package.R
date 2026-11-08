@@ -27,8 +27,9 @@
 #' design tags in [reintervals-models]). Engines: `"ems-mls"`
 #' (expected-mean-square / modified large-sample), `"anova-mls"` (unweighted
 #' lot-mean ANOVA: Montes et al. with a fixed slope, Hoffman & Kringle without
-#' one), `"reml-mls"` (REML closed form), `"gpq"` (generalized pivotal quantity,
-#' Monte Carlo).
+#' one), `"reml"` (REML-based t-interval, random-slope CI / PI / new-group
+#' mean), `"gpq"` (generalized pivotal quantity, Monte Carlo; every random-slope
+#' tolerance interval).
 #' \tabular{lllll}{
 #'   **model / situation** \tab **CI** \tab **PI** \tab **TI** \tab
 #'     **new-group mean** \cr
@@ -48,18 +49,13 @@
 #'   random intercept + fixed slope, single-observation / staggered \tab
 #'     `ems-mls` (warns with single-observation lots) \tab `ems-mls` (warns
 #'     likewise) \tab `anova-mls` \tab `anova-mls` \cr
-#'   random slope, future-observation, non-singular \tab `reml-mls` \tab
-#'     `reml-mls` \tab `reml-mls` \tab `reml-mls` \cr
-#'   random slope, singular fit or TI Satterthwaite df unavailable \tab
-#'     `reml-mls` \tab `reml-mls` \tab `gpq` \tab `reml-mls` \cr
-#'   random slope, batch-mean (`over = "group_mean"`, TI only) \tab --- \tab
-#'     --- \tab `gpq` \tab --- \cr
+#'   random slope (any fit, singular included) \tab `reml` \tab `reml` \tab
+#'     `gpq` (both `over` targets, all sides) \tab `reml` \cr
 #' }
-#' The random-slope tolerance interval switches to GPQ when the fit is
-#' singular or, at a given `t0`, when the closed form's Satterthwaite df for the
-#' between-group or residual variance is unavailable (including when the
-#' variance-component covariance is not positive definite); the reason is in
-#' `attr(., "diagnostics")$route_reason`. The random-intercept confidence
+#' Every random-slope tolerance interval is GPQ (Monte Carlo; default
+#' `M = 20000`, the validated size). The REML closed-form tolerance interval
+#' (`method = "reml-mls"`) was removed in 1.0.0 because it under-covers.
+#' The random-intercept confidence
 #' interval uses a Satterthwaite df, falling back to the SAS-style containment
 #' df (`A - 1` one-way or nested, `min(A, B) - 1` crossed) when that df is
 #' unavailable; Kenward-Roger only on request
@@ -69,10 +65,9 @@
 #' **One-sided intervals** (`sides = "lower"` / `"upper"`) are available from
 #' every verb. CI, PI, and new-group mean keep the two-sided center, variance,
 #' and df with `t_{1 - alpha}`. One-sided tolerance limits: `anova-mls` uses
-#' Hoffman's (2010) one-sided limit; `ems-mls` and random-slope models
-#' (`reml-mls`, the default on every fit) use the package's extension of
-#' Hoffman's limit to the Francq and REML closed-form bounds, validated by
-#' simulation. See [reintervals-models].
+#' Hoffman's (2010) one-sided limit; `ems-mls` uses the package's extension of
+#' Hoffman's limit to the Francq bound, validated by simulation; random-slope
+#' models use the one-sided GPQ limit. See [reintervals-models].
 #'
 #' **Scope.** General fixed effects are supported for random-intercept
 #' models; random-slope models are supported for a single continuous covariate (the

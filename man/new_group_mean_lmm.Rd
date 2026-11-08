@@ -28,8 +28,8 @@ interval keeps the two-sided interval's center, variance, and df and uses
 \verb{t_\{1 - alpha\}} in place of \verb{t_\{1 - alpha/2\}}.}
 
 \item{method}{\code{"auto"} (default) chooses the algorithm by structure; one of
-\code{"ems-mls"}, \code{"reml-mls"}, \code{"anova-mls"}, \code{"gpq"} forces that engine and
-errors if it is incompatible with the model.}
+\code{"ems-mls"}, \code{"anova-mls"} (new-group mean only), \code{"reml"} (random-slope
+models) forces that engine and errors if it is incompatible with the model.}
 
 \item{control}{An \code{\link[=lmm_interval_control]{lmm_interval_control()}} object (the GPQ \code{seed} and \code{M},
 and the confidence-interval df rule \code{ci_df}).}
@@ -44,7 +44,7 @@ with columns, in order:
 \code{lower}, \code{upper};
 \item \code{level} (the confidence, \code{1 - alpha}); \code{P} (content proportion ---
 the value for \code{ti}, \code{NA} for the coverage intervals); \code{sides};
-\item \code{method} (the engine: \code{"ems-mls"}, \code{"reml-mls"}, \code{"anova-mls"}, or
+\item \code{method} (the engine: \code{"ems-mls"}, \code{"anova-mls"}, \code{"reml"}, or
 \code{"gpq"}); \code{design} (the route-independent model class, see
 \link{reintervals-models});
 \item the per-row flags \code{singular}, \code{boundary}, \code{vg_floored}.
@@ -91,8 +91,8 @@ factor's df \code{A - 1} (\code{"top-factor"}, \code{"ems-mls"});
 \item crossed with interaction: the same \code{W}, with a Satterthwaite df in
 which \code{V_F} is attached to the two main-effect terms
 (\code{"satterthwaite-vf"}, \code{"ems-mls"});
-\item random slope: the REML closed form
-\eqn{\mu(t_0) \pm t_{\nu_G}\sqrt{V_F + V_G}} (\code{"reml-mls"}).
+\item random slope: the REML-based t-interval
+\eqn{\mu(t_0) \pm t_{\nu_G}\sqrt{V_F + V_G}} (\code{"reml"}).
 }
 A design without a closed-form variance decomposition (two crossed factors
 without their interaction term, or four or more grouping factors) is an

@@ -29,14 +29,16 @@
 ## tau2 = z' V z is the ONLY functional of V the method needs -- individual
 ## variance components are never estimated. Hence its immunity to the
 ## correlated-slope identification pathology (correlation pinned to +/-1,
-## singular REML fits) that degrades the closed form: no V to identify.
+## singular REML fits) that degraded the REML closed-form interval removed in
+## 1.0.0 (reml-mls): no V to identify.
 ##
 ## TARGET / RESIDUAL MULTIPLIER c:
 ##   c = 1  -> content distribution N(theta, tau2 + s2e): a FUTURE OBSERVATION.
-##             This matches our TI target (scored against V_T = V_G+s2e),
-##             so c = 1 is the apples-to-apples head-to-head setting.
+##             This is ti_lmm(over = "observation"): content variance
+##             V_T = V_G + s2e.
 ##   c = 0  -> content distribution N(theta, tau2): the BATCH-MEAN distribution
-##             (the target of the paper's own Section 5 / shelf-life example).
+##             (the target of the paper's own Section 5 / shelf-life example;
+##             ti_lmm(over = "group_mean")).
 ##
 ## Verified against the paper's Section 5 coverage study (see data-raw/gpq_coverage_study.R):
 ## with c = 0, t0 = 20, their DGP, the GPQ (P,gamma)-TI covers ~ gamma.
@@ -51,7 +53,7 @@
 ## ---------------------------------------------------------------------------
 .gpq_core <- function(y, time, batch, t0, content = 0.99, conf = 0.95,
                       sides = c("two.sided", "lower", "upper"),
-                      c_resid = 1, M = 10000L, seed = NULL) {
+                      c_resid = 1, M = 20000L, seed = NULL) {
   sides <- match.arg(sides)
   ## a per-call seed must not disturb the caller's stream: withr sets it and restores
   ## the caller's RNG state on exit; with seed = NULL the ambient stream is used as-is
@@ -258,10 +260,9 @@
 #' The Oliva-Aviles & Hauser (2025) generalized-pivotal-
 #' quantity tolerance interval for the random-intercept + random-slope stability
 #' model, from raw `(y, time, batch)` vectors without a fitted `lmer` model. The
-#' fit-based dispatcher [ti_lmm()] routes random-slope designs here automatically
-#' (singular fits, fits whose closed-form Satterthwaite df is unavailable at a
-#' given `t0`, and the batch-mean target `over = "group_mean"`); use
-#' `ti_gpq_raw()` directly when you have data but no model object.
+#' fit-based dispatcher [ti_lmm()] uses it for every random-slope tolerance
+#' interval (both targets, all sides); use `ti_gpq_raw()` directly when you have
+#' data but no model object.
 #'
 #' @param y Numeric response.
 #' @param time Numeric time/age covariate (same length as `y`).
