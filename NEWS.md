@@ -1,3 +1,7 @@
+# reintervals (development version)
+
+* Development towards 1.0.0.
+
 # reintervals 0.2.0
 
 ## New features
