@@ -161,7 +161,11 @@
 ## Either way the draws run inside withr::with_seed(), which restores the
 ## caller's RNG state afterwards, and the integer seed and the RNGkind() in
 ## effect during the draws are returned for the diagnostics.
-.gpq_pivots <- function(df_resid, K, M, seed = NULL) {
+## z_new = TRUE (the generalized prediction interval for a new lot's mean,
+## new_group_mean_lmm(slope_ngm_method = "gpq")) draws one more standard-normal
+## vector Z_new AFTER U, Q, Z, so U, Q, Z -- and every tolerance interval --
+## are the same draws with or without it.
+.gpq_pivots <- function(df_resid, K, M, seed = NULL, z_new = FALSE) {
   M <- as.integer(M)
   if (is.null(seed)) seed <- sample.int(.Machine$integer.max, 1L)
   seed <- as.integer(seed)
@@ -170,12 +174,20 @@
     U <- stats::rchisq(M, df_resid)
     Q <- stats::rchisq(M, K - 1L)
     Z <- stats::rnorm(M)
-    list(U = U, Q = Q, Z = Z, M = M, seed = seed, rng_kind = rng_kind)
+    Z_new <- if (z_new) stats::rnorm(M) else NULL
+    list(U = U, Q = Q, Z = Z, Z_new = Z_new, M = M, seed = seed,
+         rng_kind = rng_kind)
   })
 }
 
-## Everything t0-dependent, on the shared pivot draws `piv`. Returns one row.
-.gpq_eval_t0 <- function(pre, piv, tt, zP, zP2, conf, sides, c_resid, content) {
+## The t0-dependent pivots on the shared draws `piv` (A2 code, moved here
+## unchanged in B2 so the new-group-mean GPQ uses the same realizations):
+##   Rtheta  GPQ of the mean line mu(t0)                 (R_mu(t0))
+##   Rtau2   GPQ of the between-lot variance z0' V z0    (R_VG(t0), c_resid = 0)
+##   Rs2e    GPQ of the residual variance
+## plus the draw bookkeeping: `keep` (draws with a valid tau2 solution), the MC
+## section of each kept draw, the NA count and the boundary flags.
+.gpq_theta_draws <- function(pre, piv, tt) {
   K <- pre$K; M <- piv$M
   z0 <- c(1, tt)
   a  <- vapply(seq_len(K), function(k) as.numeric(t(z0) %*% pre$ZtZi[[k]] %*% z0), 0) # leverages a_k
@@ -229,8 +241,20 @@
   theta_tilde <- num / den
   Rs2_theta   <- 1 / den                                 # Var(theta-tilde) realization
 
-  content_var <- pmax(0, Rtau2 + c_resid * Rs2e)         # tau2 + c s2e (>=0)
   Rtheta <- theta_tilde - Zstar * sqrt(Rs2_theta)        # GPQ for theta
+  list(Rtheta = Rtheta, Rtau2 = Rtau2, Rs2e = Rs2e, Rs2_theta = Rs2_theta,
+       keep = !na, sec = sec,
+       n_na = n_na, boundary = boundary, phi1 = phi1, K = K, M = M, S = S)
+}
+
+## Everything t0-dependent for the tolerance interval, on the shared pivot
+## draws `piv`. Returns one row.
+.gpq_eval_t0 <- function(pre, piv, tt, zP, zP2, conf, sides, c_resid, content) {
+  dr <- .gpq_theta_draws(pre, piv, tt)
+  Rtheta <- dr$Rtheta; Rtau2 <- dr$Rtau2; Rs2e <- dr$Rs2e; sec <- dr$sec
+  S <- dr$S; K <- dr$K; phi1 <- dr$phi1; n_na <- dr$n_na; boundary <- dr$boundary
+  Rs2_theta <- dr$Rs2_theta
+  content_var <- pmax(0, Rtau2 + c_resid * Rs2e)         # tau2 + c s2e (>=0)
 
   if (sides == "two.sided") {
     Rzeta <- sqrt(content_var + Rs2_theta)               # ζ = sqrt(content var + center var)
@@ -268,6 +292,56 @@
              K = K, df_resid = pre$df_resid, phi1 = phi1,
              content = content, conf = conf, c_resid = c_resid,
              stringsAsFactors = FALSE)
+}
+
+## ---------------------------------------------------------------------------
+## .gpq_ngm_core: generalized prediction interval for the mean of a NEW lot at
+## t0, theta_new = mu(t0) + z0' b_new (new_group_mean_lmm, slope_ngm_method =
+## "gpq"; a validation arm). On the tolerance interval's pivots (Oliva-Aviles &
+## Hauser 2025) the generalized pivot of theta_new is (Krishnamoorthy & Mathew
+## 2009, generalized prediction intervals)
+##   R_theta_new = R_mu(t0) + Z_new * sqrt(R_VG(t0)),
+## with R_mu = Rtheta, R_VG = max(0, Rtau2) (the c_resid = 0 content variance)
+## and Z_new an independent N(0, 1) vector drawn after U, Q, Z. Limits are its
+## quantiles: alpha/2 and 1 - alpha/2 two-sided, alpha (lower) or 1 - alpha
+## (upper) one-sided. Same seed contract, common random numbers across t0, MC
+## sections, NA-draw rule and per-lot time-point guard as the TI.
+## ---------------------------------------------------------------------------
+.gpq_ngm_core <- function(y, time, batch, t0, level = 0.95,
+                          sides = c("two.sided", "lower", "upper"),
+                          M = 20000L, seed = NULL) {
+  sides <- match.arg(sides)
+  pre <- .gpq_prepare(y, time, batch)          # errors here leave the RNG untouched
+  piv <- .gpq_pivots(df_resid = pre$df_resid, K = pre$K, M = M, seed = seed,
+                     z_new = TRUE)
+  alpha <- 1 - level
+  rows <- lapply(t0, function(tt) {
+    dr <- .gpq_theta_draws(pre, piv, tt)
+    Rnew <- dr$Rtheta + piv$Z_new[dr$keep] * sqrt(pmax(0, dr$Rtau2))
+    limits <- function(i) {
+      q <- function(p) stats::quantile(Rnew[i], p, names = FALSE, type = 7)
+      switch(sides,
+             two.sided = c(q(alpha / 2), q(1 - alpha / 2)),
+             lower     = c(q(alpha), Inf),
+             upper     = c(-Inf, q(1 - alpha)))
+    }
+    lim <- limits(seq_along(Rnew))
+    sec_lim <- vapply(seq_len(dr$S), function(s) limits(which(dr$sec == s)), numeric(2))
+    mc_se <- apply(sec_lim, 1L, stats::sd) / sqrt(dr$S)
+    mc_se[!is.finite(lim)] <- NA_real_
+    data.frame(time = tt, estimate = stats::median(dr$Rtheta),
+               lower = lim[1], upper = lim[2],
+               mc_se_lower = mc_se[1], mc_se_upper = mc_se[2],
+               tau2_med = stats::median(dr$Rtau2), s2e_med = stats::median(dr$Rs2e),
+               frac_boundary = mean(dr$boundary), n_na_draws = dr$n_na,
+               K = dr$K, df_resid = pre$df_resid, phi1 = dr$phi1,
+               stringsAsFactors = FALSE)
+  })
+  out <- do.call(rbind, rows); rownames(out) <- NULL
+  attr(out, "gpq_seed")    <- piv$seed
+  attr(out, "rng_kind")    <- piv$rng_kind
+  attr(out, "mc_sections") <- .gpq_mc_sections
+  out
 }
 
 ## ---- helpers --------------------------------------------------------------

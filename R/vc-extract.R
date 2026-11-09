@@ -251,10 +251,25 @@ requireNamespace <- NULL
 ## unavailable (e.g. singular fit) or the delta-method variance is degenerate;
 ## .ci_ddf() then falls back to containment.
 .ci_ddf_satterthwaite <- function(model, Lrow, theta) {
-  l <- as.numeric(Lrow)
   if (is.null(theta) || is.null(theta$cov_theta)) return(NA_real_)
-  Al <- theta$parts$Al; th <- theta$parts$th
-  X <- theta$parts$X; N <- theta$parts$N; k <- theta$parts$k
+  cg <- .contrast_var_grad(Lrow, theta$parts)
+  if (is.null(cg)) return(NA_real_)
+  g <- cg$grad
+  var_c <- as.numeric(t(g) %*% theta$cov_theta %*% g)
+  if (!is.finite(var_c) || var_c <= 0) return(NA_real_)
+  2 * cg$value^2 / var_c
+}
+
+## The contrast variance l C11(theta) l' as a function of the variance
+## components theta (variance scale, residual last: .theta_cov()$parts), its
+## value at the REML estimate and its numerical gradient there (numDeriv).
+## Shared by the Satterthwaite CI df (.ci_ddf_satterthwaite) and the
+## broad-inference new-group-mean df (.ngm_broad), so the two use one
+## derivative. NULL when the gradient cannot be computed.
+.contrast_var_grad <- function(Lrow, parts) {
+  l <- as.numeric(Lrow)
+  Al <- parts$Al; th <- parts$th
+  X <- parts$X; N <- parts$N; k <- parts$k
   cvar <- function(t) {
     V <- as.matrix(Reduce(`+`, Map(function(a, s) s * a, Al, t[-k])) +
                      Matrix::Diagonal(N, t[k]))
@@ -262,10 +277,8 @@ requireNamespace <- NULL
     as.numeric(t(l) %*% c11 %*% l)
   }
   g <- tryCatch(numDeriv::grad(cvar, th), error = function(e) NULL)
-  if (is.null(g)) return(NA_real_)
-  var_c <- as.numeric(t(g) %*% theta$cov_theta %*% g)
-  if (!is.finite(var_c) || var_c <= 0) return(NA_real_)
-  2 * cvar(th)^2 / var_c
+  if (is.null(g)) return(NULL)
+  list(value = cvar(th), grad = g)
 }
 
 ## Stratum df adjusted for the fixed effects (the rank rule). With the

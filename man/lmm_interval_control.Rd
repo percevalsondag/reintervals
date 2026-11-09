@@ -9,7 +9,9 @@ lmm_interval_control(
   M = 20000L,
   ci_df = c("satterthwaite", "kenward-roger", "containment"),
   slope_ci_df = c("hessian-satterthwaite", "kenward-roger", "k-minus-1"),
-  pi_df = c("francq-satterthwaite", "containment")
+  pi_df = c("francq-satterthwaite", "containment"),
+  ngm_method = c("package", "broad-inference", "hts", "classical"),
+  slope_ngm_method = c("reml", "gpq", "fv-anova")
 )
 }
 \arguments{
@@ -80,20 +82,55 @@ variance with the containment df of \code{ci_df = "containment"}). There is no
 Kenward-Roger prediction interval: KR adjusts fixed-effect contrasts only,
 and the prediction variance includes estimated variance components. Not
 applied to random-slope models, whose prediction interval is unchanged.}
+
+\item{ngm_method}{New-group-mean construction (\code{\link[=new_group_mean_lmm]{new_group_mean_lmm()}}) on
+random-intercept models: \code{"package"} (default; the 0.2.0 constructions,
+see \code{\link[=new_group_mean_lmm]{new_group_mean_lmm()}}) or a validation arm:
+\code{"broad-inference"} (the SAS PROC MIXED broad-inference prediction of a new
+group, McLean, Sanders & Stroup 1991: \code{W = V_F} plus the REML estimates of
+every between-group variance component, with the Satterthwaite df
+\verb{2 W^2 / (g' A g)}, \code{g} the gradient of \code{W} in the variance components and
+\code{A} their observed-information covariance, as DDFM=SATTERTH; when that df is
+not finite or below 1 the limits are \code{NA} and \code{ngm_df_failed = TRUE}, with
+no fallback; every random-intercept design the default accepts),
+\code{"hts"} (Higgins, Thompson & Spiegelhalter 2009 prediction interval,
+\verb{mu +/- t_\{I-2\} sqrt(sigma2_L + V_F)}, with the REML between-group variance
+in place of their DerSimonian-Laird \code{tau^2}; intercept-only one-way models
+with \code{I >= 3} groups) or \code{"classical"} (Hahn & Meeker 1991 prediction
+interval on the group means, \verb{Ybar +/- t_\{I-1\} S_L sqrt(1 + 1/I)};
+intercept-only one-way models with balanced groups, where it equals the
+default).}
+
+\item{slope_ngm_method}{New-group-mean construction on random-slope models:
+\code{"reml"} (default; \verb{mu(t0) +/- t(nu_G) sqrt(V_F + V_G)}) or a validation
+arm: \code{"gpq"} (a generalized prediction interval on the tolerance
+interval's pivots, Oliva-Aviles & Hauser 2025 with the generalized
+prediction construction of Krishnamoorthy & Mathew 2009:
+\verb{R_mu(t0) + Z_new sqrt(R_VG(t0))}, limits its quantiles; the GPQ \code{seed} and
+\code{M} apply, with the same seed contract, common random numbers across \code{t0}
+and Monte-Carlo SE as \code{\link[=ti_lmm]{ti_lmm()}}) or \code{"fv-anova"} (package-original:
+\verb{Ybar_fit +/- t_\{K-1\} S_L sqrt(1 + 1/K)} on the per-lot OLS fitted values
+at \code{t0}, \code{K} lots; in a balanced design the exact t prediction interval
+for a new lot's fitted value at \code{t0}, whose variance
+\verb{V_G + sigma^2 h(t0)} exceeds that of the new lot's true mean, so it is
+conservative for the new-group mean, by \verb{sigma^2 h(t0) (1 + 1/K)}, and
+cannot truncate). Both need two distinct time points per lot.}
 }
 \value{
 An \code{lmm_interval_control} list (passed to a verb's \code{control}
-argument); a list with elements \code{seed}, \code{M}, \code{ci_df}, \code{slope_ci_df} and
-\code{pi_df}.
+argument); a list with elements \code{seed}, \code{M}, \code{ci_df}, \code{slope_ci_df},
+\code{pi_df}, \code{ngm_method} and \code{slope_ngm_method}.
 }
 \description{
 Tuning knobs only --- the RNG seed and Monte-Carlo size used when the
-GPQ algorithm runs, and the degrees-of-freedom rules of the confidence and
-prediction intervals. Algorithm \emph{selection} is the \code{method} argument, not this.
+GPQ algorithm runs, the degrees-of-freedom rules of the confidence and
+prediction intervals, and the validation arms of the new-group-mean
+interval. Algorithm \emph{selection} is the \code{method} argument, not this.
 }
 \section{Validation arms}{
 
-The non-default values of \code{ci_df}, \code{slope_ci_df} and \code{pi_df} are validation
+The non-default values of \code{ci_df}, \code{slope_ci_df}, \code{pi_df}, \code{ngm_method} and
+\code{slope_ngm_method} are validation
 arms: their coverage is under evaluation in the 1.0.0 validation study, and
 the defaults are the validated rules. Applying a non-default arm signals a
 warning of class \code{reintervals_warning_unvalidated} on every call (muffle it
@@ -101,17 +138,25 @@ by class), except \code{ci_df = "kenward-roger"} on random-intercept models,
 supported since 0.2.0. Each option applies to one model structure and verb:
 \code{ci_df} to \code{\link[=ci_lmm]{ci_lmm()}} on random-intercept models (including the fixed-slope
 design), \code{slope_ci_df} to \code{\link[=ci_lmm]{ci_lmm()}} on random-slope models, \code{pi_df} to
-\code{\link[=pi_lmm]{pi_lmm()}} on random-intercept models. Elsewhere an option is a no-op, never
-an error, so one control object can be reused across models and verbs. The
+\code{\link[=pi_lmm]{pi_lmm()}} on random-intercept models, \code{ngm_method} to
+\code{\link[=new_group_mean_lmm]{new_group_mean_lmm()}} on random-intercept models and \code{slope_ngm_method} to
+\code{\link[=new_group_mean_lmm]{new_group_mean_lmm()}} on random-slope models. Elsewhere an option is a
+no-op, never an error, so one control object can be reused across models
+and verbs; so is a new-group-mean arm that is not defined for the design
+(\code{"hts"} on anything but an intercept-only one-way model with at least three
+groups, \code{"classical"} on unbalanced groups): the default is computed. The
 diagnostics of every confidence, prediction and new-group-mean interval
-record each option as \code{ci_df_rule}, \code{slope_ci_df_rule} and \code{pi_df_rule}: the
-value applied, or \code{"not_applicable"}; \code{df} is the df actually used.
+record each option as \code{ci_df_rule}, \code{slope_ci_df_rule}, \code{pi_df_rule},
+\code{ngm_arm} and \code{slope_ngm_arm}: the value applied, or \code{"not_applicable"};
+\code{df} is the df actually used. The \code{method} column keeps the default route's
+tag; the arm is read from these fields.
 }
 
 \examples{
 lmm_interval_control(seed = 1, M = 5000)
 lmm_interval_control(ci_df = "kenward-roger")
 lmm_interval_control(slope_ci_df = "k-minus-1", pi_df = "containment")
+lmm_interval_control(ngm_method = "broad-inference", slope_ngm_method = "gpq")
 }
 \seealso{
 \code{\link[=ci_lmm]{ci_lmm()}}, \code{\link[=ti_lmm]{ti_lmm()}}, \code{\link[=ti_gpq_raw]{ti_gpq_raw()}}.

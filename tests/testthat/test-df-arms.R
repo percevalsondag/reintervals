@@ -177,6 +177,28 @@ test_that("B1 (c): slope_ci_df = 'kenward-roger' on random-slope fits; phase-0 e
   expect_true(all(is.finite(c(u$lower, u$upper))))
 })
 
+test_that("B1 (c'): a failed Kenward-Roger df on a random slope aborts; it never falls back", {
+  ## A validation arm must not fall back to another df: step 13 would credit the
+  ## fallback's coverage to Kenward-Roger. Force each failure mode of
+  ## pbkrtest::Lb_ddf (error, NA, Inf, non-positive) and require the classed
+  ## numerical error naming the arm.
+  skip_if_not_installed("pbkrtest")
+  kr <- lmm_interval_control(slope_ci_df = "kenward-roger")
+  nd <- data.frame(Days = 5)
+  for (bad in list(function(...) stop("forced"), function(...) NA_real_,
+                   function(...) Inf, function(...) 0, function(...) -3)) {
+    local({
+      testthat::local_mocked_bindings(Lb_ddf = bad, .package = "pbkrtest")
+      expect_error(quiet_arm(ci_lmm(F_b1$rs_ind$fit, newdata = nd, control = kr)),
+                   class = "reintervals_error_numerical",
+                   regexp = "slope_ci_df = \"kenward-roger\"", fixed = FALSE)
+    })
+  }
+  ## unmocked again: the arm runs (the mock did not leak)
+  ok <- quiet_arm(ci_lmm(F_b1$rs_ind$fit, newdata = nd, control = kr))
+  expect_true(is.finite(attr(ok, "diagnostics")$df))
+})
+
 test_that("B1 (d): the unvalidated warning fires once per call for each applied non-default arm", {
   fx <- F_b1$oneway; fs <- F_b1$rs_un
   warns_once <- function(expr) {

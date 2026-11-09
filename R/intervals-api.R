@@ -9,11 +9,13 @@
 #' Tuning controls for the interval engines
 #'
 #' Tuning knobs only --- the RNG seed and Monte-Carlo size used when the
-#' GPQ algorithm runs, and the degrees-of-freedom rules of the confidence and
-#' prediction intervals. Algorithm *selection* is the `method` argument, not this.
+#' GPQ algorithm runs, the degrees-of-freedom rules of the confidence and
+#' prediction intervals, and the validation arms of the new-group-mean
+#' interval. Algorithm *selection* is the `method` argument, not this.
 #'
 #' @section Validation arms:
-#' The non-default values of `ci_df`, `slope_ci_df` and `pi_df` are validation
+#' The non-default values of `ci_df`, `slope_ci_df`, `pi_df`, `ngm_method` and
+#' `slope_ngm_method` are validation
 #' arms: their coverage is under evaluation in the 1.0.0 validation study, and
 #' the defaults are the validated rules. Applying a non-default arm signals a
 #' warning of class `reintervals_warning_unvalidated` on every call (muffle it
@@ -21,11 +23,18 @@
 #' supported since 0.2.0. Each option applies to one model structure and verb:
 #' `ci_df` to [ci_lmm()] on random-intercept models (including the fixed-slope
 #' design), `slope_ci_df` to [ci_lmm()] on random-slope models, `pi_df` to
-#' [pi_lmm()] on random-intercept models. Elsewhere an option is a no-op, never
-#' an error, so one control object can be reused across models and verbs. The
+#' [pi_lmm()] on random-intercept models, `ngm_method` to
+#' [new_group_mean_lmm()] on random-intercept models and `slope_ngm_method` to
+#' [new_group_mean_lmm()] on random-slope models. Elsewhere an option is a
+#' no-op, never an error, so one control object can be reused across models
+#' and verbs; so is a new-group-mean arm that is not defined for the design
+#' (`"hts"` on anything but an intercept-only one-way model with at least three
+#' groups, `"classical"` on unbalanced groups): the default is computed. The
 #' diagnostics of every confidence, prediction and new-group-mean interval
-#' record each option as `ci_df_rule`, `slope_ci_df_rule` and `pi_df_rule`: the
-#' value applied, or `"not_applicable"`; `df` is the df actually used.
+#' record each option as `ci_df_rule`, `slope_ci_df_rule`, `pi_df_rule`,
+#' `ngm_arm` and `slope_ngm_arm`: the value applied, or `"not_applicable"`;
+#' `df` is the df actually used. The `method` column keeps the default route's
+#' tag; the arm is read from these fields.
 #'
 #' @param seed Optional integer seed for the GPQ draws (reproducibility / GxP
 #'   traceability). With the default `NULL`, one integer seed is drawn from the
@@ -90,24 +99,61 @@
 #'   Kenward-Roger prediction interval: KR adjusts fixed-effect contrasts only,
 #'   and the prediction variance includes estimated variance components. Not
 #'   applied to random-slope models, whose prediction interval is unchanged.
+#' @param ngm_method New-group-mean construction ([new_group_mean_lmm()]) on
+#'   random-intercept models: `"package"` (default; the 0.2.0 constructions,
+#'   see [new_group_mean_lmm()]) or a validation arm:
+#'   `"broad-inference"` (the SAS PROC MIXED broad-inference prediction of a new
+#'   group, McLean, Sanders & Stroup 1991: `W = V_F` plus the REML estimates of
+#'   every between-group variance component, with the Satterthwaite df
+#'   `2 W^2 / (g' A g)`, `g` the gradient of `W` in the variance components and
+#'   `A` their observed-information covariance, as DDFM=SATTERTH; when that df is
+#'   not finite or below 1 the limits are `NA` and `ngm_df_failed = TRUE`, with
+#'   no fallback; every random-intercept design the default accepts),
+#'   `"hts"` (Higgins, Thompson & Spiegelhalter 2009 prediction interval,
+#'   `mu +/- t_{I-2} sqrt(sigma2_L + V_F)`, with the REML between-group variance
+#'   in place of their DerSimonian-Laird `tau^2`; intercept-only one-way models
+#'   with `I >= 3` groups) or `"classical"` (Hahn & Meeker 1991 prediction
+#'   interval on the group means, `Ybar +/- t_{I-1} S_L sqrt(1 + 1/I)`;
+#'   intercept-only one-way models with balanced groups, where it equals the
+#'   default).
+#' @param slope_ngm_method New-group-mean construction on random-slope models:
+#'   `"reml"` (default; `mu(t0) +/- t(nu_G) sqrt(V_F + V_G)`) or a validation
+#'   arm: `"gpq"` (a generalized prediction interval on the tolerance
+#'   interval's pivots, Oliva-Aviles & Hauser 2025 with the generalized
+#'   prediction construction of Krishnamoorthy & Mathew 2009:
+#'   `R_mu(t0) + Z_new sqrt(R_VG(t0))`, limits its quantiles; the GPQ `seed` and
+#'   `M` apply, with the same seed contract, common random numbers across `t0`
+#'   and Monte-Carlo SE as [ti_lmm()]) or `"fv-anova"` (package-original:
+#'   `Ybar_fit +/- t_{K-1} S_L sqrt(1 + 1/K)` on the per-lot OLS fitted values
+#'   at `t0`, `K` lots; in a balanced design the exact t prediction interval
+#'   for a new lot's fitted value at `t0`, whose variance
+#'   `V_G + sigma^2 h(t0)` exceeds that of the new lot's true mean, so it is
+#'   conservative for the new-group mean, by `sigma^2 h(t0) (1 + 1/K)`, and
+#'   cannot truncate). Both need two distinct time points per lot.
 #' @return An `lmm_interval_control` list (passed to a verb's `control`
-#'   argument); a list with elements `seed`, `M`, `ci_df`, `slope_ci_df` and
-#'   `pi_df`.
+#'   argument); a list with elements `seed`, `M`, `ci_df`, `slope_ci_df`,
+#'   `pi_df`, `ngm_method` and `slope_ngm_method`.
 #' @seealso [ci_lmm()], [ti_lmm()], [ti_gpq_raw()].
 #' @examples
 #' lmm_interval_control(seed = 1, M = 5000)
 #' lmm_interval_control(ci_df = "kenward-roger")
 #' lmm_interval_control(slope_ci_df = "k-minus-1", pi_df = "containment")
+#' lmm_interval_control(ngm_method = "broad-inference", slope_ngm_method = "gpq")
 #' @export
 lmm_interval_control <- function(seed = NULL, M = 20000L,
                                  ci_df = c("satterthwaite", "kenward-roger",
                                            "containment"),
                                  slope_ci_df = c("hessian-satterthwaite",
                                                  "kenward-roger", "k-minus-1"),
-                                 pi_df = c("francq-satterthwaite", "containment")) {
+                                 pi_df = c("francq-satterthwaite", "containment"),
+                                 ngm_method = c("package", "broad-inference", "hts",
+                                                "classical"),
+                                 slope_ngm_method = c("reml", "gpq", "fv-anova")) {
   ci_df       <- match.arg(ci_df)
   slope_ci_df <- match.arg(slope_ci_df)
   pi_df       <- match.arg(pi_df)
+  ngm_method  <- match.arg(ngm_method)
+  slope_ngm_method <- match.arg(slope_ngm_method)
   if (!is.null(seed) && (!is.numeric(seed) || length(seed) != 1L || is.na(seed) ||
                            abs(seed) > .Machine$integer.max)) {
     .abort("`seed` must be NULL or a single number in the integer range.",
@@ -122,7 +168,8 @@ lmm_interval_control <- function(seed = NULL, M = 20000L,
            class = "reintervals_error_input")
   }
   structure(list(seed = seed, M = as.integer(M), ci_df = ci_df,
-                 slope_ci_df = slope_ci_df, pi_df = pi_df),
+                 slope_ci_df = slope_ci_df, pi_df = pi_df,
+                 ngm_method = ngm_method, slope_ngm_method = slope_ngm_method),
             class = "lmm_interval_control")
 }
 
@@ -130,8 +177,8 @@ lmm_interval_control <- function(seed = NULL, M = 20000L,
 ## The df arms of lmm_interval_control(), with their validated defaults. Each
 ## arm applies to one (model structure, verb) cell; anywhere else it is a no-op,
 ## recorded as "not_applicable" in the diagnostics field `<option>_rule`, so one
-## control object can be reused across a simulation grid. B2 adds the
-## new-group-mean arm here the same way (option ngm_method, field ngm_arm).
+## control object can be reused across a simulation grid. The new-group-mean
+## arms (B2) record the arm in `ngm_arm` / `slope_ngm_arm`.
 .df_arms <- list(
   ci_df       = list(default = "satterthwaite", rule = "ci_df_rule",
                      ## the 0.2.0 options, which do not warn
@@ -139,7 +186,9 @@ lmm_interval_control <- function(seed = NULL, M = 20000L,
   slope_ci_df = list(default = "hessian-satterthwaite", rule = "slope_ci_df_rule",
                      no_warn = "hessian-satterthwaite"),
   pi_df       = list(default = "francq-satterthwaite", rule = "pi_df_rule",
-                     no_warn = "francq-satterthwaite")
+                     no_warn = "francq-satterthwaite"),
+  ngm_method  = list(default = "package", rule = "ngm_arm", no_warn = "package"),
+  slope_ngm_method = list(default = "reml", rule = "slope_ngm_arm", no_warn = "reml")
 )
 
 ## The arm value of `opt` from a control object, or its default when the
@@ -150,13 +199,21 @@ lmm_interval_control <- function(seed = NULL, M = 20000L,
 }
 
 ## Which arms apply to this model and verb: named character, option -> value
-## for the applied arms only.
+## for the applied arms only. A new-group-mean arm that is not defined for the
+## design (e.g. ngm_method = "hts" on a nested fit, "classical" on unbalanced
+## groups) is not applied: the default runs and the option is recorded as
+## "not_applicable".
 .applied_arms <- function(model, kind, control) {
   rs <- .has_random_slope(model)
   opts <- if (kind == "CI") (if (rs) "slope_ci_df" else "ci_df")
           else if (kind == "PI" && !rs) "pi_df"
+          else if (kind == "new_group_mean") (if (rs) "slope_ngm_method" else "ngm_method")
           else character(0)
-  stats::setNames(vapply(opts, function(o) .arm_value(control, o), ""), opts)
+  out <- stats::setNames(vapply(opts, function(o) .arm_value(control, o), ""), opts)
+  if ("ngm_method" %in% names(out) && !.ngm_arm_applies(model, out[["ngm_method"]])) {
+    out <- out[names(out) != "ngm_method"]
+  }
+  out
 }
 
 ## Diagnostics fields for every arm: the applied value or "not_applicable".
@@ -256,7 +313,8 @@ lmm_interval_control <- function(seed = NULL, M = 20000L,
                  "frac_boundary", "K", "df_resid", "phi1", "c_resid", "n_E",
                  "df_method", "route_reason", "df_rule", "W", "mls_bound",
                  "n_na_draws", "mc_se_lower", "mc_se_upper", "ci_df_rule",
-                 "slope_ci_df_rule", "pi_df_rule")
+                 "slope_ci_df_rule", "pi_df_rule", "ngm_arm", "slope_ngm_arm",
+                 "ngm_df_failed")
 
 ## The output unifier. Maps any engine's native frame to the single tidy
 ## contract; relabels only, never recomputes. Universal columns, in order:
@@ -299,7 +357,7 @@ lmm_interval_control <- function(seed = NULL, M = 20000L,
   ## diagnostics -> attribute (off the core shape, still retrievable)
   diag <- list()
   for (cn in c("df", "df_method", "df_rule", "ci_df_rule", "slope_ci_df_rule",
-               "pi_df_rule", "W", "se", "tau2_med", "s2e_med",
+               "pi_df_rule", "ngm_arm", "slope_ngm_arm", "ngm_df_failed", "W", "se", "tau2_med", "s2e_med",
                "frac_boundary", "K", "df_resid", "phi1", "c_resid",
                "route_reason", "mls_bound", "n_na_draws", "mc_se_lower",
                "mc_se_upper")) {
@@ -356,9 +414,10 @@ print.lmm_interval <- function(x, ...) {
 #'   `"ems-mls"`, `"anova-mls"` (new-group mean only), `"reml"` (random-slope
 #'   models) forces that engine and errors if it is incompatible with the model.
 #' @param control An [lmm_interval_control()] object (the GPQ `seed` and `M`,
-#'   and the df rules `ci_df`, `slope_ci_df` and `pi_df`; an option that does
-#'   not apply to the model or verb is ignored and recorded as
-#'   `"not_applicable"` in the diagnostics).
+#'   the df rules `ci_df`, `slope_ci_df` and `pi_df`, and the new-group-mean
+#'   arms `ngm_method` and `slope_ngm_method`; an option that does not apply to
+#'   the model or verb is ignored and recorded as `"not_applicable"` in the
+#'   diagnostics).
 #'
 #' @return An `lmm_interval` object (a data frame), one row per evaluation point,
 #'   with columns, in order:
@@ -481,13 +540,42 @@ pi_lmm <- function(model, newdata = NULL, alpha = NULL, level = NULL,
 #'     which `V_F` is attached to the two main-effect terms
 #'     (`"satterthwaite-vf"`, `"ems-mls"`);
 #'   \item random slope: the REML-based t-interval
-#'     \eqn{\mu(t_0) \pm t_{\nu_G}\sqrt{V_F + V_G}} (`"reml"`).
+#'     \eqn{\mu(t_0) \pm t_{\nu_G}\sqrt{V_F + V_G}} (`"reml"`), with
+#'     \eqn{\nu_G} the Satterthwaite df of \eqn{V_G} alone (SAS DDFM=SATTERTH
+#'     uses the df of \eqn{V_F + V_G}, which is larger).
 #' }
 #' A design without a closed-form variance decomposition (two crossed factors
 #' without their interaction term, or four or more grouping factors) is an
 #' error.
 #' One-sided intervals (`sides = "lower"` / `"upper"`) use the same center, `W`,
 #' and df with `t_{1 - alpha}`.
+#'
+#' @section Validation arms:
+#' [lmm_interval_control()] selects alternative constructions for the
+#' validation study: `ngm_method = "broad-inference"`, `"hts"` or
+#' `"classical"` on random-intercept models and `slope_ngm_method = "gpq"` or
+#' `"fv-anova"` on random-slope models (see there for the formulas). They warn
+#' (`reintervals_warning_unvalidated`), and the arm used is recorded as
+#' `attr(., "diagnostics")$ngm_arm` / `$slope_ngm_arm`. The `"gpq"` arm reports
+#' `df = NA`, the Monte-Carlo SE of each limit (`mc_se_lower`, `mc_se_upper`)
+#' and `gpq_seed`; `"broad-inference"` reports `ngm_df_failed`.
+#'
+#' @references
+#' McLean RA, Sanders WL, Stroup WW (1991). A unified approach to mixed linear
+#' models. *The American Statistician* 45(1):54-64.
+#'
+#' Higgins JPT, Thompson SG, Spiegelhalter DJ (2009). A re-evaluation of
+#' random-effects meta-analysis. *Journal of the Royal Statistical Society A*
+#' 172(1):137-159.
+#'
+#' Hahn GJ, Meeker WQ (1991). *Statistical Intervals: A Guide for
+#' Practitioners*. Wiley.
+#'
+#' Krishnamoorthy K, Mathew T (2009). *Statistical Tolerance Regions: Theory,
+#' Applications, and Computation*. Wiley.
+#'
+#' Oliva-Aviles C, Hauser P (2025). *Technometrics* 67(2):193-202.
+#' \doi{10.1080/00401706.2024.2407324}
 #'
 #' @inheritParams ci_lmm
 #' @inherit ci_lmm return
@@ -573,7 +661,7 @@ new_group_mean_lmm <- function(model, newdata = NULL, alpha = NULL, level = NULL
   applied <- .applied_arms(model, kind, control)
   .warn_unvalidated(applied)
   out <- .interval_lmm(model, newdata = newdata, kind = kind, level = level,
-                       sides = sides, control = control)
+                       sides = sides, control = control, applied = applied)
   ## the df arm of every option: the value applied here, or "not_applicable"
   for (r in names(rules <- .arm_rules(applied))) out[[r]] <- rules[[r]]
   tag <- if (.has_random_slope(model)) NULL else "ems-mls"   # slope row already tagged

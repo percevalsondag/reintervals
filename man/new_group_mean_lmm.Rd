@@ -32,9 +32,10 @@ interval keeps the two-sided interval's center, variance, and df and uses
 models) forces that engine and errors if it is incompatible with the model.}
 
 \item{control}{An \code{\link[=lmm_interval_control]{lmm_interval_control()}} object (the GPQ \code{seed} and \code{M},
-and the df rules \code{ci_df}, \code{slope_ci_df} and \code{pi_df}; an option that does
-not apply to the model or verb is ignored and recorded as
-\code{"not_applicable"} in the diagnostics).}
+the df rules \code{ci_df}, \code{slope_ci_df} and \code{pi_df}, and the new-group-mean
+arms \code{ngm_method} and \code{slope_ngm_method}; an option that does not apply to
+the model or verb is ignored and recorded as \code{"not_applicable"} in the
+diagnostics).}
 }
 \value{
 An \code{lmm_interval} object (a data frame), one row per evaluation point,
@@ -94,7 +95,9 @@ factor's df \code{A - 1} (\code{"top-factor"}, \code{"ems-mls"});
 which \code{V_F} is attached to the two main-effect terms
 (\code{"satterthwaite-vf"}, \code{"ems-mls"});
 \item random slope: the REML-based t-interval
-\eqn{\mu(t_0) \pm t_{\nu_G}\sqrt{V_F + V_G}} (\code{"reml"}).
+\eqn{\mu(t_0) \pm t_{\nu_G}\sqrt{V_F + V_G}} (\code{"reml"}), with
+\eqn{\nu_G} the Satterthwaite df of \eqn{V_G} alone (SAS DDFM=SATTERTH
+uses the df of \eqn{V_F + V_G}, which is larger).
 }
 A design without a closed-form variance decomposition (two crossed factors
 without their interaction term, or four or more grouping factors) is an
@@ -103,10 +106,39 @@ One-sided intervals (\code{sides = "lower"} / \code{"upper"}) use the same cente
 and df with \verb{t_\{1 - alpha\}}.
 }
 
+\section{Validation arms}{
+
+\code{\link[=lmm_interval_control]{lmm_interval_control()}} selects alternative constructions for the
+validation study: \code{ngm_method = "broad-inference"}, \code{"hts"} or
+\code{"classical"} on random-intercept models and \code{slope_ngm_method = "gpq"} or
+\code{"fv-anova"} on random-slope models (see there for the formulas). They warn
+(\code{reintervals_warning_unvalidated}), and the arm used is recorded as
+\code{attr(., "diagnostics")$ngm_arm} / \verb{$slope_ngm_arm}. The \code{"gpq"} arm reports
+\code{df = NA}, the Monte-Carlo SE of each limit (\code{mc_se_lower}, \code{mc_se_upper})
+and \code{gpq_seed}; \code{"broad-inference"} reports \code{ngm_df_failed}.
+}
+
 \examples{
 fm <- lme4::lmer(Reaction ~ Days + (1 + Days | Subject),
                  data = lme4::sleepstudy)
 new_group_mean_lmm(fm, newdata = data.frame(Days = 5))
+}
+\references{
+McLean RA, Sanders WL, Stroup WW (1991). A unified approach to mixed linear
+models. \emph{The American Statistician} 45(1):54-64.
+
+Higgins JPT, Thompson SG, Spiegelhalter DJ (2009). A re-evaluation of
+random-effects meta-analysis. \emph{Journal of the Royal Statistical Society A}
+172(1):137-159.
+
+Hahn GJ, Meeker WQ (1991). \emph{Statistical Intervals: A Guide for
+Practitioners}. Wiley.
+
+Krishnamoorthy K, Mathew T (2009). \emph{Statistical Tolerance Regions: Theory,
+Applications, and Computation}. Wiley.
+
+Oliva-Aviles C, Hauser P (2025). \emph{Technometrics} 67(2):193-202.
+\doi{10.1080/00401706.2024.2407324}
 }
 \seealso{
 \code{\link[=ci_lmm]{ci_lmm()}}, \code{\link[=pi_lmm]{pi_lmm()}}, \code{\link[=ti_lmm]{ti_lmm()}}, \code{\link[=lmm_predict]{lmm_predict()}},

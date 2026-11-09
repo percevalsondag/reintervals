@@ -17,8 +17,9 @@
 #' }
 #' [lmm_predict()] is a `predict()`-style wrapper over the four, selected by
 #' `interval =`. [lmm_interval_control()] supplies the GPQ tuning (seed, `M`)
-#' and the confidence- and prediction-interval df rules (`ci_df`,
-#' `slope_ci_df`, `pi_df`; their non-default values are validation arms).
+#' the confidence- and prediction-interval df rules (`ci_df`, `slope_ci_df`,
+#' `pi_df`) and the new-group-mean constructions (`ngm_method`,
+#' `slope_ngm_method`); their non-default values are validation arms.
 #' Every verb returns the same `lmm_interval` data frame (see [ci_lmm()] for the
 #' column/attribute contract).
 #'

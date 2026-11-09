@@ -24,8 +24,9 @@ new lot at \code{t0}).}
 }
 \code{\link[=lmm_predict]{lmm_predict()}} is a \code{predict()}-style wrapper over the four, selected by
 \verb{interval =}. \code{\link[=lmm_interval_control]{lmm_interval_control()}} supplies the GPQ tuning (seed, \code{M})
-and the confidence- and prediction-interval df rules (\code{ci_df},
-\code{slope_ci_df}, \code{pi_df}; their non-default values are validation arms).
+the confidence- and prediction-interval df rules (\code{ci_df}, \code{slope_ci_df},
+\code{pi_df}) and the new-group-mean constructions (\code{ngm_method},
+\code{slope_ngm_method}); their non-default values are validation arms.
 Every verb returns the same \code{lmm_interval} data frame (see \code{\link[=ci_lmm]{ci_lmm()}} for the
 column/attribute contract).
 }

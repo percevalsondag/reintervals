@@ -227,7 +227,8 @@
 .interval_lmm <- function(model, newdata = NULL,
                           kind = c("CI", "PI", "new_group_mean"),
                           level = 0.95, sides = c("two.sided", "lower", "upper"),
-                          control = lmm_interval_control()) {
+                          control = lmm_interval_control(),
+                          applied = .applied_arms(model, kind, control)) {
   if (!inherits(model, "lmerMod")) {
     .abort("`model` must be a fitted `lmerMod` (an lmer fit).",
            class = "reintervals_error_input")
@@ -253,6 +254,14 @@
     ## Kenward-Roger, the variance) of the container; PI / NGM are unaffected.
     arm <- if (kind == "CI") slope_ci_df else "hessian-satterthwaite"
     kr  <- if (arm == "kenward-roger") .kr_parts(model, option = "slope_ci_df") else NULL
+    ## slope_ngm_method arms other than the default "reml" (one call over all
+    ## t0: the GPQ arm uses common random numbers across t0)
+    slope_ngm <- if (kind == "new_group_mean" && "slope_ngm_method" %in% names(applied))
+      applied[["slope_ngm_method"]] else "reml"
+    if (slope_ngm != "reml") {
+      return(.ngm_rs_arm(model, t0s, time_var, level = level, sides = sides,
+                         arm = slope_ngm, control = control))
+    }
     rows <- lapply(t0s, function(t0) {
       comp <- vfun_extract(model, t0 = t0)
       if (arm != "hessian-satterthwaite") comp <- .slope_ci_arm(comp, model, arm, kr)
@@ -264,6 +273,11 @@
 
   ## random intercept (incl. fixed-slope): EMS engine.
   if (kind == "new_group_mean") {
+    ngm <- if ("ngm_method" %in% names(applied)) applied[["ngm_method"]] else "package"
+    if (ngm != "package") {
+      return(.ngm_ri_arm(model, newdata = newdata, level = level, sides = sides,
+                         arm = ngm))
+    }
     return(.ngm_ri(model, newdata = newdata, level = level, sides = sides))
   }
   out <- intervals_lmm(model, newdata = newdata, level = level, conf = level,
@@ -285,14 +299,23 @@
   } else if (arm == "kenward-roger") {
     fe <- lme4::fixef(model)                 # (Intercept), time: l = (1, t0)
     l <- matrix(ifelse(names(fe) == "(Intercept)", 1, comp$t0), nrow = 1L)
-    ddf <- tryCatch(pbkrtest::Lb_ddf(l, kr$V0, kr$Vadj), error = function(e) NA_real_)
-    if (!isTRUE(is.finite(ddf) && ddf > 0)) {
-      .abort("The Kenward-Roger df could not be computed for this model; use the ",
-             "default slope_ci_df = \"hessian-satterthwaite\".",
+    ## A validation arm never falls back to another df (step 13 would credit the
+    ## fallback's coverage to Kenward-Roger): a failed, non-finite or
+    ## non-positive KR df, or a non-positive KR variance, is an error.
+    ddf <- tryCatch(as.numeric(pbkrtest::Lb_ddf(l, kr$V0, kr$Vadj)),
+                    error = function(e) NA_real_)
+    var_kr <- as.numeric(l %*% kr$Vadj_mat %*% t(l))
+    if (!isTRUE(length(ddf) == 1L && is.finite(ddf) && ddf > 0) ||
+          !isTRUE(is.finite(var_kr) && var_kr > 0)) {
+      .abort(sprintf(paste0("slope_ci_df = \"kenward-roger\": the Kenward-Roger df ",
+                            "or variance could not be computed at t0 = %g for this ",
+                            "model (no fallback is applied to a validation arm); ",
+                            "use the default slope_ci_df = \"hessian-satterthwaite\"."),
+                     comp$t0),
              class = "reintervals_error_numerical")
     }
     comp$dfs[["F"]] <- ddf
-    comp$var_mean   <- as.numeric(l %*% kr$Vadj_mat %*% t(l))
+    comp$var_mean   <- var_kr
   } else {
     .abort("Internal: unknown slope_ci_df arm '", arm, "'.",
            class = "reintervals_error_internal")

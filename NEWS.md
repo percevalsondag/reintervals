@@ -75,6 +75,28 @@
   `pi_df_rule`: the arm applied, or `"not_applicable"`. Consequently
   `ci_df = "kenward-roger"` on a random-slope model is now ignored (it was an
   error); the random-slope Kenward-Roger arm is `slope_ci_df = "kenward-roger"`.
+  A failed Kenward-Roger df or variance under `slope_ci_df = "kenward-roger"`
+  is an error naming the arm (`reintervals_error_numerical`); a validation arm
+  never falls back to another df.
+* **New-group-mean validation arms** in `lmm_interval_control()`, under the
+  same rules (defaults unchanged; non-default values warn with
+  `reintervals_warning_unvalidated`; recorded as `ngm_arm` / `slope_ngm_arm`
+  in the diagnostics; an arm not defined for the model or design is a no-op).
+  - `ngm_method` (random intercept): `"package"` (default, the 0.2.0
+    constructions); `"broad-inference"` (SAS PROC MIXED broad-inference
+    prediction of a new group: `W = V_F` plus every between-group variance
+    component, Satterthwaite df on the variance scale; it reproduces SAS
+    DDFM=SATTERTH on the package's SAS fixtures; NA limits and
+    `ngm_df_failed = TRUE`, no fallback, when the df fails); `"hts"` (Higgins,
+    Thompson & Spiegelhalter 2009, with the REML between-group variance;
+    intercept-only one-way, `I >= 3`); `"classical"` (Hahn & Meeker 1991 on the
+    group means; intercept-only one-way, balanced, where it equals the default).
+  - `slope_ngm_method` (random slope): `"reml"` (default); `"gpq"` (a
+    generalized prediction interval on the GPQ tolerance-interval pivots, with
+    the GPQ seed contract, common random numbers across `t0` and Monte-Carlo
+    SE; the tolerance-interval draws are unchanged); `"fv-anova"`
+    (package-original lot-line interval on the per-lot OLS fitted values,
+    `Ybar_fit +/- t_{K-1} S_L sqrt(1 + 1/K)`, conservative for the new-lot mean).
 * **GPQ reproducibility contract.** Every GPQ interval (`ti_lmm()` random-slope
   route and `ti_gpq_raw()`) records `gpq_seed`, the integer seed actually used,
   and `rng_kind`, the `RNGkind()` triple in effect, in
