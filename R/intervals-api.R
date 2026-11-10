@@ -118,7 +118,15 @@
 #'   default).
 #' @param slope_ngm_method New-group-mean construction on random-slope models:
 #'   `"reml"` (default; `mu(t0) +/- t(nu_G) sqrt(V_F + V_G)`) or a validation
-#'   arm: `"gpq"` (a generalized prediction interval on the tolerance
+#'   arm: `"broad-inference"` (the SAS PROC MIXED broad-inference prediction of
+#'   a new lot, McLean, Sanders & Stroup 1991: the same center and variance
+#'   `W = V_F + V_G` as `"reml"`, with the Satterthwaite df of the whole `W`,
+#'   `2 W^2 / (g' A g)`, `g` the gradient of `V_F + V_G` in the
+#'   variance-covariance parameters and `A` their observed-information
+#'   covariance, as DDFM=SATTERTH; `"reml"` uses the df of `V_G` alone; when the
+#'   df is not finite or below 1 the limits are `NA` and `ngm_df_failed = TRUE`,
+#'   with no fallback; it accepts lots with a single time point, as the
+#'   default does), `"gpq"` (a generalized prediction interval on the tolerance
 #'   interval's pivots, Oliva-Aviles & Hauser 2025 with the generalized
 #'   prediction construction of Krishnamoorthy & Mathew 2009:
 #'   `R_mu(t0) + Z_new sqrt(R_VG(t0))`, limits its quantiles; the GPQ `seed` and
@@ -129,7 +137,10 @@
 #'   for a new lot's fitted value at `t0`, whose variance
 #'   `V_G + sigma^2 h(t0)` exceeds that of the new lot's true mean, so it is
 #'   conservative for the new-group mean, by `sigma^2 h(t0) (1 + 1/K)`, and
-#'   cannot truncate). Both need two distinct time points per lot.
+#'   cannot truncate). `"gpq"` and `"fv-anova"` need two distinct time points
+#'   per lot and use the per-lot OLS fits, not the fitted random-effects
+#'   structure (an independent `||` fit gives the same interval as the
+#'   correlated fit).
 #' @return An `lmm_interval_control` list (passed to a verb's `control`
 #'   argument); a list with elements `seed`, `M`, `ci_df`, `slope_ci_df`,
 #'   `pi_df`, `ngm_method` and `slope_ngm_method`.
@@ -138,7 +149,8 @@
 #' lmm_interval_control(seed = 1, M = 5000)
 #' lmm_interval_control(ci_df = "kenward-roger")
 #' lmm_interval_control(slope_ci_df = "k-minus-1", pi_df = "containment")
-#' lmm_interval_control(ngm_method = "broad-inference", slope_ngm_method = "gpq")
+#' lmm_interval_control(ngm_method = "broad-inference",
+#'                      slope_ngm_method = "broad-inference")
 #' @export
 lmm_interval_control <- function(seed = NULL, M = 20000L,
                                  ci_df = c("satterthwaite", "kenward-roger",
@@ -148,7 +160,8 @@ lmm_interval_control <- function(seed = NULL, M = 20000L,
                                  pi_df = c("francq-satterthwaite", "containment"),
                                  ngm_method = c("package", "broad-inference", "hts",
                                                 "classical"),
-                                 slope_ngm_method = c("reml", "gpq", "fv-anova")) {
+                                 slope_ngm_method = c("reml", "broad-inference", "gpq",
+                                                      "fv-anova")) {
   ci_df       <- match.arg(ci_df)
   slope_ci_df <- match.arg(slope_ci_df)
   pi_df       <- match.arg(pi_df)
@@ -542,7 +555,8 @@ pi_lmm <- function(model, newdata = NULL, alpha = NULL, level = NULL,
 #'   \item random slope: the REML-based t-interval
 #'     \eqn{\mu(t_0) \pm t_{\nu_G}\sqrt{V_F + V_G}} (`"reml"`), with
 #'     \eqn{\nu_G} the Satterthwaite df of \eqn{V_G} alone (SAS DDFM=SATTERTH
-#'     uses the df of \eqn{V_F + V_G}, which is larger).
+#'     uses the df of \eqn{V_F + V_G}, which is larger; that df is the
+#'     validation arm `slope_ngm_method = "broad-inference"`).
 #' }
 #' A design without a closed-form variance decomposition (two crossed factors
 #' without their interaction term, or four or more grouping factors) is an
@@ -553,12 +567,12 @@ pi_lmm <- function(model, newdata = NULL, alpha = NULL, level = NULL,
 #' @section Validation arms:
 #' [lmm_interval_control()] selects alternative constructions for the
 #' validation study: `ngm_method = "broad-inference"`, `"hts"` or
-#' `"classical"` on random-intercept models and `slope_ngm_method = "gpq"` or
-#' `"fv-anova"` on random-slope models (see there for the formulas). They warn
+#' `"classical"` on random-intercept models and `slope_ngm_method =
+#' "broad-inference"`, `"gpq"` or `"fv-anova"` on random-slope models (see there for the formulas). They warn
 #' (`reintervals_warning_unvalidated`), and the arm used is recorded as
 #' `attr(., "diagnostics")$ngm_arm` / `$slope_ngm_arm`. The `"gpq"` arm reports
 #' `df = NA`, the Monte-Carlo SE of each limit (`mc_se_lower`, `mc_se_upper`)
-#' and `gpq_seed`; `"broad-inference"` reports `ngm_df_failed`.
+#' and `gpq_seed`; `"broad-inference"` (both models) reports `ngm_df_failed`.
 #'
 #' @references
 #' McLean RA, Sanders WL, Stroup WW (1991). A unified approach to mixed linear

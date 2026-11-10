@@ -18,6 +18,12 @@
 #   "classical"        Ybar +/- t_{I-1} S_L sqrt(1 + 1/I) on the group means
 #                      (Hahn & Meeker 1991); intercept-only one-way, balanced.
 # Random slope (slope_ngm_method):
+#   "broad-inference"  the default "reml" variance W = V_F + V_G(t0), with the
+#                      Satterthwaite df of the whole W, 2 W^2 / (g' A g), g the
+#                      gradient of V_F + V_G in the variance-covariance
+#                      parameters, A their observed-information covariance
+#                      (SAS DDFM=SATTERTH broad inference of a new lot). Same
+#                      no-fallback rule as the random-intercept arm.
 #   "gpq"              generalized prediction interval on the GPQ pivots
 #                      (.gpq_ngm_core, gpq.R).
 #   "fv-anova"         Ybar_fit +/- t_{K-1} S_L sqrt(1 + 1/K) on the per-lot OLS
@@ -180,8 +186,49 @@
   out
 }
 
+## Satterthwaite df of the whole random-slope prediction variance W = V_F + V_G
+## at t0, for parameters `phi` with covariance `cov` (the observed-information
+## inverse at phi). V_F(phi) is parsed$vF_fun; its gradient is numerical, that
+## of V_G analytic. Returns c(W, df); df is NA when it cannot be formed.
+## Shared by slope_ngm_method = "broad-inference" and its SAS-estimate check.
+.ngm_rs_broad_df <- function(parsed, phi, cov, t0, W = NULL) {
+  x0 <- stats::setNames(c(1, t0), c("(Intercept)", parsed$fe_time))
+  if (is.null(W)) W <- parsed$vF_fun(phi, x0) + .vfun_value_VG(parsed$type, phi, t0)
+  gF <- numDeriv::grad(function(p) parsed$vF_fun(p, x0), phi)
+  gG <- .vfun_grad_VG(parsed$type, t0)[names(phi)]
+  c(W = W, df = .vfun_df_satterthwaite(W, gF + gG, cov))
+}
+
+## slope_ngm_method = "broad-inference": the default "reml" rows (same center
+## and W, so the same SE) with the df replaced by the Satterthwaite df of W.
+## No fallback: a non-finite or < 1 df gives NA limits and ngm_df_failed = TRUE.
+.ngm_rs_broad <- function(model, t0s, level, sides) {
+  parsed <- .vfun_parse(model)
+  rows <- lapply(t0s, function(t0) {
+    comp <- vfun_extract(model, t0 = t0)
+    row <- .vfun_interval(comp, kind = "new_group_mean", level = level, sides = sides)
+    df <- .ngm_rs_broad_df(parsed, comp$phi, comp$cov, t0,
+                           W = comp$var_mean + comp$V_G)[["df"]]
+    failed <- !is.finite(df) || df < 1
+    row$df <- df; row$df_rule <- "satterthwaite-broad"; row$ngm_df_failed <- failed
+    if (failed) {
+      row$lower <- NA_real_; row$upper <- NA_real_
+    } else {
+      tq <- if (sides == "two.sided") stats::qt(1 - (1 - level) / 2, df) else
+        stats::qt(level, df)
+      hw <- tq * row$se
+      row$lower <- if (sides == "upper") -Inf else row$estimate - hw
+      row$upper <- if (sides == "lower")  Inf else row$estimate + hw
+    }
+    row
+  })
+  out <- do.call(rbind, rows); rownames(out) <- NULL
+  out
+}
+
 ## Random-slope NGM by a non-default arm, in the slope-path row schema.
 .ngm_rs_arm <- function(model, t0s, time_var, level, sides, arm, control) {
+  if (arm == "broad-inference") return(.ngm_rs_broad(model, t0s, level, sides))
   yts <- .model_yts(model, time_var)
   singular <- isTRUE(tryCatch(lme4::isSingular(model), error = function(e) NA))
   if (arm == "gpq") {

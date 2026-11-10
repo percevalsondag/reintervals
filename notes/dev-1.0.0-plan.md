@@ -691,7 +691,7 @@ committed at the time of writing.
   `"package"` / `"reml"`, `"satterthwaite-broad"` -> `"broad-inference"`,
   `"classical-pi"` -> `"classical"`, `slope_ngm` -> `slope_ngm_method`):
   `ngm_method = c("package", "broad-inference", "hts", "classical")` (RI NGM,
-  field `ngm_arm`); `slope_ngm_method = c("reml", "gpq", "fv-anova")` (RS NGM,
+  field `ngm_arm`); `slope_ngm_method = c("reml", "gpq", "fv-anova")` (RS NGM, B2b adds `"broad-inference"`;
   field `slope_ngm_arm`). Both in `.df_arms`; the same no-op rule, extended to
   arms not defined for the design (`"hts"`: intercept-only one-way, I >= 3;
   `"classical"`: intercept-only one-way, balanced; `"broad-inference"`: every RI
@@ -751,6 +751,9 @@ committed at the time of writing.
   **no SAS fixture** (no reference values invented).
 - Rank each arm earns: `broad-inference` **published** (passes item 5 on every
   SAS row); `"reml"` (default, RS) **composition** (fails item 5 on df);
+  random-slope `broad-inference` (B2b) **published** (passes item 5 on df at
+  every RS_UN_BAL / RS_VC_BAL row and on SE except RS_VC_BAL months 36 / 48,
+  which is the fit: at the SAS estimates it reproduces SAS on every row);
   `"classical"` **published** (Hahn & Meeker formula, equal to 2b on balanced
   data); `"hts"` **composition** (HTS 2009 with the REML tau^2 in place of
   DerSimonian-Laird); `"gpq"` **composition** (Oliva-Aviles & Hauser pivots +
@@ -760,6 +763,43 @@ committed at the time of writing.
 - Tests: test-ngm-arms.R (defaults pinned before the B2 edits on 8 fits x 3
   sides; formula recomputes; no-ops; GPQ draws / CRN / seed / MC SE / guard /
   15% sanity at M = 20000; lot-line pins; SAS; warnings).
+
+**B2b status: DONE on `dev`** (follow-up on the committed B2). Not committed at
+the time of writing.
+- `slope_ngm_method = "broad-inference"` (random slope; rank **published**;
+  `df_rule = "satterthwaite-broad"`): the SAS PROC MIXED broad-inference
+  prediction of a new lot (McLean, Sanders & Stroup 1991). Same center and
+  variance as the default `"reml"`, `W = V_F + V_G(t0)` (so the SE is
+  identical); df = the Satterthwaite df of the whole W, `2 W^2 / (g' A g)`, `g`
+  = numerical gradient of `V_F` plus the analytic gradient of `V_G` in the
+  variance-covariance parameters, `A = .vfun_vc_cov()$cov` (the B2 (f)
+  diagnosis, made an arm). No fallback: NA limits, `ngm_df_failed = TRUE`. Runs
+  on the default per-t0 `vfun_extract` path, so single-time-point lots are
+  accepted wherever the default accepts them. Code: `.ngm_rs_broad()`,
+  `.ngm_rs_broad_df()` (R/ngm-arms.R). The default `"reml"` is unchanged.
+- SAS comparison (DDFM=SATTERTH `##NGM`; SE 1e-4 relative, df 0.05):
+
+  | Fixture | t0 | package SE rel. / df diff | at SAS estimates: SE rel. / df diff | Result |
+  |---|---|---|---|---|
+  | RS_UN_BAL | 0, 12, 24, 36, 48 | max 5.1e-6 / max 5.3e-5 | max 3.2e-13 / max 4.7e-6 | pass (5) |
+  | RS_VC_BAL | 0, 12, 24 | 1.1e-5, 4.7e-5, 8.8e-5 / max 4.1e-4 | max 9.8e-13 / max 1.1e-4 | pass (3) |
+  | RS_VC_BAL | 36, 48 | 1.08e-4, 1.18e-4 / 3.3e-4, 2.6e-4 | 1.2e-12, 1.4e-12 / 8.9e-5, 7.9e-5 | df pass, SE fail (fit) |
+
+  "At SAS estimates": the package's W and df formulas evaluated at the SAS
+  `##COVP` covariance-parameter estimates (UN(1,1), UN(2,1), UN(2,2),
+  Residual; VC: Intercept, month, Residual) with the same X and Z, `A` = the
+  inverse Hessian of the REML NLL at those estimates. The method reproduces
+  SAS; the remaining SE gap on RS_VC_BAL is lme4's optimum (slope variance
+  0.00135877 vs SAS 0.00135838). Pinned and asserted in test-ngm-arms.R.
+- **Release blocker (1.0.0):** before 1.0.0, any validation arm kept after
+  step 13 must report its own method tag in the `method` column (currently
+  arms keep the default route's tag; the arm is read from `ngm_arm` /
+  `slope_ngm_arm`).
+- Note: the GPQ TI and the GPQ / fv-anova NGM arms use per-lot OLS fits and
+  ignore the fitted random-effects structure: on a `||` (independent) fit they
+  are the same as on the UN fit. Document this in `ti_lmm` /
+  `new_group_mean_lmm` before 1.0.0. (Done now for the `ti_lmm` @details GPQ
+  paragraph and the `lmm_interval_control` `slope_ngm_method` entry.)
 
 Current control: intervals-api.R:34-45 (`seed`, `M`, `ci_df`). Only `ci_df`
 reaches the engines (intervals-api.R:395-397 → slope-intervals.R:192-201 →
@@ -779,7 +819,7 @@ with a scope prefix. All defaults reproduce 0.2.0 exactly until step 13 decides.
 | `slope_ci_df` (RS CI) **[B1 done]** | `"hessian-satterthwaite"`, `"kenward-roger"`, `"k-minus-1"` | `"hessian-satterthwaite"` (`rF`, vfun-extract.R:319, with containment fallback) | `vfun_extract` gains a CI-df argument (vfun-extract.R:266-269, 313-319). `k-minus-1` = `parsed$B - 1` (note: today's containment uses `B - k_re`, vfun-extract.R:49; it is a different rule). KR needs `pbkrtest::vcovAdj` and the adjusted `V_F` (vfun-extract.R:290 uses `parsed$vcov_beta`, vfun-extract.R:197), so A3's helper is reused. Remove the KR rejection slope-intervals.R:204-208. |
 | `pi_df` (RI PI) **[B1 done]** | `"francq-satterthwaite"`, `"containment"` | `"francq-satterthwaite"` (with the containment fallback, vc-extract.R:104-111) | `intervals_lmm(pi_method = )` replaces `df_pi` with `.ddf_containment()`. No Kenward-Roger value, not even reserved: H6 arm (iii) dropped (see B1 status). |
 | `ngm_method` (RI NGM; diagnostics field `ngm_arm`) **[B2 done]** | `"package"` (2a-2e as in `.ngm_ri`), `"broad-inference"` (SAS DDFM=SATTERTH broad-inference new-group prediction), `"hts"` (Higgins-Thompson-Spiegelhalter), `"classical"` | `"package"` | `.ngm_ri` slope-intervals.R:105-186: route before the 2a/2b branch (slope-intervals.R:126) and before the EMS branch (slope-intervals.R:150). `value_rows` (slope-intervals.R:112-124) is shared by all arms. `broad-inference` reuses `.theta_cov` (Hessian, vc-extract.R:73) plus a gradient of the new-group variance (pattern: `.ci_ddf_satterthwaite` vc-extract.R:219-235). Oracle: SAS part1 `##NGM ... SATTERTH`. HTS and classical formulas: see the B2 status. |
-| `slope_ngm_method` (RS NGM; field `slope_ngm_arm`) **[B2 done]** | `"reml"` (`mu ± t(nu_G) sqrt(V_F + V_G)`), `"gpq"` (generalized prediction interval), `"fv-anova"` (lot-line PI on per-lot fitted values) | `"reml"` | slope-intervals.R:218-221 (kind `new_group_mean`). `gpq` reuses A2's `.gpq_pivots` (the theta/tau² GPQs, gpq.R:116-133), drawing a new-lot value `Rtheta + Z' sqrt(Rtau2)`; it **depends on A2**. `fv-anova` reuses the per-batch OLS fitted values `NY` (gpq.R:99-100), so factor `.batch_ols()` out of gpq.R:73-91 first. Oracle: SAS part1 `RS_*` NGM lines (RS_UN_BAL, RS_VC_BAL; RS_UN_UNBAL is singular, boundary case only, per the oracle README) and part2 once it has been run (`ngm_sas_check_part2.results.txt` does not exist yet). |
+| `slope_ngm_method` (RS NGM; field `slope_ngm_arm`) **[B2 done]** | `"reml"` (`mu ± t(nu_G) sqrt(V_F + V_G)`), `"broad-inference"` (B2b: same W, Satterthwaite df of V_F + V_G), `"gpq"` (generalized prediction interval), `"fv-anova"` (lot-line PI on per-lot fitted values) | `"reml"` | slope-intervals.R:218-221 (kind `new_group_mean`). `gpq` reuses A2's `.gpq_pivots` (the theta/tau² GPQs, gpq.R:116-133), drawing a new-lot value `Rtheta + Z' sqrt(Rtau2)`; it **depends on A2**. `fv-anova` reuses the per-batch OLS fitted values `NY` (gpq.R:99-100), so factor `.batch_ols()` out of gpq.R:73-91 first. Oracle: SAS part1 `RS_*` NGM lines (RS_UN_BAL, RS_VC_BAL; RS_UN_UNBAL is singular, boundary case only, per the oracle README) and part2 once it has been run (`ngm_sas_check_part2.results.txt` does not exist yet). |
 
 `lmm_interval_control` validation gets one `match.arg` per option. Applying an
 option to a model or verb it does not concern (e.g. `slope_ngm_method` on a

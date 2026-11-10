@@ -97,7 +97,8 @@ which \code{V_F} is attached to the two main-effect terms
 \item random slope: the REML-based t-interval
 \eqn{\mu(t_0) \pm t_{\nu_G}\sqrt{V_F + V_G}} (\code{"reml"}), with
 \eqn{\nu_G} the Satterthwaite df of \eqn{V_G} alone (SAS DDFM=SATTERTH
-uses the df of \eqn{V_F + V_G}, which is larger).
+uses the df of \eqn{V_F + V_G}, which is larger; that df is the
+validation arm \code{slope_ngm_method = "broad-inference"}).
 }
 A design without a closed-form variance decomposition (two crossed factors
 without their interaction term, or four or more grouping factors) is an
@@ -110,12 +111,11 @@ and df with \verb{t_\{1 - alpha\}}.
 
 \code{\link[=lmm_interval_control]{lmm_interval_control()}} selects alternative constructions for the
 validation study: \code{ngm_method = "broad-inference"}, \code{"hts"} or
-\code{"classical"} on random-intercept models and \code{slope_ngm_method = "gpq"} or
-\code{"fv-anova"} on random-slope models (see there for the formulas). They warn
+\code{"classical"} on random-intercept models and \code{slope_ngm_method = "broad-inference"}, \code{"gpq"} or \code{"fv-anova"} on random-slope models (see there for the formulas). They warn
 (\code{reintervals_warning_unvalidated}), and the arm used is recorded as
 \code{attr(., "diagnostics")$ngm_arm} / \verb{$slope_ngm_arm}. The \code{"gpq"} arm reports
 \code{df = NA}, the Monte-Carlo SE of each limit (\code{mc_se_lower}, \code{mc_se_upper})
-and \code{gpq_seed}; \code{"broad-inference"} reports \code{ngm_df_failed}.
+and \code{gpq_seed}; \code{"broad-inference"} (both models) reports \code{ngm_df_failed}.
 }
 
 \examples{

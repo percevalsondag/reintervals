@@ -91,7 +91,12 @@
     Thompson & Spiegelhalter 2009, with the REML between-group variance;
     intercept-only one-way, `I >= 3`); `"classical"` (Hahn & Meeker 1991 on the
     group means; intercept-only one-way, balanced, where it equals the default).
-  - `slope_ngm_method` (random slope): `"reml"` (default); `"gpq"` (a
+  - `slope_ngm_method` (random slope): `"reml"` (default);
+    `"broad-inference"` (SAS PROC MIXED broad-inference prediction of a new
+    lot: the default's center and variance `V_F + V_G`, with the Satterthwaite
+    df of the whole `V_F + V_G` instead of `V_G` alone; it reproduces SAS
+    DDFM=SATTERTH on the package's SAS fixtures; NA limits and
+    `ngm_df_failed = TRUE`, no fallback, when the df fails); `"gpq"` (a
     generalized prediction interval on the GPQ tolerance-interval pivots, with
     the GPQ seed contract, common random numbers across `t0` and Monte-Carlo
     SE; the tolerance-interval draws are unchanged); `"fv-anova"`

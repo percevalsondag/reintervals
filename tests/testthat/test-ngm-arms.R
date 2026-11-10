@@ -260,6 +260,9 @@ test_that("B2 (c): an arm not defined for the model or design is a no-op, with n
     list("oneway_cov",   list(ngm_method = "hts")),
     list("fixed_slope",  list(ngm_method = "classical")),
     list("oneway_bal",   list(slope_ngm_method = "gpq")),
+    list("oneway_unbal", list(slope_ngm_method = "broad-inference")),
+    list("nested",       list(slope_ngm_method = "broad-inference")),
+    list("fixed_slope",  list(slope_ngm_method = "broad-inference")),
     list("fixed_slope",  list(slope_ngm_method = "fv-anova")),
     list("rs_un",        list(ngm_method = "broad-inference")),
     list("rs_ind",       list(ngm_method = "hts")))
@@ -475,11 +478,113 @@ test_that("B2 (f): reml random-slope NGM vs SAS: pinned, SE within tolerance, df
   }
 })
 
+## ---- B2b: slope_ngm_method = "broad-inference" (random slope) ---------------
+## SAS DDFM=SATTERTH broad inference of a new lot: the default "reml" W =
+## V_F + V_G(t0), with the Satterthwaite df of the whole W (the B2 (f)
+## diagnosis, made an arm). Package vs SAS on RS_UN_BAL, RS_VC_BAL (all t0):
+##   RS_UN_BAL: SE within 5.2e-6 relative, df within 5.4e-5: pass x 5.
+##   RS_VC_BAL: df within 4.2e-4: pass x 5; SE 1.1e-5, 4.7e-5, 8.8e-5 (pass)
+##     and 1.08e-4, 1.18e-4 at months 36 and 48 (fail, > 1e-4).
+## The same W and df formulas evaluated AT the SAS covariance-parameter
+## estimates (##COVP lines; A = inverse Hessian of the REML NLL at those
+## estimates, same X and Z): SE within 1.4e-12 relative, df within 1.1e-4 on all
+## ten rows. The RS_VC_BAL SE gap is therefore lme4's optimum (slope variance
+## 0.00135877 vs SAS 0.00135838), not the method.
+broad_rs_pins <- list(
+  RS_UN_BAL = list(se = c(0.987963915, 0.717594616, 0.950685223, 1.46378065, 2.05706008),
+                   df = c(4.6520663, 5.1607579, 3.741319, 3.324586, 3.2424758)),
+  RS_VC_BAL = list(se = c(0.797510767, 0.915544326, 1.23727375, 1.64739133, 2.09460664),
+                   df = c(4.131501, 4.5031842, 3.5829781, 2.8717316, 2.5643233)))
+sas_covp <- function(tag) {
+  res <- readLines(test_path("fixtures", "sas_ngm", "ngm_sas_check_satterth.results.txt"))
+  m <- grep(paste0("^##COVP +", tag, " +SATTERTH "), res, value = TRUE)
+  est <- as.numeric(sub(".*Estimate= *([-0-9.eE]+).*", "\\1", m))
+  if (tag == "RS_UN_BAL") c(s2_0 = est[1], s01 = est[2], s2_1 = est[3], s2e = est[4])
+  else c(s2_0 = est[1], s2_1 = est[2], s2e = est[3])
+}
+
+test_that("B2b: random-slope broad-inference vs SAS DDFM=SATTERTH: pinned, passing rows, and at the SAS estimates", {
+  sas <- sas_ngm_rows()
+  for (tag in names(broad_rs_pins)) {
+    s <- sas[sas$fit == tag, ]; fm <- sas_ngm_fit(tag)
+    r <- quiet_arm(new_group_mean_lmm(fm, newdata = data.frame(month = s$t0),
+                   control = lmm_interval_control(slope_ngm_method = "broad-inference")))
+    d <- attr(r, "diagnostics")
+    expect_equal(d$se, broad_rs_pins[[tag]]$se, tolerance = 1e-6, info = tag)
+    expect_equal(d$df, broad_rs_pins[[tag]]$df, tolerance = 1e-6, info = tag)
+    expect_true(all(abs(d$df - s$df) < 0.05), info = tag)
+    ok_se <- if (tag == "RS_VC_BAL") 1:3 else 1:5      # SE rows inside 1e-4
+    expect_true(all(abs(d$se[ok_se] / s$se[ok_se] - 1) < 1e-4), info = tag)
+    ## the same formulas at SAS's covariance-parameter estimates reproduce SAS
+    parsed <- .vfun_parse(fm); phiS <- sas_covp(tag)
+    covS <- solve(numDeriv::hessian(parsed$reml_nll, phiS))
+    atS <- vapply(s$t0, function(t0) .ngm_rs_broad_df(parsed, phiS, covS, t0), c(W = 0, df = 0))
+    expect_true(all(abs(sqrt(atS["W", ]) / s$se - 1) < 1e-8), info = tag)
+    expect_true(all(abs(atS["df", ] - s$df) < 1e-3), info = tag)
+  }
+})
+
+test_that("B2b: random-slope broad-inference recomputes from its formula; SE == reml, df >= reml", {
+  for (nm in c("rs_un", "rs_ind")) {
+    fx <- F_b2[[nm]]; fm <- fx$fit
+    for (sd in c("two.sided", "lower", "upper")) {
+      r <- ngm(fx, slope_ngm_method = "broad-inference", sides = sd)
+      b <- quiet(new_group_mean_lmm(fm, newdata = fx$nd, sides = sd))
+      d <- attr(r, "diagnostics"); db <- attr(b, "diagnostics")
+      expect_identical(d$se, db$se, info = paste(nm, sd))
+      expect_identical(r$estimate, b$estimate, info = paste(nm, sd))
+      expect_identical(unique(d$df_rule), "satterthwaite-broad")
+      expect_identical(unique(d$slope_ngm_arm), "broad-inference")
+      expect_false(any(d$ngm_df_failed))
+      ## formula: 2 W^2 / (g' A g), g = grad V_F + grad V_G, A = .vfun_vc_cov
+      parsed <- .vfun_parse(fm); A <- .vfun_vc_cov(parsed)$cov; phi <- parsed$phi
+      nu <- vapply(fx$nd$Days, function(t0) {
+        x0 <- c(1, t0)
+        W <- as.numeric(t(x0) %*% parsed$vcov_beta %*% x0) + .vfun_value_VG(parsed$type, phi, t0)
+        g <- numDeriv::grad(function(p) parsed$vF_fun(p, x0), phi) +
+          .vfun_grad_VG(parsed$type, t0)[names(phi)]
+        2 * W^2 / as.numeric(t(g) %*% A %*% g)
+      }, 0)
+      expect_equal(d$df, nu, tolerance = 1e-10, info = paste(nm, sd))
+      tq <- if (sd == "two.sided") stats::qt(0.975, nu) else stats::qt(0.95, nu)
+      if (sd != "upper") expect_equal(r$lower, r$estimate - tq * d$se, tolerance = 1e-12)
+      if (sd != "lower") expect_equal(r$upper, r$estimate + tq * d$se, tolerance = 1e-12)
+    }
+  }
+  ## df >= reml df on the SAS fixtures (the whole-W df adds the V_F information)
+  for (tag in names(broad_rs_pins))
+    expect_true(all(broad_rs_pins[[tag]]$df >= reml_rs_pins[[tag]]$df), info = tag)
+})
+
+test_that("B2b: random-slope broad-inference: NA limits when the df fails", {
+  fx <- F_b2$rs_un
+  local_mocked_bindings(.vfun_df_satterthwaite = function(value, grad_vec, vc_cov) NA_real_)
+  r <- ngm(fx, slope_ngm_method = "broad-inference")
+  expect_true(all(is.na(r$lower) & is.na(r$upper)))
+  expect_true(all(is.finite(r$estimate)))
+  expect_true(all(attr(r, "diagnostics")$ngm_df_failed))
+})
+
+test_that("B2b: random-slope broad-inference accepts a lot with one time point, as the default does", {
+  ss <- lme4::sleepstudy
+  ss <- ss[!(ss$Subject == "308" & ss$Days > 0), ]           # lot 308: Day 0 only
+  fm <- suppressMessages(lme4::lmer(Reaction ~ Days + (1 + Days | Subject), data = ss))
+  nd <- data.frame(Days = c(0, 5))
+  b <- quiet(new_group_mean_lmm(fm, newdata = nd))
+  r <- quiet_arm(new_group_mean_lmm(fm, newdata = nd,
+                 control = lmm_interval_control(slope_ngm_method = "broad-inference")))
+  expect_identical(attr(r, "diagnostics")$se, attr(b, "diagnostics")$se)
+  expect_true(all(is.finite(c(r$lower, r$upper))))
+  expect_error(quiet_arm(new_group_mean_lmm(fm, newdata = nd,
+                 control = lmm_interval_control(slope_ngm_method = "fv-anova"))),
+               class = "reintervals_error_time_points")
+})
+
 test_that("B2 (g): the unvalidated warning fires once per call for each applied non-default arm only", {
   for (a in c("broad-inference", "hts", "classical"))
     expect_identical(n_unvalidated(new_group_mean_lmm(F_b2$oneway_bal$fit,
       control = lmm_interval_control(ngm_method = a))), 1L, info = a)
-  for (a in c("gpq", "fv-anova"))
+  for (a in c("broad-inference", "gpq", "fv-anova"))
     expect_identical(n_unvalidated(new_group_mean_lmm(F_b2$rs_un$fit, newdata = data.frame(Days = c(0, 5)),
       control = lmm_interval_control(slope_ngm_method = a, seed = 1L, M = 2000))), 1L, info = a)
   ## defaults never warn

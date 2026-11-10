@@ -11,7 +11,7 @@ lmm_interval_control(
   slope_ci_df = c("hessian-satterthwaite", "kenward-roger", "k-minus-1"),
   pi_df = c("francq-satterthwaite", "containment"),
   ngm_method = c("package", "broad-inference", "hts", "classical"),
-  slope_ngm_method = c("reml", "gpq", "fv-anova")
+  slope_ngm_method = c("reml", "broad-inference", "gpq", "fv-anova")
 )
 }
 \arguments{
@@ -103,7 +103,15 @@ default).}
 
 \item{slope_ngm_method}{New-group-mean construction on random-slope models:
 \code{"reml"} (default; \verb{mu(t0) +/- t(nu_G) sqrt(V_F + V_G)}) or a validation
-arm: \code{"gpq"} (a generalized prediction interval on the tolerance
+arm: \code{"broad-inference"} (the SAS PROC MIXED broad-inference prediction of
+a new lot, McLean, Sanders & Stroup 1991: the same center and variance
+\code{W = V_F + V_G} as \code{"reml"}, with the Satterthwaite df of the whole \code{W},
+\verb{2 W^2 / (g' A g)}, \code{g} the gradient of \code{V_F + V_G} in the
+variance-covariance parameters and \code{A} their observed-information
+covariance, as DDFM=SATTERTH; \code{"reml"} uses the df of \code{V_G} alone; when the
+df is not finite or below 1 the limits are \code{NA} and \code{ngm_df_failed = TRUE},
+with no fallback; it accepts lots with a single time point, as the
+default does), \code{"gpq"} (a generalized prediction interval on the tolerance
 interval's pivots, Oliva-Aviles & Hauser 2025 with the generalized
 prediction construction of Krishnamoorthy & Mathew 2009:
 \verb{R_mu(t0) + Z_new sqrt(R_VG(t0))}, limits its quantiles; the GPQ \code{seed} and
@@ -114,7 +122,10 @@ at \code{t0}, \code{K} lots; in a balanced design the exact t prediction interva
 for a new lot's fitted value at \code{t0}, whose variance
 \verb{V_G + sigma^2 h(t0)} exceeds that of the new lot's true mean, so it is
 conservative for the new-group mean, by \verb{sigma^2 h(t0) (1 + 1/K)}, and
-cannot truncate). Both need two distinct time points per lot.}
+cannot truncate). \code{"gpq"} and \code{"fv-anova"} need two distinct time points
+per lot and use the per-lot OLS fits, not the fitted random-effects
+structure (an independent \code{||} fit gives the same interval as the
+correlated fit).}
 }
 \value{
 An \code{lmm_interval_control} list (passed to a verb's \code{control}
@@ -156,7 +167,8 @@ tag; the arm is read from these fields.
 lmm_interval_control(seed = 1, M = 5000)
 lmm_interval_control(ci_df = "kenward-roger")
 lmm_interval_control(slope_ci_df = "k-minus-1", pi_df = "containment")
-lmm_interval_control(ngm_method = "broad-inference", slope_ngm_method = "gpq")
+lmm_interval_control(ngm_method = "broad-inference",
+                     slope_ngm_method = "broad-inference")
 }
 \seealso{
 \code{\link[=ci_lmm]{ci_lmm()}}, \code{\link[=ti_lmm]{ti_lmm()}}, \code{\link[=ti_gpq_raw]{ti_gpq_raw()}}.

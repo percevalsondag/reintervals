@@ -124,7 +124,10 @@ check at \code{M = 2000} the sectioning estimate ran about 8\% below the observe
 run-to-run SD (sections of 100 draws); the gap is expected to shrink at the
 default \code{M = 20000}. The GPQ route requires
 every lot to have at least two distinct time points and otherwise signals
-an error of class \code{reintervals_error_time_points}.
+an error of class \code{reintervals_error_time_points}. The GPQ interval works
+from the per-lot OLS fits of the raw data and ignores the fitted
+random-effects structure: on an independent (\code{||}) random-slope fit it is the
+same as on the correlated (unstructured) fit of the same data.
 }
 \section{Availability}{
 
