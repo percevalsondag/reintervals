@@ -74,6 +74,19 @@ ems_synthesis <- function(counts, design = c("crossed", "nested")) {
     .abort("crossed synthesis needs an A-by-B matrix with every cell filled ",
            "(n_ij >= 1).", class = "reintervals_error_input")
   }
+  ## a crossed design needs >= 2 levels of each factor (else a factor has no
+  ## between-level contrast and model.matrix() fails on its contrasts) and a
+  ## positive residual df (at least one cell with n_ij >= 2)
+  if (nrow(counts) < 2L || ncol(counts) < 2L) {
+    .abort(sprintf(paste0("crossed synthesis needs at least 2 levels of each ",
+                          "factor; got a %d-by-%d count matrix."),
+                   nrow(counts), ncol(counts)), class = "reintervals_error_design")
+  }
+  if (sum(counts) <= length(counts)) {
+    .abort("crossed synthesis needs at least one replicated cell (n_ij >= 2): ",
+           "with one observation per cell the residual df is 0.",
+           class = "reintervals_error_design")
+  }
   rg <- expand.grid(a = seq_len(nrow(counts)), b = seq_len(ncol(counts)))
   rows <- rg[rep(seq_len(nrow(rg)), as.vector(counts)), ]
   af <- factor(rows$a)

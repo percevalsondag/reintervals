@@ -8,6 +8,7 @@ fit_44 <- function() {
   ))
 }
 
+# oracle: francq2019-s44-ti-lmm (fixtures/oracles.csv)
 test_that("Section 4.4 END-TO-END: full pipeline yields kε=0.456 (plumbing, not just math)", {
   skip_if_not_installed("lme4")
   m <- fit_44()
@@ -28,6 +29,7 @@ test_that("Section 4.4 END-TO-END: full pipeline yields kε=0.456 (plumbing, not
   expect_true(all(is.finite(c(ti$lower, ti$upper))))
 })
 
+# oracle: francq2019-s44-ti-lmm (fixtures/oracles.csv)
 test_that("cell-count extraction equals the known Section 4.4 table (catches transposition)", {
   skip_if_not_installed("lme4")
   m <- fit_44()

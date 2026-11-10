@@ -25,8 +25,9 @@ test_that("A2 (CI gate): slope constructors reproduce oracle to 1e-9 (committed 
     CI    = function(comp) .vfun_interval(comp, "CI"),
     PI    = function(comp) .vfun_interval(comp, "PI"),
     CInew = function(comp) .vfun_interval(comp, "new_group_mean")
-    ## the TI rows of slope_oracle.rds belong to the removed closed-form TI
-    ## (ti_vfun, "reml-mls", 1.0.0) and are no longer checked
+    ## the TI rows (closed-form "reml-mls" TI, defunct in 1.0.0) and the fields
+    ## only it read were stripped from slope_oracle.rds at step T (see
+    ## fixtures/slope_oracle.md); this is a regression snapshot, not a registry oracle
   )
 
   for (case in names(comps)) {

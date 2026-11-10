@@ -245,5 +245,7 @@ ti_anova_raw <- function(y, time, lot, t0 = NULL, P = 0.95, alpha = NULL,
   ## boundary: public alpha/level -> internal `conf`; public `P` -> `content`.
   conf  <- 1 - .resolve_alpha(alpha, level)
   native <- .montes_core(y, time, lot, t0, content = P, conf = conf, sides = sides)
-  .unify_intervals(native, model = NULL, kind = "ti", P_value = P)
+  if (!is.null(time)) .warn_extrapolation(t0, time, random = FALSE, var = "t0")
+  .unify_intervals(native, model = NULL, kind = "ti", P_value = P,
+                   verb = "ti_anova_raw()")
 }

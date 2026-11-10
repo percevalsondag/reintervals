@@ -1,5 +1,6 @@
 # fit_52() is provided by helper-fixtures.R.
 
+# oracle: francq2019-s52-vc-extract (fixtures/oracles.csv)
 test_that("vc_extract reproduces Section 5.2 components and df_PI FROM the Hessian", {
   skip_if_not_installed("lme4")
   comp <- vc_extract(fit_52())
@@ -16,6 +17,7 @@ test_that("vc_extract reproduces Section 5.2 components and df_PI FROM the Hessi
   expect_false(attr(comp, "pi_df_fallback"))
 })
 
+# oracle: francq2019-s52-vc-extract (fixtures/oracles.csv)
 test_that("vc_extract end-to-end reproduces Francq et al. (2019) Section 5.2 CI / PI / TI", {
   skip_if_not_installed("lme4")
   comp <- vc_extract(fit_52())

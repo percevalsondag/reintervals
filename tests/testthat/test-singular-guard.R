@@ -33,8 +33,8 @@ test_that("singular fit: all four verbs report singular = TRUE (CI included)", {
   ))
   expect_true(lme4::isSingular(m))
 
-  expect_true(all(ci_lmm(m)$singular))
-  expect_true(all(pi_lmm(m)$singular))
+  expect_true(all(quiet_df_fallback(ci_lmm(m))$singular))
+  expect_true(all(quiet_df_fallback(pi_lmm(m))$singular))
   # new_group_mean: every run mean here is exactly 0.981, so the unweighted
   # between-group mean square is 0 and the anova-mls W is 0 -> a clear error,
   # not a zero-width interval. On an ordinary singular fit (MSA < MSE) it

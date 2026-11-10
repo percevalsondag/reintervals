@@ -189,7 +189,7 @@
            "' column giving the time(s) to evaluate at.", class = "reintervals_error_input")
   }
 
-  singular <- isTRUE(tryCatch(lme4::isSingular(model), error = function(e) NA))
+  singular <- .is_singular(model)   # NA when the check failed
   yts <- .model_yts(model, time_var)
   c_resid <- if (target == "observable") 1 else 0       # future-obs vs batch-mean
   g <- .gpq_core(yts$y, yts$time, yts$batch, t0 = t0s,
@@ -255,9 +255,16 @@
 #'
 #' For slope models the between-group variance `V_G(t0)` is quadratic in the
 #' time covariate, so evaluating at a `t0` outside the observed time range is
-#' an extrapolation of that quadratic and should be done knowingly (the interval
-#' is computed without a guard or warning). The same applies to the other slope
-#' verbs ([ci_lmm()], [pi_lmm()], [new_group_mean_lmm()]).
+#' an extrapolation of that quadratic. The interval is still computed, but every
+#' verb ([ti_lmm()], [ci_lmm()], [pi_lmm()], [new_group_mean_lmm()],
+#' [lmm_predict()]) and the raw engines [ti_gpq_raw()] and [ti_anova_raw()] signal
+#' one warning of class `reintervals_warning_extrapolation` per call when any
+#' requested `t0` lies outside the observed time range, naming those `t0` values
+#' and the range: the interval assumes the linear (fixed-slope) model, or the
+#' quadratic-in-`t0` between-group variance (random slope), holds beyond the
+#' data. For slope models `newdata` must contain the time variable as a numeric,
+#' finite, non-missing column (otherwise an error of class
+#' `reintervals_error_input` naming the variable); other columns are ignored.
 #'
 #' @details
 #' **Monte-Carlo (GPQ) intervals.** Within one call, the GPQ pivot draws are
@@ -374,6 +381,7 @@ ti_lmm <- function(model, newdata = NULL, P = 0.95,
                      method, .model_class(model)),
              "\"auto\" or \"gpq\".", class = "reintervals_error_method")
     }
+    .slope_newdata_guard(model, newdata)
     out <- .ti_slope_path(model, newdata = newdata, content = P, conf = conf,
                           target = target, sides = sides,
                           forced = method == "gpq", seed = seed, M = M)
@@ -401,6 +409,10 @@ ti_lmm <- function(model, newdata = NULL, P = 0.95,
                    method, .model_class(model)),
            "\"auto\", \"ems-mls\", or \"anova-mls\".", class = "reintervals_error_method")
   }
+
+  ## fixed-slope models: newdata time column check + extrapolation warning
+  ## (a no-op without a time covariate)
+  .slope_newdata_guard(model, newdata)
 
   ## Intercept-only one-way -> Hoffman-Kringle (the slope-free branch of the
   ## anova-mls core), unless method = "ems-mls" asks for Francq.

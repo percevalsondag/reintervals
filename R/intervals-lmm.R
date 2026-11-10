@@ -119,6 +119,14 @@ intervals_lmm <- function(model, newdata = NULL, level = 0.95, conf = 0.95,
     ## the singular-fit df guard is a property of the default (Francq) df only
     attr(out, "pi_df_fallback") <- if (pi_method == "containment") NA else
       isTRUE(theta$pi_df_fallback)
+    if (isTRUE(attr(out, "pi_df_fallback")))
+      attr(out, "df_fallback_reason") <- theta$fallback_reason
+  }
+  ## reason for a default Satterthwaite CI df that fell back to containment
+  if ("CI" %in% which && is.null(ci_df) && ci_method == "satterthwaite" &&
+        any(blocks$CI$df_method == "containment")) {
+    attr(out, "df_fallback_reason") <- c(attr(out, "df_fallback_reason"),
+      if (is.null(theta$cov_theta)) theta$fallback_reason else "non-finite df")
   }
   ## set whether or not theta was computed (a CI-only call skips .theta_cov), so
   ## the CI reports lme4::isSingular() like the PI / new-group-mean / TI.

@@ -47,7 +47,7 @@ test_that("non-singular fits use Satterthwaite; singular fits fall back to conta
     cs <- ci_cases()[[nm]]
     fm <- fit(cs[[1]], cs[[2]])
     expect_identical(lme4::isSingular(fm), cs[[3]], info = nm)
-    x <- ci_lmm(fm)
+    x <- quiet_df_fallback(ci_lmm(fm))
     if (cs[[3]]) {
       expect_identical(diag_of(x)$df_method, "containment", info = nm)
       expect_equal(diag_of(x)$df, cs[[4]], info = nm)
@@ -59,6 +59,7 @@ test_that("non-singular fits use Satterthwaite; singular fits fall back to conta
   }
 })
 
+# oracle: pbkrtest-kr-ci-cases (fixtures/oracles.csv)
 test_that("Kenward-Roger is used only on request and reported as such", {
   skip_if_not_installed("lme4")
   skip_if_not_installed("pbkrtest")
@@ -81,11 +82,11 @@ test_that("Kenward-Roger is used only on request and reported as such", {
 test_that("results are identical with pbkrtest masked; KR then errors instead of falling back", {
   skip_if_not_installed("lme4")
   fits <- lapply(ci_cases(), function(cs) fit(cs[[1]], cs[[2]]))
-  before <- lapply(fits, ci_lmm)
+  before <- lapply(fits, function(f) quiet_df_fallback(ci_lmm(f)))
   local_mocked_bindings(requireNamespace = function(package, ...) {
     if (identical(package, "pbkrtest")) FALSE else base::requireNamespace(package, ...)
   })
-  after <- lapply(fits, ci_lmm)
+  after <- lapply(fits, function(f) quiet_df_fallback(ci_lmm(f)))
   for (nm in names(fits)) {
     expect_identical(after[[nm]], before[[nm]], info = nm)
   }

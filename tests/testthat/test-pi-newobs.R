@@ -1,5 +1,6 @@
 # Uses the shared `fixture_52()` (Francq Section 5.2) from helper-fixtures.R.
 
+# oracle: francq2019-s52-pi (fixtures/oracles.csv)
 test_that("pi_newobs reproduces Francq Section 5.2: 95% PI = [0.881, 1.081]", {
   pi <- pi_newobs(fixture_52(), level = 0.95)
   expect_s3_class(pi, "re_interval")

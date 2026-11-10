@@ -3,7 +3,9 @@
 Copied unchanged from `reintervals-simstudy` at commit **d3d8a13** ("SAS NGM oracle
 fixtures: part 1 results, part 2 program and data"), directory
 `oracles/sas_ngm/part1/`. The simstudy repository is the source of record. Do not
-edit these copies; re-copy them if the source changes.
+edit these copies; re-copy them if the source changes. Copied into this repository on 2026-11-07
+(commit `8afffa9`); the hashes below were re-checked against the simstudy
+copies on 2026-11-09 (step T) and are also in `../SHA256SUMS`.
 
 | File | Content |
 |---|---|

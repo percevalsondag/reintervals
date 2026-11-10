@@ -199,7 +199,7 @@ test_that("a non-singular random-slope fit with an unavailable Satterthwaite df:
   x <- ti_lmm(fm, nd, P = 0.99, control = ctl)              # not an oracle
   expect_identical(x$method, c("gpq", "gpq"))
   expect_identical(attr(x, "diagnostics")$route_reason, c("auto", "auto"))
-  ngm <- new_group_mean_lmm(fm, nd)
+  ngm <- quiet_df_fallback(new_group_mean_lmm(fm, nd))
   expect_identical(ngm$method, c("reml", "reml"))
   expect_identical(attr(ngm, "diagnostics")$df_rule, c("containment", "containment"))
 })

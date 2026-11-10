@@ -308,7 +308,11 @@ lmm_interval_control <- function(seed = NULL, M = 20000L,
   cnms <- lme4::getME(model, "cnms")
   has_slope <- any(vapply(cnms, function(t) any(t != "(Intercept)"), logical(1)))
   if (has_slope) return(NA_character_)
-  tryCatch(.design_of(model)$type, error = function(e) NA_character_)
+  ## a failed classification is NA with its reason kept (attr "reason"), which
+  ## .unify_intervals() records as diagnostics$grouping_reason
+  tryCatch(.design_of(model)$type, error = function(e)
+    structure(NA_character_, reason = paste0("classification failed: ",
+                                             conditionMessage(e))))
 }
 
 ## interval-kind tag for the `type` column (always lower-case / snake).
@@ -337,8 +341,23 @@ lmm_interval_control <- function(seed = NULL, M = 20000L,
 ## attr(.,"diagnostics"). `model = NULL` serves the raw engines (design taken
 ## from the native row, grouping NA, the generic "time" eval column kept).
 .unify_intervals <- function(native, model, kind, P_value = NA_real_,
-                             method_tag = NULL) {
+                             method_tag = NULL, verb = NULL) {
   n <- nrow(native)
+  ## NaN guard: an engine must never hand back a NaN estimate or limit (NA is
+  ## allowed: e.g. a validation arm whose df failed reports NA limits; +/-Inf is
+  ## a one-sided limit).
+  for (col in c("estimate", "lower", "upper")) {
+    bad <- which(is.nan(native[[col]]))
+    if (length(bad)) {
+      if (is.null(verb)) verb <- switch(tolower(kind), ci = "ci_lmm()", pi = "pi_lmm()",
+                                        new_group_mean = "new_group_mean_lmm()",
+                                        ti = "ti_lmm()", kind)
+      .abort(verb, ": the engine returned NaN for `", col, "` in row(s) ",
+             paste(bad, collapse = ", "), "; the interval is not available for this ",
+             "fit.", class = "reintervals_error_numerical",
+             data = list(verb = verb, column = col, rows = bad))
+    }
+  }
   ## eval-point columns (predictors); rename the generic "time" to the covariate
   eval_df <- native[, setdiff(names(native), .value_cols), drop = FALSE]
   if ("time" %in% names(native)) {
@@ -354,7 +373,11 @@ lmm_interval_control <- function(seed = NULL, M = 20000L,
                 else if ("design" %in% names(native)) native$design else NA_character_
   pick <- function(col) if (col %in% names(native)) native[[col]] else rep(NA, n)
   singular_out <- if ("singular" %in% names(native)) native$singular
-                  else rep(isTRUE(attr(native, "singular")), n)
+                  else rep(if (is.null(attr(native, "singular"))) FALSE
+                           else as.logical(attr(native, "singular"))[1], n)
+  ## a failed lme4::isSingular() is reported as singular = NA, never FALSE
+  sing_check <- if (!is.null(model)) .singular_status(model)$check else NA_character_
+  if (!is.na(sing_check)) singular_out <- rep(NA, n)
 
   core <- data.frame(
     type = .type_tag(kind), estimate = native$estimate,
@@ -380,8 +403,11 @@ lmm_interval_control <- function(seed = NULL, M = 20000L,
               "gpq_seed", "rng_kind", "mc_sections")) {
     v <- attr(native, a); if (!is.null(v)) diag[[a]] <- v
   }
+  if (!is.na(sing_check)) diag$singular_check <- sing_check
+  grp <- if (!is.null(model)) .grouping_of(model) else NA_character_
+  if (!is.null(attr(grp, "reason"))) diag$grouping_reason <- attr(grp, "reason")
   attr(out, "diagnostics") <- diag
-  attr(out, "grouping") <- if (!is.null(model)) .grouping_of(model) else NA_character_
+  attr(out, "grouping") <- as.vector(grp)
   class(out) <- c("lmm_interval", "data.frame")
   out
 }
@@ -634,6 +660,9 @@ new_group_mean_lmm <- function(model, newdata = NULL, alpha = NULL, level = NULL
              sprintf("use \"auto\" or \"%s\".", ok), class = "reintervals_error_method")
     }
   }
+  ## slope models: newdata must carry a usable time column; warn (once) when a
+  ## requested t0 lies outside the observed time range
+  .slope_newdata_guard(model, newdata)
   ## Anti-conservative-drift warning, scoped to the drifting cells: the EMS CI
   ## and PI on a fixed-slope model with at least one single-observation lot
   ## (.m1_has_single_obs_lot; REML precision-weighting down-weights those lots,
@@ -676,6 +705,7 @@ new_group_mean_lmm <- function(model, newdata = NULL, alpha = NULL, level = NULL
   .warn_unvalidated(applied)
   out <- .interval_lmm(model, newdata = newdata, kind = kind, level = level,
                        sides = sides, control = control, applied = applied)
+  .warn_df_fallback(out, model, kind, applied)
   ## the df arm of every option: the value applied here, or "not_applicable"
   for (r in names(rules <- .arm_rules(applied))) out[[r]] <- rules[[r]]
   tag <- if (.has_random_slope(model)) NULL else "ems-mls"   # slope row already tagged

@@ -2,6 +2,7 @@
 # Montes-Burdick-Leblond (2019) Appendix A oracle EXACTLY -- the published TI and
 # its printed intermediates -- on unbalanced data with single-observation lots.
 
+# oracle: montes2019-appa-ti (fixtures/oracles.csv)
 test_that("ti_anova_raw reproduces the MBL Appendix A oracle to the published decimals", {
   d <- mbl_appendix_a
   out <- ti_anova_raw(d$Y, d$Month, d$Lot, t0 = 12, P = 0.99, level = 0.95)
@@ -68,6 +69,7 @@ test_that("input guards: P/level in (0,1), finite t0, >= 2 lots, within-lot time
   )
 })
 
+# oracle: montes2019-tables12-onesided (fixtures/oracles.csv)
 test_that("one-sided limits are Hoffman's (2010) H: Montes et al. (2019) Tables I-II on mbl_appendix_a", {
   d <- mbl_appendix_a; r2 <- function(x) round(x, 2)
   ## intercept-only (the slope-free / Hoffman-Kringle branch), P = 0.99, conf 0.95
@@ -93,3 +95,25 @@ test_that("one-sided limits are Hoffman's (2010) H: Montes et al. (2019) Tables 
   expect_false(isTRUE(all.equal(c(lo12$lower, up12$upper), c(58.13, 74.53), tolerance = 1e-3)))
   expect_gt(abs(lo$lower - 61.48), 0.5); expect_gt(abs(lo12$lower - 58.13), 0.5)
 })
+
+## ---- PENDING oracle: nist-recipe-ex4 (fixtures/oracles.csv) -------------------
+## Vangel (1995) NIST RECIPE, Example 4 (regression with multiple batches):
+## one-sided tolerance limits for a regression model with between-batch
+## variability. To collect: transcribe the example data and its printed output to
+## fixtures/nist_recipe_ex4/ (data.csv: batch, x, y; limits.csv: x0, P, level,
+## side, limit, with a `#` header giving the reference, who transcribed it and
+## when), confirm that the RECIPE model is the random-intercept + fixed-slope
+## model of ti_anova_raw(), then compare the one-sided limit at each printed x0 at
+## the printed precision (round(limit, <printed dp>) equality). If RECIPE's model
+## or limit construction differs (e.g. not Hoffman's H), record that in the notes
+## and compare only the quantities that share a definition.
+## test_that("nist-recipe-ex4: one-sided limits reproduce NIST RECIPE Example 4", {
+##   fx <- oracle_fixture("nist-recipe-ex4")      # list(data = ..., limits = ...) once collected
+##   for (i in seq_len(nrow(fx$limits))) {
+##     L <- fx$limits[i, ]
+##     r <- ti_anova_raw(fx$data$y, fx$data$x, fx$data$batch, t0 = L$x0,
+##                       P = L$P, level = L$level, sides = L$side)
+##     got <- if (L$side == "lower") r$lower else r$upper
+##     expect_equal(round(got, L$dp), L$limit, info = paste("x0 =", L$x0))
+##   }
+## })

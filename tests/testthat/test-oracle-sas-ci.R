@@ -25,23 +25,8 @@
 
 sas_dir <- function() test_path("fixtures", "sas_ngm")
 
-sas_mean_rows <- function() {
-  res <- readLines(file.path(sas_dir(), "ngm_sas_check_satterth.results.txt"))
-  m <- grep("^##MEAN", res, value = TRUE)
-  num <- function(key, x) {
-    hit <- grepl(paste0(key, "="), x)
-    out <- rep(NA_real_, length(x))
-    out[hit] <- as.numeric(sub(paste0(".*", key, "= *([-0-9.eE]+).*"), "\\1", x[hit]))
-    out
-  }
-  data.frame(
-    fit  = sub("^##MEAN +([A-Z_]+) .*", "\\1", m),
-    ddfm = sub("^##MEAN +[A-Z_]+ +([A-Z]+) .*", "\\1", m),
-    t0   = num("month", m),
-    pred = num("Pred", m), se = num("SE", m), df = num("DF", m),
-    stringsAsFactors = FALSE
-  )
-}
+## the ##MEAN rows (fit, ddfm, t0, pred, se, df, ...); parser in helper-oracles.R
+sas_mean_rows <- function() oracle_fixture("sas-part1-ci-satterth")$mean
 
 ## PROC MIXED model -> lmer equivalent (see the fixture README)
 sas_specs <- list(
@@ -61,7 +46,8 @@ sas_fit <- function(tag) {
 ## ci_lmm at the SAS rows of one fit; SE recovered from the two-sided 95% width
 pkg_ci <- function(fm, t0, ci_df) {
   nd <- if (all(is.na(t0))) NULL else data.frame(month = t0)
-  r  <- ci_lmm(fm, newdata = nd, control = lmm_interval_control(ci_df = ci_df))
+  ## the fixtures are evaluated up to month 48, outside some fits' time range
+  r  <- quiet_extrapolation(ci_lmm(fm, newdata = nd, control = lmm_interval_control(ci_df = ci_df)))
   df <- attr(r, "diagnostics")$df
   list(estimate = r$estimate, df = df,
        se = (r$upper - r$lower) / 2 / stats::qt(0.975, df),
@@ -74,6 +60,7 @@ l_rows <- function(fm, t0) {
   cbind(1, t0)
 }
 
+# oracle: sas-part1-ci-satterth
 test_that("Satterthwaite CI reproduces SAS DDFM=SATTERTH (estimate, SE, df) on every ##MEAN row", {
   skip_if_not_installed("lme4")
   sas <- sas_mean_rows()
@@ -90,6 +77,7 @@ test_that("Satterthwaite CI reproduces SAS DDFM=SATTERTH (estimate, SE, df) on e
   }
 })
 
+# oracle: sas-part1-ci-kr-balanced
 test_that("Kenward-Roger CI SE reproduces SAS DDFM=KR on the balanced fits (SE only)", {
   skip_if_not_installed("lme4")
   skip_if_not_installed("pbkrtest")
@@ -103,6 +91,7 @@ test_that("Kenward-Roger CI SE reproduces SAS DDFM=KR on the balanced fits (SE o
   }
 })
 
+# oracle: pbkrtest-kr-sas-fits
 test_that("Kenward-Roger CI pairs the pbkrtest KR df with the KR-adjusted SE on all five fits", {
   skip_if_not_installed("lme4")
   skip_if_not_installed("pbkrtest")
@@ -122,6 +111,7 @@ test_that("Kenward-Roger CI pairs the pbkrtest KR df with the KR-adjusted SE on 
   }
 })
 
+# oracle: sas-part1-ci-kr-balanced (the documented OW_UNBAL disagreement)
 test_that("documented SAS difference: OW_UNBAL Kenward-Roger (pbkrtest) vs SAS DDFM=KR", {
   skip_if_not_installed("lme4")
   skip_if_not_installed("pbkrtest")

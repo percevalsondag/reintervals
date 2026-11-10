@@ -42,8 +42,24 @@ topology is reported separately in \code{attr(result, "grouping")}
 For the random-slope and fixed-slope models the between-group variance
 \verb{V_G(t0) = z0' Sigma z0} is quadratic in the time covariate. Evaluating an
 interval at a time point outside the observed range therefore extrapolates
-that quadratic; the package computes it without a guard or warning, so
-out-of-range \code{t0} should be requested knowingly.
+that quadratic (and, for the fixed-slope model, the linear trend). The
+interval is still returned, with one warning of class
+\code{reintervals_warning_extrapolation} per call naming the out-of-range \code{t0}
+values and the observed range.
+}
+
+\section{Default-df fallback}{
+
+When a default df rule cannot be computed (typically a singular fit, or a
+covariance of the variance components that is not positive definite) the
+package uses the containment df instead: the random-intercept CI
+(Satterthwaite) and PI (Francq), the crossed new-group-mean Satterthwaite df,
+and the random-slope Hessian-Satterthwaite df of the CI, PI and new-group
+mean. Each such call signals one warning of class
+\code{reintervals_warning_df_fallback} (a child of \code{reintervals_warning_fallback})
+naming the verb, the df used, and the reason
+when known. Validation arms of \code{\link[=lmm_interval_control]{lmm_interval_control()}} never fall back, and a
+user-chosen containment arm does not warn.
 }
 
 \section{new_group_mean (CInew / new-batch-mean)}{

@@ -87,7 +87,11 @@
   attr(out, "balanced") <- isTRUE(desc$balanced)
   attr(out, "singular") <- singular
 
-  if (singular) {
+  if (is.na(singular)) {
+    .warn("The singularity check (lme4::isSingular) failed for this fit; it is ",
+          "treated as singular: the tolerance interval may reflect a ",
+          "near-degenerate model.", class = "reintervals_warning_singular")
+  } else if (singular) {
     .warn("Singular fit: a variance component is at the boundary (zero); the ",
           "tolerance interval reflects a near-degenerate model.",
           class = "reintervals_warning_singular")

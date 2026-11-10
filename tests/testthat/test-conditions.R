@@ -136,7 +136,7 @@ test_that("pi_df_fallback reaches attr(., 'diagnostics')", {
   set.seed(4); g <- factor(rep(1:6, each = 3))
   f1 <- lmer_q(y ~ 1 + (1 | g), data.frame(g = g, y = 10 + rnorm(18)))
   skip_if_not(lme4::isSingular(f1))
-  expect_true(attr(pi_lmm(f1), "diagnostics")$pi_df_fallback)
+  expect_true(attr(quiet_df_fallback(pi_lmm(f1)), "diagnostics")$pi_df_fallback)
   expect_false(attr(pi_lmm(fit_52()), "diagnostics")$pi_df_fallback)
 })
 
@@ -151,7 +151,7 @@ test_that("random-slope CI / PI / NGM report their df source as df_rule", {
   d$y <- 100 - 2 * d$time + rnorm(nrow(d))
   fz <- lmer_q(y ~ time + (time | batch), d)
   skip_if_not(lme4::isSingular(fz))
-  expect_identical(attr(ci_lmm(fz, newdata = data.frame(time = 6)), "diagnostics")$df_rule,
+  expect_identical(attr(quiet_df_fallback(ci_lmm(fz, newdata = data.frame(time = 6))), "diagnostics")$df_rule,
                    "containment")
 })
 

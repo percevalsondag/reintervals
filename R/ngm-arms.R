@@ -230,7 +230,7 @@
 .ngm_rs_arm <- function(model, t0s, time_var, level, sides, arm, control) {
   if (arm == "broad-inference") return(.ngm_rs_broad(model, t0s, level, sides))
   yts <- .model_yts(model, time_var)
-  singular <- isTRUE(tryCatch(lme4::isSingular(model), error = function(e) NA))
+  singular <- .is_singular(model)   # NA when the check failed
   if (arm == "gpq") {
     g <- .gpq_ngm_core(yts$y, yts$time, yts$batch, t0 = t0s, level = level,
                        sides = sides, M = control$M, seed = control$seed)

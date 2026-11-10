@@ -99,9 +99,16 @@ covariates, nested, crossed) -> EMS engine.
 
 For slope models the between-group variance \code{V_G(t0)} is quadratic in the
 time covariate, so evaluating at a \code{t0} outside the observed time range is
-an extrapolation of that quadratic and should be done knowingly (the interval
-is computed without a guard or warning). The same applies to the other slope
-verbs (\code{\link[=ci_lmm]{ci_lmm()}}, \code{\link[=pi_lmm]{pi_lmm()}}, \code{\link[=new_group_mean_lmm]{new_group_mean_lmm()}}).
+an extrapolation of that quadratic. The interval is still computed, but every
+verb (\code{\link[=ti_lmm]{ti_lmm()}}, \code{\link[=ci_lmm]{ci_lmm()}}, \code{\link[=pi_lmm]{pi_lmm()}}, \code{\link[=new_group_mean_lmm]{new_group_mean_lmm()}},
+\code{\link[=lmm_predict]{lmm_predict()}}) and the raw engines \code{\link[=ti_gpq_raw]{ti_gpq_raw()}} and \code{\link[=ti_anova_raw]{ti_anova_raw()}} signal
+one warning of class \code{reintervals_warning_extrapolation} per call when any
+requested \code{t0} lies outside the observed time range, naming those \code{t0} values
+and the range: the interval assumes the linear (fixed-slope) model, or the
+quadratic-in-\code{t0} between-group variance (random slope), holds beyond the
+data. For slope models \code{newdata} must contain the time variable as a numeric,
+finite, non-missing column (otherwise an error of class
+\code{reintervals_error_input} naming the variable); other columns are ignored.
 
 \strong{Monte-Carlo (GPQ) intervals.} Within one call, the GPQ pivot draws are
 generated once and reused for every time point in \code{newdata} and for both

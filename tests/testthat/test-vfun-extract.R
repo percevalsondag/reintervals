@@ -52,6 +52,7 @@ test_that("ORACLE: balanced M1 matches the Montes route exactly (REML == ANOVA)"
   expect_equal(ve$V_T / ve$var_mean, mr$n_E, tolerance = 1e-4)   # Montes n_E = V_T / V_F
 })
 
+# oracle: montes2019-appa-montes-ref (fixtures/oracles.csv)
 test_that("ORACLE: montes_ref reproduces MBL Appendix A published TI", {
   d <- mbl_appendix_a
   mr <- montes_ref(d$Y, d$Month, d$Lot, t0 = 12)

@@ -106,7 +106,7 @@ test_that("crossed NGM df: an undefined Satterthwaite term falls back to contain
   local_mocked_bindings(.design_components_fit = function(...) {
     dc <- real(...); dc$ems$k[1:2] <- 0; dc
   })
-  r <- new_group_mean_lmm(fm)
+  r <- quiet_df_fallback(new_group_mean_lmm(fm))
   expect_identical(attr(r, "diagnostics")$df_rule, "containment")
   expect_equal(attr(r, "diagnostics")$df, .ddf_containment(fm))      # min(A, B) - 1 = 2
   expect_true(all(is.finite(c(r$lower, r$upper))))

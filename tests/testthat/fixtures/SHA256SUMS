@@ -1,0 +1,10 @@
+# SHA-256 of every fixture data file (shasum -a 256 format; paths relative to tests/testthat/fixtures).
+# Checked by test-fixture-sha256.R. Regenerate only when a fixture is deliberately replaced, and say why in its README.
+99280663f260a140cf68d9635a41be9edfa8b2a061ce5edddd22418ebe0fa2a0  sas_ngm/nested_bal.csv
+2cc9ba2d61ce6d0404c391a53e884f8bc399237f3fa65dd1152b6ec444ab6fb1  sas_ngm/oneway_bal.csv
+ac0c3e15760b3c283756ce66e431837dc5d4e47719195f4f3ba432a13135d0c2  sas_ngm/oneway_unbal.csv
+e72570899e1d6ad7f1275a3111d8abe3920d022f26ba2a44270787c48be491a4  sas_ngm/stab_bal.csv
+1d014a0ba182a647bc1a32a26e550d1b24a1e1ee27f55dfa6948d287acee2b16  sas_ngm/stab_unbal.csv
+ae8e856657bd2859e25d985524292487a7038caef4b4e6029ce71e773563d1f6  sas_ngm/ngm_sas_check_satterth.results.txt
+f8c30a75eead51bd3e470691c4d64693de508cc2e5fd1ae02183946e09b4a7aa  sas_ngm_part2/stab_unbal_v2_a.csv
+4a741794f91328cbebbb0df3088c1fad3cd5b2c843abab01b6aa836b4344d7b5  slope_oracle.rds

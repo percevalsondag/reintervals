@@ -208,8 +208,10 @@ validate_vfun_components <- function(type, phi, cov, mean, var_mean,
   }
 
   ## --- singular / boundary flags ------------------------------------------
-  if (!is.logical(singular) || length(singular) != 1L || is.na(singular)) {
-    .abort("`singular` must be a single TRUE/FALSE.", class = "reintervals_error_input")
+  ## NA = lme4::isSingular() failed (see .singular_status): unknown, not FALSE
+  if (!is.logical(singular) || length(singular) != 1L) {
+    .abort("`singular` must be a single TRUE/FALSE (or NA when unknown).",
+           class = "reintervals_error_input")
   }
   if (!is.logical(boundary) || length(boundary) != 1L || is.na(boundary)) {
     .abort("`boundary` must be a single TRUE/FALSE.", class = "reintervals_error_input")
@@ -227,6 +229,7 @@ validate_vfun_components <- function(type, phi, cov, mean, var_mean,
 #' @export
 print.vfun_components <- function(x, ...) {
   flags <- c(if (isTRUE(x$singular)) "singular",
+             if (is.na(x$singular)) "singularity unknown",
              if (isTRUE(x$boundary)) "near-boundary")
   cat("<vfun_components>", paste0("[", x$type, "]"),
       if (length(flags)) paste0("(", paste(flags, collapse = ", "), ")"), "\n")

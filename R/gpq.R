@@ -475,10 +475,11 @@ ti_gpq_raw <- function(y, time, batch, t0, P = 0.95, alpha = NULL, level = NULL,
   conf  <- 1 - .resolve_alpha(alpha, level)
   g <- .gpq_core(y, time, batch, t0, content = P, conf = conf, sides = sides,
                  c_resid = c_resid, M = control$M, seed = control$seed)
+  .warn_extrapolation(t0, time, random = TRUE, var = "t0")
   ## the same row schema (and so the same diagnostics) as the ti_lmm() GPQ route;
   ## route_reason = "method": the GPQ engine was called explicitly
   out <- .gpq_rows(g, design = "random_slope_correlated", sides = sides,
                    singular = FALSE)
   out$route_reason <- "method"
-  .unify_intervals(out, model = NULL, kind = "ti", P_value = P)
+  .unify_intervals(out, model = NULL, kind = "ti", P_value = P, verb = "ti_gpq_raw()")
 }

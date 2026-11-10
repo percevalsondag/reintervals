@@ -133,11 +133,15 @@ F_b2 <- ngm_arm_fits()
 
 ## muffle the documented limitation warnings only
 quiet <- function(expr) withCallingHandlers(expr,
-  reintervals_warning_limitation = function(w) invokeRestart("muffleWarning"))
+  reintervals_warning_limitation = function(w) invokeRestart("muffleWarning"),
+  reintervals_warning_extrapolation = function(w) invokeRestart("muffleWarning"),
+  reintervals_warning_df_fallback   = function(w) invokeRestart("muffleWarning"))
 ## ... and the unvalidated-arm warning (tested separately in (g))
 quiet_arm <- function(expr) withCallingHandlers(expr,
   reintervals_warning_unvalidated = function(w) invokeRestart("muffleWarning"),
-  reintervals_warning_limitation  = function(w) invokeRestart("muffleWarning"))
+  reintervals_warning_limitation  = function(w) invokeRestart("muffleWarning"),
+  reintervals_warning_extrapolation = function(w) invokeRestart("muffleWarning"),
+  reintervals_warning_df_fallback   = function(w) invokeRestart("muffleWarning"))
 ngm <- function(fx, ..., sides = "two.sided")
   quiet_arm(new_group_mean_lmm(fx$fit, newdata = fx$nd, sides = sides,
                                control = lmm_interval_control(...)))
@@ -145,7 +149,9 @@ n_unvalidated <- function(expr) {
   n <- 0L
   withCallingHandlers(expr,
     reintervals_warning_unvalidated = function(w) { n <<- n + 1L; invokeRestart("muffleWarning") },
-    reintervals_warning_limitation  = function(w) invokeRestart("muffleWarning"))
+    reintervals_warning_limitation  = function(w) invokeRestart("muffleWarning"),
+    reintervals_warning_extrapolation = function(w) invokeRestart("muffleWarning"),
+    reintervals_warning_df_fallback   = function(w) invokeRestart("muffleWarning"))
   n
 }
 ## an interval without its arm fields (which record the option, not the numbers)
@@ -369,6 +375,7 @@ lotline_data <- function() {
        v2a = list(y = v2$y, t = v2$month, g = v2$lot, d = v2, f = y ~ month + (1 + month | lot), tv = "month"))
 }
 
+# oracle: simstudy-lotline-f4ce68e (fixtures/oracles.csv)
 test_that("B2 (e): fv-anova reproduces the pilot lotline() pins and recomputes from its formula", {
   D <- lotline_data()
   for (p in lotline_pins) {
@@ -441,6 +448,7 @@ reml_rs_pins <- list(
   RS_VC_BAL = list(se = c(0.79751077, 0.91554433, 1.23727375, 1.64739133, 2.09460664),
                    df = c(3.7359849, 4.3707037, 3.3617061, 2.5888613, 2.2480654)))
 
+# oracle: sas-part1-ngm-ri-broad (fixtures/oracles.csv)
 test_that("B2 (f): broad-inference reproduces SAS DDFM=SATTERTH on every random-intercept ##NGM row", {
   sas <- sas_ngm_rows()
   for (tag in c("OW_BAL", "OW_UNBAL", "NEST_BAL", "FS_BAL", "FS_UNBAL")) {
@@ -454,6 +462,7 @@ test_that("B2 (f): broad-inference reproduces SAS DDFM=SATTERTH on every random-
   }
 })
 
+# oracle: sas-part1-ngm-rs-reml (fixtures/oracles.csv)
 test_that("B2 (f): reml random-slope NGM vs SAS: pinned, SE within tolerance, df gap diagnosed", {
   sas <- sas_ngm_rows()
   for (tag in names(reml_rs_pins)) {
@@ -503,6 +512,7 @@ sas_covp <- function(tag) {
   else c(s2_0 = est[1], s2_1 = est[2], s2e = est[3])
 }
 
+# oracle: sas-part1-ngm-rs-broad (fixtures/oracles.csv)
 test_that("B2b: random-slope broad-inference vs SAS DDFM=SATTERTH: pinned, passing rows, and at the SAS estimates", {
   sas <- sas_ngm_rows()
   for (tag in names(broad_rs_pins)) {
@@ -596,3 +606,73 @@ test_that("B2 (g): the unvalidated warning fires once per call for each applied 
   expect_identical(w$option, "ngm_method"); expect_identical(w$value, "hts")
   expect_match(conditionMessage(w), "ngm_method = \"package\"", fixed = TRUE)
 })
+
+## ---- PENDING oracle: chow-shao1991-t23 (fixtures/oracles.csv) -----------------
+## Chow & Shao (1991), Biometrics 47(3):1071-1079: the stability data and the
+## exact t_23 limits. To collect: transcribe the data and the printed limits to
+## fixtures/chow_shao1991/ (data.csv: batch, time, y; limits.csv: t0, side,
+## estimate, limit, dp; `#` header: reference, table, transcriber, date), then
+## compare slope_ngm_method = "fv-anova" (mean of the per-lot OLS lines; df
+## K - 1, which is 23 only if the data have 24 batches: check, and record any
+## other df in the notes) at each printed t0: estimate and limit at the printed
+## precision, and the df exactly (23).
+## test_that("chow-shao1991-t23: fv-anova reproduces the Chow & Shao (1991) limits", {
+##   fx <- oracle_fixture("chow-shao1991-t23")
+##   fm <- lme4::lmer(y ~ time + (1 + time | batch), data = fx$data)
+##   for (sd in unique(fx$limits$side)) {
+##     L <- fx$limits[fx$limits$side == sd, ]
+##     r <- quiet_arm(new_group_mean_lmm(fm, newdata = data.frame(time = L$t0), sides = sd,
+##                    control = lmm_interval_control(slope_ngm_method = "fv-anova")))
+##     expect_identical(unique(attr(r, "diagnostics")$df), 23)
+##     expect_equal(round(r$estimate, L$dp), L$estimate)
+##     expect_equal(round(if (sd == "lower") r$lower else r$upper, L$dp), L$limit)
+##   }
+## })
+
+## ---- PENDING oracle: sas-part2-ngm-rs-unbal (fixtures/oracles.csv) ------------
+## SAS part 2 (simstudy oracles/sas_ngm/part2, ngm_sas_check_part2.sas; data
+## stab_unbal_v2_a/b/c.csv): unbalanced random-slope fits, once the results file
+## exists. To collect: copy ngm_sas_check_part2.results.txt and the three CSVs to
+## fixtures/sas_ngm_part2/ unchanged (add their hashes to the README and
+## SHA256SUMS), then compare on every ##NGM SATTERTH row, as part 1 (B2 (f) /
+## B2b above): slope_ngm_method = "broad-inference" SE 1e-4 relative and df 0.05
+## absolute; the default "reml" SE 1e-4 relative, its df pinned with the gap
+## diagnosed as in part 1; ##COVP vs lme4::VarCorr as a fit-agreement gate
+## (1e-4 relative). Rows on a singular SAS fit (SE ".") are reported, not compared.
+## test_that("sas-part2-ngm-rs-unbal: random-slope NGM vs SAS part 2", {
+##   sas <- oracle_fixture("sas-part2-ngm-rs-unbal")
+##   s <- sas$ngm[sas$ngm$ddfm == "SATTERTH" & !is.na(sas$ngm$se), ]
+##   for (tag in unique(s$fit)) {
+##     st <- s[s$fit == tag, ]
+##     fm <- sas_part2_fit(tag)                   # tag -> csv + y ~ month + (1 + month | lot)
+##     r <- quiet_arm(new_group_mean_lmm(fm, newdata = data.frame(month = st$t0),
+##                    control = lmm_interval_control(slope_ngm_method = "broad-inference")))
+##     d <- attr(r, "diagnostics")
+##     expect_true(all(abs(d$se / st$se - 1) < 1e-4), info = tag)
+##     expect_true(all(abs(d$df - st$df) < 0.05), info = tag)
+##   }
+## })
+
+## ---- PENDING oracle: sas-part3-ngm-designs (fixtures/oracles.csv) -------------
+## SAS part 3 (simstudy bcf4661, oracles/sas_ngm/part3, ngm_sas_check_part3.sas;
+## cr_bal, cr_unbal, nest_unbal, ow_covw, ow_covb, nest_covw, cr_covw), once the
+## results file exists. To collect: copy the results file and the CSVs to
+## fixtures/sas_ngm_part3/ unchanged (README with hashes; SHA256SUMS), then
+## compare ngm_method = "broad-inference" on every ##NGM SATTERTH row: SE 1e-4
+## relative, df 0.05 absolute (as part 1, B2 (f)); ##MEAN SATTERTH vs ci_lmm()
+## with the tolerances of test-oracle-sas-ci.R; ##COVP vs lme4::VarCorr (1e-4
+## relative) as the fit-agreement gate. The lmer formula of each tag is taken from
+## the PROC MIXED statements in the program and listed in the fixture README.
+## test_that("sas-part3-ngm-designs: broad-inference NGM vs SAS part 3", {
+##   sas <- oracle_fixture("sas-part3-ngm-designs")
+##   s <- sas$ngm[sas$ngm$ddfm == "SATTERTH", ]
+##   for (tag in unique(s$fit)) {
+##     st <- s[s$fit == tag, ]
+##     fm <- sas_part3_fit(tag)                   # tag -> csv + lmer formula (fixture README)
+##     r <- quiet_arm(new_group_mean_lmm(fm, newdata = sas_part3_newdata(tag, st),
+##                    control = lmm_interval_control(ngm_method = "broad-inference")))
+##     d <- attr(r, "diagnostics")
+##     expect_true(all(abs(d$se / st$se - 1) < 1e-4), info = tag)
+##     expect_true(all(abs(d$df - st$df) < 0.05), info = tag)
+##   }
+## })

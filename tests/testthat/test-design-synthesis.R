@@ -1,6 +1,7 @@
 # Helpers build_44_counts(), n0_approx_k/_ems(), nested_ems_closed(),
 # ti_width_from_ems() are in helper-crosschecks.R.
 
+# oracle: francq2019-s44-synthesis (fixtures/oracles.csv)
 test_that("ACCEPTANCE GATE: synthesis reproduces Francq Section 4.4 (unbalanced crossed)", {
   syn <- ems_synthesis(build_44_counts(), "crossed")
   # EMS_A coefficients (paper: sigma2_e=1, sigma2_alphabeta=1.568, sigma2_alpha=7.84)

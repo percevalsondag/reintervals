@@ -1,5 +1,6 @@
 # Uses the shared `fixture_52()` (Francq Section 5.2) from helper-fixtures.R.
 
+# oracle: francq2019-s52-ci (fixtures/oracles.csv)
 test_that("ci_mean reproduces Francq Section 5.2: 95% CI = [0.946, 1.016]", {
   ci <- ci_mean(fixture_52(), conf = 0.95)
   expect_s3_class(ci, "re_interval")

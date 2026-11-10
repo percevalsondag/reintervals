@@ -22,6 +22,7 @@ test_that("ti_francq implements the documented Eq. 26 (matches re-derivation)", 
   expect_equal(ti$upper, unname(hand[["upper"]]))
 })
 
+# oracle: francq2019-s52-ti (fixtures/oracles.csv)
 test_that("ti_francq reproduces Francq et al. (2019) Section 5.2: 95/90 TI ~ [0.845, 1.117]", {
   # "95% TI_90" denotes 95% content (beta) at 90% confidence
   # (gamma) -- the 95/90 pharma convention (maintainer-confirmed). With the
@@ -115,3 +116,21 @@ test_that("ti_francq one-sided (provisional) is Hoffman's (2010) limit on the Fr
   expect_error(ti_francq(comp, conf = 0), "between 0 and 1")
   expect_error(ti_francq(list(mean = 1)), "re_components")
 })
+
+## ---- PENDING oracle: francq2019-table2-corrected (fixtures/oracles.csv) -------
+## Francq, Lin & Hoyer (2019) Table 2 as corrected in the 2020 correction
+## (doi:10.1002/sim.8548). Only the corrected values are an oracle. To collect:
+## transcribe the corrected Table 2 to fixtures/francq2019_table2_corrected/
+## table2.csv (one row per printed cell: case, interval, quantity, value, dp; `#`
+## header with both DOIs, transcriber, date, checker), map each case to the
+## re_components / fit that realises it, and compare every printed quantity
+## (CI / PI / TI limits, df) at its printed precision (round(x, dp) equality; a
+## documented looser tolerance only where the inputs are themselves rounded, as
+## for Section 5.2 above, 1e-3).
+## test_that("francq2019-table2-corrected: constructors reproduce the corrected Table 2", {
+##   tab <- oracle_fixture("francq2019-table2-corrected")
+##   for (i in seq_len(nrow(tab))) {
+##     got <- table2_value(tab[i, ])       # helper to write with the transcription
+##     expect_equal(round(got, tab$dp[i]), tab$value[i], info = paste(tab$case[i], tab$quantity[i]))
+##   }
+## })

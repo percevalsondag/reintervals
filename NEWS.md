@@ -48,6 +48,9 @@
   `reintervals_error_input`), as is a non-integer `M`. The Monte-Carlo
   standard error uses 20 MC sections, and below 2000 a section has fewer than
   100 draws.
+* **A character time column in `newdata` is an error** for the fixed-slope
+  `new_group_mean_lmm()` (class `reintervals_error_input`). It was coerced to
+  numeric before (`"5"` taken as 5).
 
 ## New features
 
@@ -165,6 +168,13 @@
 * The GPQ engine drops Monte-Carlo draws without a valid between-batch variance
   solution (reported as `n_na_draws` in the diagnostics) and errors if they
   exceed 1% of the draws.
+* Fixed-slope `ci_lmm()`, `pi_lmm()` and `ti_lmm()` with an `NA` time value in
+  `newdata` dropped that row and misaligned the remaining rows (the interval
+  of one time point was reported against another). They now signal a
+  `reintervals_error_input` naming the time variable.
+* A factor time column in `newdata` was used as its level codes (so
+  `factor(5)` was evaluated at time 1) by the random-slope `ti_lmm()` and the
+  fixed-slope `new_group_mean_lmm()`. It is now a `reintervals_error_input`.
 
 ## Other changes
 
@@ -185,6 +195,27 @@
 * New diagnostics: `pi_df_fallback` (prediction interval), `df_rule` for the
   random-slope confidence, prediction and new-group-mean intervals, `mls_bound`
   (tolerance intervals), `n_na_draws` (GPQ).
+* New warning class `reintervals_warning_extrapolation`: on fixed-slope and
+  random-slope models every verb (`ci_lmm()`, `pi_lmm()`, `ti_lmm()`,
+  `new_group_mean_lmm()`, `lmm_predict()`), and the raw engines
+  `ti_gpq_raw()` and `ti_anova_raw()`, warn once per call when a requested
+  `t0` lies outside the observed time range. The message names the
+  out-of-range `t0` values and the range. The interval is unchanged.
+* New warning class `reintervals_warning_df_fallback` (a child of
+  `reintervals_warning_fallback`): emitted once per call
+  when a default df rule falls back to the containment df (random-intercept CI
+  Satterthwaite, random-intercept PI Francq df, crossed new-group-mean
+  Satterthwaite, random-slope Hessian-Satterthwaite df of the CI, PI or
+  new-group mean). It names the verb, the df used and the reason when known
+  (e.g. singular fit). Validation arms and user-chosen containment arms do not
+  emit it. The interval is unchanged.
+* For fixed-slope and random-slope models, `newdata` must contain the time
+  variable as a numeric, finite, non-missing column; otherwise every verb
+  signals a `reintervals_error_input` naming the variable. Before, a missing
+  column on the random-slope CI / PI / new-group mean failed with an unclassed
+  base error, and a non-numeric, `NA` or `Inf` time value otherwise failed
+  with an unclassed base error or a message that did not name the variable. (The silently wrong cases are under "Bug fixes"; the character
+  column on the fixed-slope new-group mean under "Breaking changes".)
 
 # reintervals 0.2.0
 

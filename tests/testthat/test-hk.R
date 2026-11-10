@@ -35,6 +35,7 @@ hk_formula <- function(y, run, beta, gamma) {
   c(lower = centre - hw, upper = centre + hw)
 }
 
+# oracle: hk2007-table3 (fixtures/oracles.csv)
 test_that("hk_assay matches the published summary statistics (HK 2007 Table III)", {
   ybar_i <- tapply(hk_assay$conc, hk_assay$run, mean)
   expect_equal(round(mean(hk_assay$conc), 4), 0.9798)
@@ -42,6 +43,7 @@ test_that("hk_assay matches the published summary statistics (HK 2007 Table III)
   expect_equal(round(sum((hk_assay$conc - ybar_i[hk_assay$run])^2) / 12, 6), 0.001167)
 })
 
+# oracle: hk2005-o1 (fixtures/oracles.csv)
 test_that("O1: HK 2005, beta 0.95, gamma 0.90 -> (0.846, 1.114); default route is anova-mls", {
   skip_if_not_installed("lme4")
   x <- ti_lmm(fit_hk(hk_assay), P = 0.95, level = 0.90)
@@ -51,6 +53,7 @@ test_that("O1: HK 2005, beta 0.95, gamma 0.90 -> (0.846, 1.114); default route i
   expect_equal(c(r$lower, r$upper), c(x$lower, x$upper), tolerance = 1e-14)
 })
 
+# oracle: hk2007-ex1-o2 (fixtures/oracles.csv)
 test_that("O2: HK 2007 Ex. 1, beta 0.667 -> (0.914, 1.046) with printed intermediates", {
   r <- ti_anova_raw(hk_assay$conc, time = NULL, lot = hk_assay$run, P = 0.667, level = 0.90)
   expect_equal(round(c(r$lower, r$upper), 3), c(0.914, 1.046))
@@ -64,6 +67,7 @@ test_that("O2: HK 2007 Ex. 1, beta 0.667 -> (0.914, 1.046) with printed intermed
   expect_equal(round(6 * (0.003251 + 2 * 0.001167) / 0.003251, 3), 10.308)
 })
 
+# oracle: hk2007-ex2-o3 (fixtures/oracles.csv)
 test_that("O3: HK 2007 Ex. 2, beta 0.667 -> (0.0799, 0.1265)", {
   d <- hk_ex2()
   r <- ti_anova_raw(d$conc, time = NULL, lot = d$run, P = 0.667, level = 0.90)
@@ -71,6 +75,7 @@ test_that("O3: HK 2007 Ex. 2, beta 0.667 -> (0.0799, 0.1265)", {
   expect_equal(round(attr(r, "diagnostics")$n_E, 3), 6.907)
 })
 
+# oracle: hk2007-unbal-o4 (fixtures/oracles.csv)
 test_that("O4: HK 2007 unbalanced (run 1 replicates 1-2 removed) -> (0.904, 1.048)", {
   d <- hk_assay[!(hk_assay$run == 1 & hk_assay$replicate %in% 1:2), ]
   r <- ti_anova_raw(d$conc, time = NULL, lot = d$run, P = 0.667, level = 0.90)
@@ -80,6 +85,7 @@ test_that("O4: HK 2007 unbalanced (run 1 replicates 1-2 removed) -> (0.904, 1.04
   expect_equal(round(attr(r, "diagnostics")$C2, 4), 1.0554)        # H2
 })
 
+# oracle: francq2019-s52-hk-printed (fixtures/oracles.csv)
 test_that("O5: Francq 5.2 (printed data), ems-mls -> (0.845, 1.117)", {
   skip_if_not_installed("lme4")
   x <- ti_lmm(fit_hk(hk_printed()), P = 0.95, level = 0.90, method = "ems-mls")
@@ -87,6 +93,7 @@ test_that("O5: Francq 5.2 (printed data), ems-mls -> (0.845, 1.117)", {
   expect_equal(round(c(x$lower, x$upper), 3), c(0.845, 1.117))
 })
 
+# oracle: francq2019-s53-hk-printed (fixtures/oracles.csv)
 test_that("O6: Francq 5.3 (printed data minus replicate 1 of runs 1, 2, 6) -> (0.838, 1.127), df_PI 11.31", {
   skip_if_not_installed("lme4")
   # Closes the long-deferred Section 5.3 test: with the genuine (misprinted) raw

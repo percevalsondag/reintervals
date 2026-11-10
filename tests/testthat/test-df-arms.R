@@ -28,11 +28,15 @@ df_arm_fits <- function() {
 
 ## muffle only the documented limitation warnings (few-groups PI, once per session)
 quiet <- function(expr) withCallingHandlers(expr,
-  reintervals_warning_limitation = function(w) invokeRestart("muffleWarning"))
+  reintervals_warning_limitation = function(w) invokeRestart("muffleWarning"),
+  reintervals_warning_extrapolation = function(w) invokeRestart("muffleWarning"),
+  reintervals_warning_df_fallback   = function(w) invokeRestart("muffleWarning"))
 ## muffle the B1 unvalidated-arm warning (tested separately in (d))
 quiet_arm <- function(expr) withCallingHandlers(expr,
   reintervals_warning_unvalidated = function(w) invokeRestart("muffleWarning"),
-  reintervals_warning_limitation  = function(w) invokeRestart("muffleWarning"))
+  reintervals_warning_limitation  = function(w) invokeRestart("muffleWarning"),
+  reintervals_warning_extrapolation = function(w) invokeRestart("muffleWarning"),
+  reintervals_warning_df_fallback   = function(w) invokeRestart("muffleWarning"))
 
 default_pins <- list(
   oneway_ci = list(lower = c(7.1170263152),

@@ -139,6 +139,7 @@ test_that("PI df on singular fits is the stratum containment df (A - 1; min(A, B
   expect_equal(th2$df_pi, min(A, B) - 1)
 })
 
+# oracle: francq2019-s44-stratum (fixtures/oracles.csv)
 test_that("ems_synthesis reproduces Francq et al. (2019) Sec. 4.4 unbalanced crossed coefficients", {
   ## alpha 4 levels x beta 5 levels; the published count vectors are by beta level
   ## (the columns). The transposed layout swaps the A and B rows and does not match.

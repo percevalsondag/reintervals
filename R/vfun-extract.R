@@ -274,7 +274,7 @@ vfun_extract <- function(model, t0,
 
   parsed <- .vfun_parse(model)
   vc     <- .vfun_vc_cov(parsed, boundary_tol = boundary_tol)
-  sing   <- isTRUE(tryCatch(lme4::isSingular(model), error = function(e) NA))
+  sing   <- .is_singular(model)    # NA when the check failed (not "non-singular")
 
   phi   <- parsed$phi; type <- parsed$type; s2e <- parsed$s2e
   beta  <- parsed$fixef; Vbeta <- parsed$vcov_beta; fe_time <- parsed$fe_time

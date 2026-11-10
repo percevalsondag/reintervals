@@ -1,7 +1,9 @@
 # reintervals 1.0.0 — development plan (branch `dev`)
 
-Status: implementation in progress on `dev`. Done: A5 (partly; see its status),
-A3, A4, A1 and A2 (see each section's status block and section 9). Engine code
+Status: implementation in progress on `dev`. Done: A5 (closed; see its status and
+the A5-leftovers status),
+A3, A4, A1 and A2 (see each section's status block and section 9); T scaffolding
+(see the T status). Engine code
 has changed since this plan was written: line numbers in the unmarked sections
 are at `d94d441` (R code identical to `a73e8b7`, the 0.2.0 CRAN submission) and
 are stale where a done item touched the file. `main` stays frozen at the CRAN
@@ -515,7 +517,8 @@ unbalanced designs that today give a wrong (mis-signed) bound.
 
 ## A5. Classed conditions
 
-**Status: DONE on `dev`.** `R/conditions.R`: `.abort()` / `.warn()` (base
+**Status: DONE on `dev`; A5 fully CLOSED (2026-11-09, see the A5-leftovers
+status).** `R/conditions.R`: `.abort()` / `.warn()` (base
 `errorCondition` / `warningCondition`, no call recorded) and the registered
 hierarchy. All 111 `stop()` / `warning()` sites in R/ are converted with unchanged
 message text. The only bare `stop()` / `warning()` left are inside the two helpers
@@ -549,7 +552,8 @@ Silent paths surfaced (inventory numbers from A5.1):
 - Not done, as not in the step-2 brief: the fallback *warnings* proposed in A5.2
   (`reintervals_warning_fallback` on df fallbacks; the class exists and is used
   only by the truncation/floor warnings); #13, #14, #15 (newdata check on the
-  slope coverage path), #19 (extrapolation).
+  slope coverage path), #19 (extrapolation). **#15, #19 and the df-fallback
+  warning (#2, #5, #6, crossed NGM) are done: see the A5-leftovers status below.**
 - Found while testing: `ems_synthesis(matrix(1, 1, 1), "crossed")` fails inside
   `stats::model.matrix` with an unclassed base error (no package check runs first).
   It is unreachable from a fitted model (classify_design needs >= 2 levels), but
@@ -560,6 +564,75 @@ Silent paths surfaced (inventory numbers from A5.1):
   two stray outputs are silenced at the call site (test-vc-extract.R:52
   `suppressMessages`; test-vfun-components.R:145 `expect_output`).
 
+
+**A5-leftovers status: DONE on `dev` (#15, #19, df-fallback warning; Percy's
+brief of 2026-11-09).** Not committed at the time of writing. No number moved:
+every existing pin passes untouched (only call sites were wrapped in muffling
+helpers).
+- Class names and parents: `reintervals_warning_extrapolation` is a direct
+  child of `reintervals_warning` (A5.2 had it under the known-limitation
+  class); `reintervals_warning_df_fallback` is a child of
+  `reintervals_warning_fallback`, as in A5.2 (review follow-up, 2026-11-09; the
+  first pass had it directly under `reintervals_warning`).
+- #19 extrapolation: `.slope_newdata_guard()` (R/conditions.R) in
+  `.coverage_verb` (CI / PI / NGM, so `lmm_predict` too) and `ti_lmm` (random
+  slope after the method check; fixed slope before routing), plus
+  `ti_gpq_raw()` / `ti_anova_raw()` on their `time` argument. One warning per
+  call naming the out-of-range `t0`, the observed `[min, max]`, and the model
+  assumption (linear fixed slope / quadratic-in-t0 V_G); fields `t0`, `range`,
+  `variable`. Not applicable without a time covariate. The "without a guard or
+  warning" text is gone from `?ti_lmm`, `?reintervals-models` and the
+  getting-started vignette.
+- df fallback: `.warn_df_fallback()` after `.interval_lmm`, once per call, only
+  for the default rules: RI CI Satterthwaite (`df_method == "containment"`), RI
+  PI Francq (`pi_df_fallback`), crossed NGM Satterthwaite (`df_rule ==
+  "containment"`), RS Hessian-Satterthwaite (the verb's own df: F for the CI, T
+  for the PI, G for the NGM; `df_rule == "containment"`). Never for validation
+  arms or user-chosen containment arms. Reason carried as internal attr
+  `df_fallback_reason` (not in the diagnostics): `.theta_cov()$fallback_reason`
+  (singular fit / Hessian failed / non-PD covariance / non-finite df), crossed
+  `k_A EMS_A + k_B EMS_B is not positive`, RS singular + non-PD covariance.
+  Overlap: the existing `reintervals_warning_singular` fires only on the EMS TI,
+  so it never co-fires with this warning (CI / PI / NGM); the few-groups PI
+  limitation can co-fire on a PI with <= 5 top levels (once per session).
+- #15 newdata: slope models need the time variable numeric, finite and
+  non-missing (`reintervals_error_input`, field `variable`). Before: RS CI /
+  PI / NGM with the column missing failed with a base "incorrect number of
+  dimensions"; RS TI with a character / NA / Inf column failed in base code, a
+  factor was taken as its level codes; FS character / factor failed in
+  `model.matrix` (NGM coerced them), an NA row was dropped and misaligned (CI /
+  PI / TI), Inf failed with a `mean` message. Missing columns keep the existing
+  messages (`.check_newdata` for FS, the TI "Could not determine" text for RS).
+- Tests: test-a5-warnings.R. Existing tests muffled (quiet_extrapolation /
+  quiet_df_fallback in helper-conditions.R; quiet_limitation and the local quiet /
+  quiet_arm helpers in test-df-arms.R and test-ngm-arms.R muffle both): ci-df,
+  conditions, df-arms, dispatch, gpq, mls, ngm-arms, oracle-sas-ci,
+  singular-guard, stratum-sides.
+- Review follow-ups (2026-11-09), closing A5:
+  - #13 done: `.singular_status()` (vc-extract.R); a failing
+    `lme4::isSingular()` gives `singular = NA` on every row and
+    `diagnostics$singular_check = "failed: <message>"`. Every branch on
+    singularity takes the singular branch for NA (`!isFALSE()`): `.theta_cov`
+    (no Hessian -> CI / PI containment, reason "singularity check failed;
+    treated as singular"), the EMS TI singular warning, the RS fallback reason.
+    `vfun_components()` accepts `singular = NA`.
+  - NaN guard done: `.unify_intervals()` aborts (`reintervals_error_numerical`,
+    fields `verb`, `column`, `rows`) on a NaN `estimate` / `lower` / `upper`;
+    NA and +/-Inf pass. No test produced a NaN intentionally (grep: two
+    comments only, test-ti-montes.R:36 and test-mls.R:96, both asserting none).
+  - `ems_synthesis()` crossed: `reintervals_error_design` before
+    `model.matrix()` for fewer than 2 levels of either factor or no replicated
+    cell (residual df 0).
+  - #14 done: a failed classification records
+    `diagnostics$grouping_reason = "classification failed: <message>"` next to
+    `grouping = NA`.
+  - **#10 declined:** frac_boundary already reports the share of clamped
+    draws; a warning would fire on most near-boundary fits. **Singular-fit
+    warning on every verb declined:** the per-row singular flag and the
+    df-fallback warning cover it.
+  - getting-started vignette: the `t0 = 20` (Oliva-Aviles & Hauser) loop shows
+    the extrapolation warning once and muffles it by class afterwards.
+- **A5 is closed.**
 
 ### A5.1 Inventory: places that can return NaN/NA limits or fall back silently
 
@@ -853,6 +926,72 @@ What is still needed:
 
 ## T. Oracle-test scaffolding
 
+**Status: scaffolding DONE on `dev` (Percy's step-T brief of 2026-11-09).** Not
+committed at the time of writing. No R/ change; no expectation changed (comments,
+the parser swap and the slope_oracle strip only; 2503 expectations, 0 failed /
+skipped / warnings). Deviations from T.2, by the brief:
+- Location: the registry and fixtures stay in `tests/testthat/fixtures/` (not
+  `inst/extdata/oracles/`); they are in the built tarball (fixtures 55 KB
+  uncompressed, tarball 238 KB).
+- Pending oracles are registry rows plus commented-out templates in their target
+  test file, not `skip()`ped test files.
+- The published-number tests are **not moved** into `test-oracle-*.R` files and
+  the cross-method tests are not renamed `test-consistency-*` (not in the brief;
+  still open). Their values stay inline: `fixture_path = inline:<file>` or
+  `data:<dataset>` (documented in fixtures/README.md).
+- Files: `fixtures/oracles.csv` + `README.md` (columns, statuses, CSV `#`-header
+  convention, `fixture_path` forms); `fixtures/SHA256SUMS` (every fixture data
+  file; checked by `test-fixture-sha256.R`, which needs R >= 4.5 and skips
+  otherwise); `fixtures/slope_oracle.md`; `helper-oracles.R`
+  (`oracle_registry()`, `oracle_fixture(id)`, `parse_sas_results(path)` for
+  ##NGM / ##MEAN / ##COVP / ##FIXD / ##CONV); `test-oracle-registry.R` (no skips).
+  `test-oracle-sas-ci.R` uses the new parser (its ##MEAN frame is `identical()`
+  to the old one); `test-ngm-arms.R` still has its own `sas_ngm_rows()` /
+  `sas_covp()` (the new parser reproduces both `identical()`; switching is
+  optional).
+- `slope_oracle.rds`: no generator exists, so it was **stripped** (n_E,
+  dfs["e"], attr target, the 4 TI rows); kept fields `identical()`, the 18
+  expectations give `identical()` outputs before and after. It is a regression
+  snapshot and is not in the registry. Provenance and both SHA-256 in
+  `fixtures/slope_oracle.md`.
+- Collected (29):
+  - `francq2019-s52-ci` (ci/constructor (ci_mean); published_table) -> `test-ci-mean.R`
+  - `francq2019-s52-pi` (pi/constructor (pi_newobs); published_table) -> `test-pi-newobs.R`
+  - `francq2019-s52-ti` (ti/francq (ti_francq); published_table) -> `test-ti-francq.R`
+  - `francq2019-s52-ems-oneway` (ti/francq via ems_oneway; published_table) -> `test-design-oneway.R`
+  - `francq2019-s52-vc-extract` (vc_extract (REML components, Hessian df_PI) + CI/PI/TI constructors; published_table) -> `test-vc-extract.R`
+  - `francq2019-s52-intervals-lmm` (ci+pi/intervals_lmm (random intercept); published_table) -> `test-intervals-lmm.R`
+  - `francq2019-s52-ti-lmm` (ti/ems-mls (.ti_ems); published_table) -> `test-ti-lmm.R`
+  - `francq2019-s52-hk-printed` (ti/ems-mls (ti_lmm method = ems-mls); published_table) -> `test-hk.R`
+  - `francq2019-s53-hk-printed` (ti/ems-mls + vc_extract df_PI (unbalanced one-way); published_table) -> `test-hk.R`
+  - `francq2019-s44-synthesis` (ems_synthesis (crossed, unbalanced); published_table) -> `test-design-synthesis.R`
+  - `francq2019-s44-stratum` (ems_synthesis (crossed, unbalanced; E rows A, B, AB); published_table) -> `test-stratum-sides.R`
+  - `francq2019-s44-ti-lmm` (vc_extract (crossed k coefficients) + cell-count extraction; published_table) -> `test-ti-lmm-unbalanced.R`
+  - `hk2007-table3` (data (hk_assay summary statistics); published_table) -> `test-hk.R`
+  - `hk2005-o1` (ti/anova-mls (ti_lmm default, slope-free); published_table) -> `test-hk.R`
+  - `hk2007-ex1-o2` (ti/anova-mls (ti_anova_raw, slope-free); published_table) -> `test-hk.R`
+  - `hk2007-ex2-o3` (ti/anova-mls (ti_anova_raw, slope-free); published_table) -> `test-hk.R`
+  - `hk2007-unbal-o4` (ti/anova-mls (ti_anova_raw, unbalanced slope-free); published_table) -> `test-hk.R`
+  - `montes2019-appa-ti` (ti/anova-mls (ti_anova_raw, fixed slope); published_table) -> `test-ti-montes.R`
+  - `montes2019-tables12-onesided` (ti/anova-mls one-sided (Hoffman 2010 H limit); published_table) -> `test-ti-montes.R`
+  - `montes2019-appa-montes-ref` (ti/anova-mls (independent montes_ref() re-implementation); published_table) -> `test-vfun-extract.R`
+  - `oliva2025-tau2` (ti/gpq (closed-form content variance V_G); published_table) -> `test-gpq.R`
+  - `sas-part1-ci-satterth` (ci/random intercept, ci_df = satterthwaite; sas_run) -> `test-oracle-sas-ci.R`
+  - `sas-part1-ci-kr-balanced` (ci/random intercept, ci_df = kenward-roger (SE only); sas_run) -> `test-oracle-sas-ci.R`
+  - `pbkrtest-kr-sas-fits` (ci/random intercept, ci_df = kenward-roger (SE + df); independent_code) -> `test-oracle-sas-ci.R`
+  - `pbkrtest-kr-ci-cases` (ci/random intercept, ci_df = kenward-roger (SE + df); independent_code) -> `test-ci-df.R`
+  - `sas-part1-ngm-ri-broad` (ngm/random intercept, ngm_method = broad-inference; sas_run) -> `test-ngm-arms.R`
+  - `sas-part1-ngm-rs-reml` (ngm/random slope, slope_ngm_method = reml (default); sas_run) -> `test-ngm-arms.R`
+  - `sas-part1-ngm-rs-broad` (ngm/random slope, slope_ngm_method = broad-inference; sas_run) -> `test-ngm-arms.R`
+  - `simstudy-lotline-f4ce68e` (ngm/random slope, slope_ngm_method = fv-anova (.lotline); independent_code) -> `test-ngm-arms.R`
+- Pending (6; templates in place):
+  - `nist-recipe-ex4` (ti/one-sided tolerance limit, regression with random batches (anova-mls fixed slope; engine to confirm at transcription); published_table) -> `test-ti-montes.R`
+  - `francq2019-table2-corrected` (ci+pi+ti/Francq Table 2 (verbs to confirm at transcription); published_table) -> `test-ti-francq.R`
+  - `chow-shao1991-t23` (ngm/random slope, slope_ngm_method = fv-anova (shelf-life lower bound); published_table) -> `test-ngm-arms.R`
+  - `oliva2025-worked-example` (ti/gpq (random slope); published_table) -> `test-gpq.R`
+  - `sas-part2-ngm-rs-unbal` (ngm/random slope (reml, broad-inference), unbalanced; sas_run) -> `test-ngm-arms.R`
+  - `sas-part3-ngm-designs` (ngm/random intercept, ngm_method = broad-inference (crossed, unbalanced nested, covariate designs); sas_run) -> `test-ngm-arms.R`
+
 ### T.1 Current self-referential tests (code checked against its own formula or output)
 
 | Test | Lines | What is being compared |
@@ -938,9 +1077,13 @@ B plumbing (control object passed down) ──> all B arms ──> C (sides for 
 Proposed implementation order (each step is one reviewable commit series, with
 defaults unchanged unless stated):
 1. **T scaffolding + `.Rbuildignore` `^notes$`**: move the published-number tests,
-   add the SAS part1 fixtures and parser. No R/ changes. (Low risk.)
-2. **A5 helpers + inventory fixes**. **Done on `dev`** (see A5 status; #13-#15 and
-   #19 remain).
+   add the SAS part1 fixtures and parser. No R/ changes. (Low risk.) **Scaffolding
+   done on `dev`** (registry, helpers, hashes, templates; see the T status). Moving
+   the inline published-number tests into oracle files is still open.
+2. **A5 helpers + inventory fixes**. **Done on `dev`** (see A5 status; #15, #19
+   and the df-fallback warning done in the A5 leftovers; #13, #14, the NaN
+   guard and the synthesis check in the review follow-ups; #10 and the
+   every-verb singular warning declined. **A5 closed.**)
 3. **A3** KR vcovAdj. **Done on `dev`** (decision a). Gates: KR vs pbkrtest
    (SE + df, 1e-8) on all five SAS fits; KR SE vs SAS on the balanced fits only.
 4. **A4** `.mls_upper` + TBG. **Done on `dev`** (no negative k_j reachable from the

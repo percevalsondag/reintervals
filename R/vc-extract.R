@@ -64,7 +64,19 @@
   }
 }
 
-.is_singular <- function(model) isTRUE(lme4::isSingular(model))
+## lme4::isSingular() with its failure kept: list(singular, check). `singular` is
+## TRUE / FALSE, or NA when isSingular() errors (then `check` is "failed:
+## <message>", else NA). A failed check is never read as "not singular": every
+## route that branches on singularity takes the singular branch for NA
+## (!isFALSE(singular)), and .unify_intervals() reports singular = NA with
+## diagnostics$singular_check.
+.singular_status <- function(model) {
+  tryCatch(list(singular = isTRUE(lme4::isSingular(model)), check = NA_character_),
+           error = function(e) list(singular = NA,
+                                    check = paste0("failed: ", conditionMessage(e))))
+}
+## TRUE / FALSE, or NA when the check failed (see .singular_status)
+.is_singular <- function(model) .singular_status(model)$singular
 
 ## ---- total variance, its variance, df_PI (observed Fisher information) -------
 ## Cov(theta_hat) from the observed information: a numerical Hessian of the
@@ -94,14 +106,14 @@
               as.numeric(crossprod(r, vi %*% r)))
   }
   sigmaT2 <- sum(th)
-  singular <- isTRUE(lme4::isSingular(model))
-  hmat <- if (singular) NULL else tryCatch(numDeriv::hessian(ll, th),
+  singular <- .is_singular(model)              # NA (check failed) -> singular branch
+  hmat <- if (!isFALSE(singular)) NULL else tryCatch(numDeriv::hessian(ll, th),
                                            error = function(e) NULL)
   cov_theta <- if (is.null(hmat)) NULL else tryCatch(solve(-hmat),
                                                      error = function(e) NULL)
   if (!.is_pd_cov(cov_theta)) cov_theta <- NULL   # not a covariance -> fallbacks
   vS <- if (is.null(cov_theta)) NA_real_ else sum(cov_theta)
-  use_hessian <- isTRUE(is.finite(vS) && vS > 0) && !singular
+  use_hessian <- isTRUE(is.finite(vS) && vS > 0) && isFALSE(singular)
   ## PI df: observed-information Satterthwaite when the Hessian route is usable;
   ## otherwise (singular fit, non-PD covariance, non-positive vS) the stratum
   ## containment df (.ddf_containment), the df of the coarsest random stratum.
@@ -109,9 +121,17 @@
   ## gave df of 8-70 on singular fits whose stratum df is 1-4, and the PI then
   ## under-covered; the containment df restores coverage (validation W5).
   df_pi <- if (use_hessian) 2 * sigmaT2^2 / vS else .ddf_containment(model)
+  ## why the Hessian route is unusable (read by the df-fallback warning)
+  fallback_reason <- if (use_hessian) NA_character_
+    else if (is.na(singular)) "singularity check failed; treated as singular"
+    else if (singular) "singular fit"
+    else if (is.null(hmat)) "the REML Hessian could not be computed"
+    else if (is.null(cov_theta)) "non-PD covariance of the variance components"
+    else "non-finite df"
   list(sigmaT2 = sigmaT2,
        df_pi = df_pi,
        pi_df_fallback = !use_hessian,
+       fallback_reason = fallback_reason,
        singular = singular,
        components = stats::setNames(th, c(gn, "Residual")),
        cov_theta = if (use_hessian) cov_theta else NULL,

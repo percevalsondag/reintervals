@@ -1,5 +1,6 @@
 # fit_52() / build_52_data() are provided by helper-fixtures.R.
 
+# oracle: francq2019-s52-intervals-lmm (fixtures/oracles.csv)
 test_that("intervals_lmm reproduces Section 5.2 CI and PI from a real fit", {
   skip_if_not_installed("lme4")
   out <- intervals_lmm(fit_52())
