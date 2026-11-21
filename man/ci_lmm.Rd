@@ -63,8 +63,16 @@ the value for \code{ti}, \code{NA} for the coverage intervals); \code{sides};
 \code{attr(., "diagnostics")} is a list of engine-specific extras (degrees of
 freedom \code{df}; for the random-intercept confidence interval its source
 \code{df_method} --- \code{"satterthwaite"}, \code{"containment"}, or \code{"kenward-roger"};
-for the random-slope tolerance interval the GPQ \code{route_reason}; standard
-error \code{se}; and any GPQ / ANOVA intermediates);
+for the random-slope tolerance interval the GPQ \code{route_reason}; for the
+random-slope confidence, prediction and new-group-mean intervals
+\code{vc_cov_route}, how the observed-information covariance of the variance
+parameters behind their Satterthwaite dfs was obtained --- \code{"default"}
+(the numerical REML Hessian at numDeriv's default step), \code{"retry-d1e-3"}
+(the default Hessian left the valid region, e.g. a strong
+intercept-slope correlation, and a retry with a 0.1\% first step that stayed
+inside it was used) or \code{"unavailable"} (no valid covariance; the default
+dfs fall back to containment and the \code{"broad-inference"} arm reports \code{NA}
+limits); standard error \code{se}; and any GPQ / ANOVA intermediates);
 \code{attr(., "grouping")} is the random-intercept topology (\code{"oneway"},
 \code{"nested"}, \code{"crossed"}, or \code{NA} for slope models).
 }

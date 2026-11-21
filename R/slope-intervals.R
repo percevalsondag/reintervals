@@ -99,6 +99,8 @@
     design = comp$type, method = "reml",            # harmonized engine tag
     singular = if (is.na(comp$singular)) NA else isTRUE(comp$singular), boundary = isTRUE(comp$boundary),
     vg_floored = isTRUE(attr(comp, "vg_floored")),  # V_G<0 floored at this t0
+    vc_cov_route = if (is.null(attr(comp, "vc_cov_route"))) NA_character_
+                   else attr(comp, "vc_cov_route"),  # Cov(phi) route (.vfun_vc_cov)
     stringsAsFactors = FALSE
   )
 }

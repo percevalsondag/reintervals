@@ -177,7 +177,7 @@ test_that("EMS and slope df fallbacks are distinct functions (not shared)", {
   expect_identical(.vfun_df_containment(parsed, w_between = 0), max(1, 26 - 2 - 11))
 })
 
-test_that("a non-singular random-slope fit with an unavailable Satterthwaite df: TI is GPQ, slope NGM reports containment", {
+test_that("a boundary-adjacent non-singular random-slope fit: Cov(phi) recovered by the Hessian retry, TI is GPQ", {
   skip_if_not_installed("lme4")
   skip_on_cran()   # the fit sits near the variance-component boundary (the
                    # mechanism behind the df failure), so its singular /
@@ -185,15 +185,24 @@ test_that("a non-singular random-slope fit with an unavailable Satterthwaite df:
   # One of the 361 E3 fits (paper repo data/defects/e3_fallback_fits.rds): sigma1
   # = 0.10, 20 batches, rep 1084, seed = MASTER_SEED + 100000 * k + rep with k = 3
   # (the coverage study's DGP, scripts/coverage_reml.R). Non-singular by
-  # lme4::isSingular(), yet the Hessian of Cov(phi) is unusable, so the
-  # Satterthwaite df of nu_G falls back to containment.
+  # lme4::isSingular() (the package's singular criterion, kept as is; the fit is
+  # boundary-adjacent, delta = -9.9e-6), and the default Hessian of Cov(phi) is
+  # unusable (its first 10% step leaves the valid region). Until the Hessian retry
+  # (.vfun_vc_cov, d = 1e-3) this test expected the containment df; the retry now
+  # recovers a PD Cov(phi), so nu_G is Satterthwaite. The containment fallback is
+  # still covered by the singular-fit and mocked-df tests in test-a5-warnings.R
+  # ("df_fallback fires on a random-slope fit whose Hessian-Satterthwaite df
+  # falls back", "... below 1 falls back to containment (mocked 0.004)") and by
+  # the "retry also hits the sentinel" test below.
   set.seed(20261026L + 100000L * 3L + 1084L)
   d <- expand.grid(time = c(0, 3, 6, 9, 12), batch = factor(1:20))
   b0 <- rnorm(20, 0, 3); b1 <- rnorm(20, 0, 0.10)
   d$y <- 100 - 2 * d$time + b0[d$batch] + b1[d$batch] * d$time + rnorm(nrow(d), 0, 2)
   fm <- suppressWarnings(suppressMessages(lme4::lmer(y ~ time + (time | batch), data = d)))
   expect_false(lme4::isSingular(fm))
-  expect_true(attr(vfun_extract(fm, t0 = 12), "df_fallback")[["G"]])
+  cp <- vfun_extract(fm, t0 = 12)
+  expect_identical(attr(cp, "vc_cov_route"), "retry-d1e-3")
+  expect_false(attr(cp, "df_fallback")[["G"]])
 
   nd <- data.frame(time = c(6, 12)); ctl <- lmm_interval_control(seed = 1, M = 2000)
   x <- ti_lmm(fm, nd, P = 0.99, control = ctl)              # not an oracle
@@ -201,7 +210,8 @@ test_that("a non-singular random-slope fit with an unavailable Satterthwaite df:
   expect_identical(attr(x, "diagnostics")$route_reason, c("auto", "auto"))
   ngm <- quiet_df_fallback(new_group_mean_lmm(fm, nd))
   expect_identical(ngm$method, c("reml", "reml"))
-  expect_identical(attr(ngm, "diagnostics")$df_rule, c("containment", "containment"))
+  expect_identical(attr(ngm, "diagnostics")$df_rule, c("satterthwaite", "satterthwaite"))
+  expect_identical(attr(ngm, "diagnostics")$vc_cov_route, c("retry-d1e-3", "retry-d1e-3"))
 })
 
 test_that("route_reason is 'auto' for every dispatched random-slope TI and 'method' when gpq is forced", {
@@ -227,13 +237,18 @@ test_that(".is_pd_cov accepts a PD covariance and rejects indefinite / singular 
   expect_false(.is_pd_cov(matrix(c(1, NA, NA, 1), 2)))
 })
 
-test_that("an indefinite Cov(phi) is unavailable: containment df at every t0 (TI is GPQ regardless)", {
+test_that("an indefinite default Cov(phi) is recovered by the Hessian retry (TI is GPQ regardless)", {
   skip_if_not_installed("lme4")
   skip_on_cran()   # near-boundary fit (the mechanism): status could flip with lme4 jitter
   # One of the 7 E3 fits whose Satterthwaite df failed at one t0 only, because
   # the inverse Hessian is indefinite (smallest eigenvalue ~ -1e-9): sigma1 =
   # 0.05, 20 batches, rep 229, seed = MASTER_SEED + 100000 * k + rep with k = 2
-  # (the coverage study's DGP, scripts/coverage_reml.R).
+  # (the coverage study's DGP, scripts/coverage_reml.R). The fit is interior
+  # (UN, rho = -0.95): the default Hessian is contaminated by the reml_nll
+  # sentinel at its 10% first step; the d = 1e-3 retry recovers Cov(phi). The
+  # broad-inference df is checked against the step-13 diagnostic (two
+  # independent Hessians: reml_nll at d = 1e-3 and lme4's theta-scale Hessian by
+  # the delta method, agreeing to 3 digits): 16.7 at t0 = 6, 11.3 at t0 = 12.
   set.seed(20261026L + 100000L * 2L + 229L)
   d <- expand.grid(time = c(0, 3, 6, 9, 12), batch = factor(1:20))
   b0 <- rnorm(20, 0, 3); b1 <- rnorm(20, 0, 0.05)
@@ -245,11 +260,105 @@ test_that("an indefinite Cov(phi) is unavailable: containment df at every t0 (TI
   expect_false(.is_pd_cov(solve(H)))                 # the raw inverse is indefinite
   for (t0 in c(6, 12)) {
     cp <- vfun_extract(fm, t0 = t0)
-    expect_null(cp$cov)
-    expect_true(attr(cp, "df_fallback")[["G"]], info = t0)
+    expect_false(is.null(cp$cov), info = t0)
+    expect_true(.is_pd_cov(cp$cov), info = t0)
+    expect_identical(attr(cp, "vc_cov_route"), "retry-d1e-3", info = t0)
+    expect_false(attr(cp, "df_fallback")[["G"]], info = t0)
   }
+  bi <- suppressWarnings(new_group_mean_lmm(fm, data.frame(time = c(6, 12)),
+          control = lmm_interval_control(slope_ngm_method = "broad-inference")))
+  db <- attr(bi, "diagnostics")
+  expect_identical(db$vc_cov_route, c("retry-d1e-3", "retry-d1e-3"))
+  expect_false(any(db$ngm_df_failed))
+  expect_equal(db$df, c(16.7, 11.3), tolerance = 1e-2)
   x <- ti_lmm(fm, data.frame(time = c(6, 12)), P = 0.99,
               control = lmm_interval_control(seed = 1, M = 2000))   # not an oracle
   expect_identical(x$method, c("gpq", "gpq"))
   expect_identical(attr(x, "diagnostics")$route_reason, c("auto", "auto"))
+})
+
+## ---- Hessian retry (.vfun_vc_cov): sentinel contamination -------------------
+## reml_nll evaluated at phi, recording whether any evaluation of a numDeriv
+## Hessian at method.args `ma` returned the 1e10 sentinel
+sentinel_hit <- function(p, ma = list()) {
+  hit <- FALSE
+  f <- function(q) { v <- p$reml_nll(q); if (!is.finite(v) || v >= 1e10) hit <<- TRUE; v }
+  H <- numDeriv::hessian(f, p$phi, method.args = ma)
+  list(hit = hit, H = H)
+}
+
+test_that("a constructed UN random-slope fit with |rho| in 0.90-0.98: default Hessian hits the sentinel, the retry recovers Cov(phi)", {
+  skip_if_not_installed("lme4")
+  set.seed(2); K <- 12; tt <- c(0, 3, 6, 9, 12, 18, 24)
+  d <- expand.grid(time = tt, lot = factor(1:K))
+  z1 <- rnorm(K); z2 <- 0.95 * z1 + sqrt(1 - 0.95^2) * rnorm(K)
+  d$y <- 100 + (2 * z1)[d$lot] + (-0.3 + (0.15 * z2)[d$lot]) * d$time + rnorm(nrow(d), 0, 1)
+  fm <- suppressWarnings(suppressMessages(lme4::lmer(y ~ time + (time | lot), data = d)))
+  p <- .vfun_parse(fm); ph <- p$phi
+  rho <- ph[["s01"]] / sqrt(ph[["s2_0"]] * ph[["s2_1"]])
+  skip_if(isTRUE(lme4::isSingular(fm)) || abs(rho) < 0.90 || abs(rho) > 0.98,
+          "the optimum differs on this platform")
+  ## the default Hessian evaluates reml_nll outside the PD cone of Sigma
+  def <- sentinel_hit(p)
+  skip_if_not(def$hit, "the default Hessian does not hit the sentinel on this platform")
+  expect_true(def$hit)
+  expect_false(sentinel_hit(p, list(d = 1e-3))$hit)     # the retry stays inside
+  vc <- .vfun_vc_cov(p)
+  expect_identical(vc$vc_cov_route, "retry-d1e-3")
+  expect_true(.is_pd_cov(vc$cov))
+  nd <- data.frame(time = c(12, 24))
+  bi <- suppressWarnings(new_group_mean_lmm(fm, nd,
+          control = lmm_interval_control(slope_ngm_method = "broad-inference")))
+  expect_true(all(is.finite(attr(bi, "diagnostics")$df)))
+  expect_false(any(attr(bi, "diagnostics")$ngm_df_failed))
+  expect_true(all(is.finite(c(bi$lower, bi$upper))))
+  ## default reml arm: Satterthwaite nu_G (no containment) when nu_G >= 1
+  ngm <- quiet_df_fallback(new_group_mean_lmm(fm, nd))
+  dg <- attr(ngm, "diagnostics")
+  expect_identical(dg$vc_cov_route, c("retry-d1e-3", "retry-d1e-3"))
+  expect_identical(dg$df_rule[dg$df >= 1], rep("satterthwaite", sum(dg$df >= 1)))
+  expect_true(all(dg$df >= 1))
+  ## ci_lmm and pi_lmm report the same route
+  expect_identical(attr(ci_lmm(fm, nd), "diagnostics")$vc_cov_route, c("retry-d1e-3", "retry-d1e-3"))
+  expect_identical(attr(pi_lmm(fm, nd), "diagnostics")$vc_cov_route, c("retry-d1e-3", "retry-d1e-3"))
+})
+
+test_that("when the retry also hits the sentinel, Cov(phi) stays unavailable and the fallbacks apply", {
+  skip_if_not_installed("lme4")
+  ## |rho| > 0.9999 on a fit lme4 calls non-singular: the PD margin of Sigma
+  ## (1 - rho^2) is below even the retry's 0.1% step on s01
+  set.seed(13); K <- 12; tt <- c(0, 3, 6, 9, 12, 18, 24)
+  d <- expand.grid(time = tt, lot = factor(1:K))
+  z1 <- rnorm(K); z2 <- 0.9999 * z1 + sqrt(1 - 0.9999^2) * rnorm(K)
+  d$y <- 100 + (2 * z1)[d$lot] + (-0.3 + (0.15 * z2)[d$lot]) * d$time + rnorm(nrow(d), 0, 1)
+  fm <- suppressWarnings(suppressMessages(lme4::lmer(y ~ time + (time | lot), data = d)))
+  p <- .vfun_parse(fm); ph <- p$phi
+  rho <- ph[["s01"]] / sqrt(ph[["s2_0"]] * ph[["s2_1"]])
+  skip_if(isTRUE(lme4::isSingular(fm)) || abs(rho) < 0.9999,
+          "the optimum differs on this platform")
+  expect_true(sentinel_hit(p)$hit)
+  expect_true(sentinel_hit(p, list(d = 1e-3))$hit)
+  vc <- .vfun_vc_cov(p)
+  expect_null(vc$cov)
+  expect_identical(vc$vc_cov_route, "unavailable")
+  nd <- data.frame(time = c(12, 24))
+  ngm <- quiet_df_fallback(new_group_mean_lmm(fm, nd))
+  expect_identical(attr(ngm, "diagnostics")$df_rule, c("containment", "containment"))
+  expect_identical(attr(ngm, "diagnostics")$vc_cov_route, c("unavailable", "unavailable"))
+  expect_identical(attr(ngm, "diagnostics")$df, rep(K - 2, 2))
+  expect_true(all(is.finite(c(ngm$lower, ngm$upper))))
+  bi <- suppressWarnings(new_group_mean_lmm(fm, nd,
+          control = lmm_interval_control(slope_ngm_method = "broad-inference")))
+  expect_true(all(attr(bi, "diagnostics")$ngm_df_failed))
+  expect_true(all(is.na(bi$lower) & is.na(bi$upper)))
+  x <- ti_lmm(fm, nd, P = 0.99, control = lmm_interval_control(seed = 1, M = 2000))  # not an oracle
+  expect_identical(x$method, c("gpq", "gpq"))
+})
+
+test_that("a fit whose default Hessian is valid keeps vc_cov_route = 'default' (sleepstudy pins)", {
+  skip_if_not_installed("lme4")
+  fm <- suppressMessages(lme4::lmer(Reaction ~ Days + (Days | Subject), data = lme4::sleepstudy))
+  expect_identical(.vfun_vc_cov(.vfun_parse(fm))$vc_cov_route, "default")
+  expect_identical(attr(new_group_mean_lmm(fm, data.frame(Days = 5)), "diagnostics")$vc_cov_route,
+                   "default")
 })

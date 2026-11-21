@@ -166,6 +166,19 @@
 
 ## Bug fixes
 
+* The random-slope variance-parameter covariance could be unavailable on
+  non-singular fits with a strong intercept-slope correlation (`|rho|` above
+  about 0.86), because the numerical Hessian's first step (10% of each
+  parameter) left the valid region, where the REML objective returns a
+  sentinel value. The default random-slope CI / PI / new-group-mean dfs then
+  fell back to containment and the `"broad-inference"` new-group-mean arm
+  returned `NA` limits. When the default Hessian gives no valid covariance, it
+  is now recomputed with a 0.1% first step, and the retry is accepted only when
+  every evaluation stays in the valid region and the inverse is positive
+  definite. The route is reported as `vc_cov_route` (`"default"`,
+  `"retry-d1e-3"` or `"unavailable"`) in `attr(., "diagnostics")` of the
+  random-slope `ci_lmm()`, `pi_lmm()`, `new_group_mean_lmm()` and
+  `lmm_predict()`. Fits whose default Hessian was valid are unchanged.
 * The default random-slope new-group-mean interval (and the random-slope
   confidence and prediction intervals) could return `(-Inf, Inf)` when the
   Hessian-Satterthwaite df was a tiny positive number (for example 0.004 on a

@@ -405,7 +405,7 @@ lmm_interval_control <- function(seed = NULL, M = 20000L,
                  "df_method", "route_reason", "df_rule", "W", "mls_bound",
                  "n_na_draws", "mc_se_lower", "mc_se_upper", "ci_df_rule",
                  "slope_ci_df_rule", "pi_df_rule", "ngm_arm", "slope_ngm_arm",
-                 "ngm_df_failed")
+                 "ngm_df_failed", "vc_cov_route")
 
 ## The output unifier. Maps any engine's native frame to the single tidy
 ## contract; relabels only, never recomputes. Universal columns, in order:
@@ -472,7 +472,7 @@ lmm_interval_control <- function(seed = NULL, M = 20000L,
                "pi_df_rule", "ngm_arm", "slope_ngm_arm", "ngm_df_failed", "W", "se", "tau2_med", "s2e_med",
                "frac_boundary", "K", "df_resid", "phi1", "c_resid",
                "route_reason", "mls_bound", "n_na_draws", "mc_se_lower",
-               "mc_se_upper")) {
+               "mc_se_upper", "vc_cov_route")) {
     if (cn %in% names(native)) diag[[cn]] <- native[[cn]]
   }
   for (a in c("beta_hat", "n_E", "U", "Vhat_Y", "C1", "C2", "pi_df_fallback",
@@ -559,8 +559,16 @@ print.lmm_interval <- function(x, ...) {
 #'   `attr(., "diagnostics")` is a list of engine-specific extras (degrees of
 #'   freedom `df`; for the random-intercept confidence interval its source
 #'   `df_method` --- `"satterthwaite"`, `"containment"`, or `"kenward-roger"`;
-#'   for the random-slope tolerance interval the GPQ `route_reason`; standard
-#'   error `se`; and any GPQ / ANOVA intermediates);
+#'   for the random-slope tolerance interval the GPQ `route_reason`; for the
+#'   random-slope confidence, prediction and new-group-mean intervals
+#'   `vc_cov_route`, how the observed-information covariance of the variance
+#'   parameters behind their Satterthwaite dfs was obtained --- `"default"`
+#'   (the numerical REML Hessian at numDeriv's default step), `"retry-d1e-3"`
+#'   (the default Hessian left the valid region, e.g. a strong
+#'   intercept-slope correlation, and a retry with a 0.1% first step that stayed
+#'   inside it was used) or `"unavailable"` (no valid covariance; the default
+#'   dfs fall back to containment and the `"broad-inference"` arm reports `NA`
+#'   limits); standard error `se`; and any GPQ / ANOVA intermediates);
 #'   `attr(., "grouping")` is the random-intercept topology (`"oneway"`,
 #'   `"nested"`, `"crossed"`, or `NA` for slope models).
 #'

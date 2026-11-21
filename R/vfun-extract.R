@@ -210,18 +210,45 @@
 ## Hessian makes the Satterthwaite df arbitrarily large (anti-conservative), so
 ## a NULL cov sends every df to the containment fallback and the random-slope
 ## TI to GPQ. `boundary` flags a small-but-positive component.
+##
+## RETRY (sentinel contamination). numDeriv::hessian()'s default first
+## Richardson step is 10% of each parameter (d = 0.1). On a correlated (M2c)
+## fit with |rho| above about 0.86-0.91 that step on s01 (or on s2_0 / s2_1)
+## leaves the PD cone of Sigma, reml_nll returns its 1e10 sentinel, and the
+## finite differences are corrupted (paired Hessian eigenvalues of +/-1e11 to
+## 1e16), so cov was NULL on interior, non-singular fits. Only when the default
+## Hessian gives no valid cov, the Hessian is recomputed with d = 1e-3, and the
+## retry is accepted only if NO evaluation hit the sentinel, every entry is
+## finite, solve() succeeds and the inverse passes .is_pd_cov(). The default
+## computation is unchanged (a global smaller step moves the sleepstudy pins).
+## vc_cov_route: "default", "retry-d1e-3" or "unavailable" (cov NULL).
 .vfun_vc_cov <- function(parsed, boundary_tol = 1e-4) {
   phi <- parsed$phi
   boundary <- .vfun_is_boundary(phi, boundary_tol)  # variances-only (see helper)
 
+  cov_from <- function(H) {
+    if (is.null(H) || !all(is.finite(H))) return(NULL)
+    cv <- tryCatch(solve(H), error = function(e) NULL)
+    if (.is_pd_cov(cv)) cv else NULL
+  }
   H <- tryCatch(numDeriv::hessian(parsed$reml_nll, phi), error = function(e) NULL)
-  cov <- NULL
-  if (!is.null(H) && all(is.finite(H))) {
-    cov <- tryCatch(solve(H), error = function(e) NULL)
-    if (!.is_pd_cov(cov)) cov <- NULL
+  cov <- cov_from(H)
+  route <- "default"
+  if (is.null(cov)) {
+    hit <- FALSE
+    f <- function(p) {
+      v <- parsed$reml_nll(p)
+      if (!is.finite(v) || v >= 1e10) hit <<- TRUE
+      v
+    }
+    H2 <- tryCatch(numDeriv::hessian(f, phi, method.args = list(d = 1e-3)),
+                   error = function(e) NULL)
+    cov <- if (hit) NULL else cov_from(H2)
+    route <- if (is.null(cov)) "unavailable" else "retry-d1e-3"
   }
 
-  list(cov = cov, phi = phi, boundary = boundary, ok = !is.null(cov))
+  list(cov = cov, phi = phi, boundary = boundary, ok = !is.null(cov),
+       vc_cov_route = route)
 }
 
 #' Build a `vfun_components` from a fitted slope (or fixed-slope) lmer model
@@ -330,6 +357,7 @@ vfun_extract <- function(model, t0,
     t0 = t0, singular = sing, boundary = isTRUE(vc$boundary)
   )
   attr(out, "vg_floored") <- vg$floored
+  attr(out, "vc_cov_route") <- vc$vc_cov_route   # how Cov(phi) was obtained
   attr(out, "df_fallback") <- c(F = rF[2] == 1, T = rT[2] == 1, G = rG[2] == 1)
   ## why each fallen-back df fell back (NA where it did not)
   why <- c("non-finite df", "df below 1")
