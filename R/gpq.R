@@ -59,27 +59,43 @@
 ##   .gpq_eval_t0  everything t0-dependent, evaluated on those same draws
 ## Common random numbers: every t0 in the call, and both limits, use the same
 ## pivot draws, so a limit at a time point does not depend on which other time
-## points were requested. The draw order (U, Q, Z) is the 0.2.0 / A1 order, so
+## points were requested. B3 (plumbing only): content, conf and sides may be
+## vectors; the draws and the tau2 solve are shared by every combination, and
+## only the final quantile step runs per (content, conf, side), so a
+## vectorised call equals the scalar calls with the same seed. The draw order (U, Q, Z) is the 0.2.0 / A1 order, so
 ## the FIRST t0 of a seeded call reproduces the A1 numbers exactly.
 ## ---------------------------------------------------------------------------
 .gpq_core <- function(y, time, batch, t0, content = 0.99, conf = 0.95,
-                      sides = c("two.sided", "lower", "upper"),
+                      sides = "two.sided",
                       c_resid = 1, M = 20000L, seed = NULL) {
-  sides <- match.arg(sides)
+  ## B3: content, conf and sides may be vectors; every (content, conf, sides)
+  ## combination is evaluated on the same pivot draws and the same tau2 solve.
+  ## Rows: t0 fastest, then sides, then content, then conf (.combo_grid).
+  sides <- .resolve_sides(sides)
+  combos <- .combo_grid(sides = sides, P = content, level = conf)
   pre <- .gpq_prepare(y, time, batch)          # errors here leave the RNG untouched
   piv <- .gpq_pivots(df_resid = pre$df_resid, K = pre$K, M = M, seed = seed)
 
-  zP   <- stats::qnorm(content)             # one-sided content quantile
-  zP2  <- stats::qnorm((1 + content) / 2)   # two-sided content quantile
-
-  rows <- lapply(t0, function(tt)
-    .gpq_eval_t0(pre, piv, tt, zP = zP, zP2 = zP2, conf = conf, sides = sides,
-                 c_resid = c_resid, content = content))
+  ## per t0: one draw set / tau2 solve, one row per combination
+  by_t0 <- lapply(t0, function(tt)
+    .gpq_eval_t0(pre, piv, tt, combos = combos, c_resid = c_resid))
+  rows <- unlist(lapply(seq_len(nrow(combos)), function(j)
+    lapply(by_t0, `[[`, j)), recursive = FALSE)
   out <- do.call(rbind, rows); rownames(out) <- NULL
   attr(out, "gpq_seed")    <- piv$seed
   attr(out, "rng_kind")    <- piv$rng_kind
   attr(out, "mc_sections") <- .gpq_mc_sections
   out
+}
+
+## The (sides, P, level) combinations of a vectorised call, in output-block
+## order: sides fastest, then P, then level (t0 varies fastest of all, within
+## a block). A scalar call is a one-row grid.
+.combo_grid <- function(sides, P = NA_real_, level) {
+  g <- expand.grid(sides = sides, P = P, level = level,
+                   KEEP.OUT.ATTRS = FALSE, stringsAsFactors = FALSE)
+  rownames(g) <- NULL
+  g
 }
 
 ## Number of MC sections for the Monte-Carlo standard error of each limit.
@@ -248,50 +264,64 @@
 }
 
 ## Everything t0-dependent for the tolerance interval, on the shared pivot
-## draws `piv`. Returns one row.
-.gpq_eval_t0 <- function(pre, piv, tt, zP, zP2, conf, sides, c_resid, content) {
+## draws `piv`: the draws and the tau2 solve once (.gpq_theta_draws), then one
+## row per (sides, P, level) combination of `combos` (.combo_grid; columns
+## sides, P = content, level = conf). Only the content quantile (zP, zP2), the
+## side and the confidence quantile depend on the combination. Returns a list
+## of one-row data frames, in the order of `combos`.
+.gpq_eval_t0 <- function(pre, piv, tt, combos, c_resid) {
   dr <- .gpq_theta_draws(pre, piv, tt)
   Rtheta <- dr$Rtheta; Rtau2 <- dr$Rtau2; Rs2e <- dr$Rs2e; sec <- dr$sec
   S <- dr$S; K <- dr$K; phi1 <- dr$phi1; n_na <- dr$n_na; boundary <- dr$boundary
   Rs2_theta <- dr$Rs2_theta
   content_var <- pmax(0, Rtau2 + c_resid * Rs2e)         # tau2 + c s2e (>=0)
+  Rzeta <- if (any(combos$sides == "two.sided"))
+    sqrt(content_var + Rs2_theta)                        # ζ = sqrt(content var + center var)
+  sec_idx <- lapply(seq_len(S), function(s) which(sec == s))
+  ## combination-free summaries (identical on every row at this t0)
+  est <- stats::median(Rtheta)
+  tau2_med <- stats::median(Rtau2); s2e_med <- stats::median(Rs2e)
+  frac_b <- mean(boundary)
 
-  if (sides == "two.sided") {
-    Rzeta <- sqrt(content_var + Rs2_theta)               # ζ = sqrt(content var + center var)
-  } else if (sides == "lower") {
-    Rdelta <- Rtheta - zP * sqrt(content_var)            # GPQ for lower β-quantile
-  } else {                                               # upper
-    Rdelta <- Rtheta + zP * sqrt(content_var)            # GPQ for upper β-quantile
-  }
-  ## the limits from the draws indexed by i (all draws: the reported limit;
-  ## one MC section: that section's replicate of it)
-  limits <- function(i) {
-    if (sides == "two.sided") {
-      theta_hat <- stats::median(Rtheta[i])
-      Rzeta_g   <- stats::quantile(Rzeta[i], conf, names = FALSE, type = 7)
-      c(theta_hat - zP2 * Rzeta_g, theta_hat + zP2 * Rzeta_g)
-    } else if (sides == "lower") {
-      c(stats::quantile(Rdelta[i], 1 - conf, names = FALSE, type = 7), Inf)
-    } else {
-      c(-Inf, stats::quantile(Rdelta[i], conf, names = FALSE, type = 7))
+  lapply(seq_len(nrow(combos)), function(j) {
+    sides <- combos$sides[j]; content <- combos$P[j]; conf <- combos$level[j]
+    zP   <- stats::qnorm(content)             # one-sided content quantile
+    zP2  <- stats::qnorm((1 + content) / 2)   # two-sided content quantile
+    if (sides == "lower") {
+      Rdelta <- Rtheta - zP * sqrt(content_var)          # GPQ for lower β-quantile
+    } else if (sides == "upper") {
+      Rdelta <- Rtheta + zP * sqrt(content_var)          # GPQ for upper β-quantile
     }
-  }
-  lim <- limits(seq_along(Rtheta))
-  ## Monte-Carlo SE by MC sections: sd of the S section replicates / sqrt(S)
-  sec_lim <- vapply(seq_len(S), function(s) limits(which(sec == s)), numeric(2))
-  mc_se <- apply(sec_lim, 1L, stats::sd) / sqrt(S)
-  mc_se[!is.finite(lim)] <- NA_real_
+    ## the limits from the draws indexed by i (all draws: the reported limit;
+    ## one MC section: that section's replicate of it)
+    limits <- function(i) {
+      if (sides == "two.sided") {
+        theta_hat <- stats::median(Rtheta[i])
+        Rzeta_g   <- stats::quantile(Rzeta[i], conf, names = FALSE, type = 7)
+        c(theta_hat - zP2 * Rzeta_g, theta_hat + zP2 * Rzeta_g)
+      } else if (sides == "lower") {
+        c(stats::quantile(Rdelta[i], 1 - conf, names = FALSE, type = 7), Inf)
+      } else {
+        c(-Inf, stats::quantile(Rdelta[i], conf, names = FALSE, type = 7))
+      }
+    }
+    lim <- limits(seq_along(Rtheta))
+    ## Monte-Carlo SE by MC sections: sd of the S section replicates / sqrt(S)
+    sec_lim <- vapply(sec_idx, limits, numeric(2))
+    mc_se <- apply(sec_lim, 1L, stats::sd) / sqrt(S)
+    mc_se[!is.finite(lim)] <- NA_real_
 
-  data.frame(method = "gpq", time = tt,
-             estimate = stats::median(Rtheta),
-             lower = lim[1], upper = lim[2],
-             mc_se_lower = mc_se[1], mc_se_upper = mc_se[2],
-             tau2_med = stats::median(Rtau2),
-             s2e_med = stats::median(Rs2e),
-             frac_boundary = mean(boundary), n_na_draws = n_na,
-             K = K, df_resid = pre$df_resid, phi1 = phi1,
-             content = content, conf = conf, c_resid = c_resid,
-             stringsAsFactors = FALSE)
+    data.frame(method = "gpq", time = tt,
+               estimate = est,
+               lower = lim[1], upper = lim[2],
+               mc_se_lower = mc_se[1], mc_se_upper = mc_se[2],
+               tau2_med = tau2_med,
+               s2e_med = s2e_med,
+               frac_boundary = frac_b, n_na_draws = n_na,
+               K = K, df_resid = pre$df_resid, phi1 = phi1,
+               content = content, conf = conf, c_resid = c_resid,
+               sides = sides, stringsAsFactors = FALSE)
+  })
 }
 
 ## ---------------------------------------------------------------------------
@@ -308,35 +338,47 @@
 ## sections, NA-draw rule and per-lot time-point guard as the TI.
 ## ---------------------------------------------------------------------------
 .gpq_ngm_core <- function(y, time, batch, t0, level = 0.95,
-                          sides = c("two.sided", "lower", "upper"),
+                          sides = "two.sided",
                           M = 20000L, seed = NULL) {
-  sides <- match.arg(sides)
+  ## B3: level and sides may be vectors, evaluated on the same draws; rows:
+  ## t0 fastest, then sides, then level.
+  sides <- .resolve_sides(sides)
+  combos <- .combo_grid(sides = sides, level = level)
   pre <- .gpq_prepare(y, time, batch)          # errors here leave the RNG untouched
   piv <- .gpq_pivots(df_resid = pre$df_resid, K = pre$K, M = M, seed = seed,
                      z_new = TRUE)
-  alpha <- 1 - level
-  rows <- lapply(t0, function(tt) {
+  by_t0 <- lapply(t0, function(tt) {
     dr <- .gpq_theta_draws(pre, piv, tt)
     Rnew <- dr$Rtheta + piv$Z_new[dr$keep] * sqrt(pmax(0, dr$Rtau2))
-    limits <- function(i) {
-      q <- function(p) stats::quantile(Rnew[i], p, names = FALSE, type = 7)
-      switch(sides,
-             two.sided = c(q(alpha / 2), q(1 - alpha / 2)),
-             lower     = c(q(alpha), Inf),
-             upper     = c(-Inf, q(1 - alpha)))
-    }
-    lim <- limits(seq_along(Rnew))
-    sec_lim <- vapply(seq_len(dr$S), function(s) limits(which(dr$sec == s)), numeric(2))
-    mc_se <- apply(sec_lim, 1L, stats::sd) / sqrt(dr$S)
-    mc_se[!is.finite(lim)] <- NA_real_
-    data.frame(time = tt, estimate = stats::median(dr$Rtheta),
-               lower = lim[1], upper = lim[2],
-               mc_se_lower = mc_se[1], mc_se_upper = mc_se[2],
-               tau2_med = stats::median(dr$Rtau2), s2e_med = stats::median(dr$Rs2e),
-               frac_boundary = mean(dr$boundary), n_na_draws = dr$n_na,
-               K = dr$K, df_resid = pre$df_resid, phi1 = dr$phi1,
-               stringsAsFactors = FALSE)
+    sec_idx <- lapply(seq_len(dr$S), function(s) which(dr$sec == s))
+    est <- stats::median(dr$Rtheta)
+    tau2_med <- stats::median(dr$Rtau2); s2e_med <- stats::median(dr$Rs2e)
+    frac_b <- mean(dr$boundary)
+    lapply(seq_len(nrow(combos)), function(j) {
+      sides <- combos$sides[j]; level <- combos$level[j]
+      alpha <- 1 - level
+      limits <- function(i) {
+        q <- function(p) stats::quantile(Rnew[i], p, names = FALSE, type = 7)
+        switch(sides,
+               two.sided = c(q(alpha / 2), q(1 - alpha / 2)),
+               lower     = c(q(alpha), Inf),
+               upper     = c(-Inf, q(1 - alpha)))
+      }
+      lim <- limits(seq_along(Rnew))
+      sec_lim <- vapply(sec_idx, limits, numeric(2))
+      mc_se <- apply(sec_lim, 1L, stats::sd) / sqrt(dr$S)
+      mc_se[!is.finite(lim)] <- NA_real_
+      data.frame(time = tt, estimate = est,
+                 lower = lim[1], upper = lim[2],
+                 mc_se_lower = mc_se[1], mc_se_upper = mc_se[2],
+                 tau2_med = tau2_med, s2e_med = s2e_med,
+                 frac_boundary = frac_b, n_na_draws = dr$n_na,
+                 K = dr$K, df_resid = pre$df_resid, phi1 = dr$phi1,
+                 level = level, sides = sides, stringsAsFactors = FALSE)
+    })
   })
+  rows <- unlist(lapply(seq_len(nrow(combos)), function(j)
+    lapply(by_t0, `[[`, j)), recursive = FALSE)
   out <- do.call(rbind, rows); rownames(out) <- NULL
   attr(out, "gpq_seed")    <- piv$seed
   attr(out, "rng_kind")    <- piv$rng_kind

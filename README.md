@@ -3,6 +3,12 @@
 
 # reintervals
 
+<!-- badges: start -->
+
+[![CRAN
+status](https://www.r-pkg.org/badges/version/reintervals)](https://CRAN.R-project.org/package=reintervals)
+<!-- badges: end -->
+
 > Confidence, prediction, tolerance, and new-group-mean intervals for
 > linear mixed models.
 
@@ -43,13 +49,18 @@ here is the validated, unified implementation, not new methodology.**
 
 ## Installation
 
+Install the released version from CRAN:
+
 ``` r
-# pre-CRAN: install from GitHub
-# install.packages("remotes")
-remotes::install_github("percevalsondag/reintervals")
+install.packages("reintervals")
 ```
 
-(A CRAN release will be noted here once available.)
+Or the development version from the GitHub `dev` branch:
+
+``` r
+# install.packages("remotes")
+remotes::install_github("percevalsondag/reintervals", ref = "dev")
+```
 
 ## Quick start
 
@@ -63,7 +74,7 @@ ci_lmm(fm, newdata = data.frame(Days = 5))
 #> <lmm_interval> ci  (method = ems-mls, design = random_intercept_fixed_slope)
 #>  Days type estimate    lower    upper level  P     sides singular boundary vg_floored
 #>     5   ci 303.7415 284.6347 322.8483  0.95 NA two.sided    FALSE       NA         NA
-#> diagnostics: df, df_method  (see attr(., "diagnostics"))
+#> diagnostics: df, df_method, ci_df_rule, slope_ci_df_rule, pi_df_rule, ngm_arm, slope_ngm_arm  (see attr(., "diagnostics"))
 
 # 99%-content / 95%-confidence tolerance interval at Days = 5
 ti_lmm(fm, newdata = data.frame(Days = 5), P = 0.99)

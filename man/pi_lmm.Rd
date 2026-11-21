@@ -9,7 +9,7 @@ pi_lmm(
   newdata = NULL,
   alpha = NULL,
   level = NULL,
-  sides = c("two.sided", "lower", "upper"),
+  sides = "two.sided",
   method = "auto",
   control = lmm_interval_control()
 )
@@ -21,11 +21,14 @@ pi_lmm(
 \code{NULL} uses the first model-frame row.}
 
 \item{alpha, level}{The interval confidence, as a mutually-exclusive pair: give
-at most one. \code{level} is \code{1 - alpha}; the default is \code{alpha = 0.05} (95\%).}
+at most one. \code{level} is \code{1 - alpha}; the default is \code{alpha = 0.05} (95\%).
+A vector of unique values (no \code{NA}) gives one block of rows per value (see
+Value).}
 
-\item{sides}{\code{"two.sided"} (default), \code{"lower"}, or \code{"upper"}. A one-sided
-interval keeps the two-sided interval's center, variance, and df and uses
-\verb{t_\{1 - alpha\}} in place of \verb{t_\{1 - alpha/2\}}.}
+\item{sides}{\code{"two.sided"} (default), \code{"lower"} or \code{"upper"}, or a vector
+of them (unique; one block of rows per side, see Value). A
+one-sided interval keeps the two-sided interval's center, variance, and df
+and uses \verb{t_\{1 - alpha\}} in place of \verb{t_\{1 - alpha/2\}}.}
 
 \item{method}{\code{"auto"} (default) chooses the algorithm by structure; one of
 \code{"ems-mls"}, \code{"anova-mls"} (new-group mean only), \code{"reml"} (random-slope
@@ -38,8 +41,13 @@ the model or verb is ignored and recorded as \code{"not_applicable"} in the
 diagnostics).}
 }
 \value{
-An \code{lmm_interval} object (a data frame), one row per evaluation point,
-with columns, in order:
+An \code{lmm_interval} object (a data frame), one row per evaluation point
+for scalar \code{level} and \code{sides} (and \code{P}, for \code{\link[=ti_lmm]{ti_lmm()}}). With vector
+arguments there is one row per combination of evaluation point x \code{sides} x
+\code{P} x \code{level}, the full cross product, in this order: the evaluation point
+varies fastest, then \code{sides}, then \code{P}, then \code{level}, each in the order
+given; the \code{sides}, \code{P} and \code{level} columns identify each row, and every
+per-row diagnostic is row-aligned. Columns, in order:
 \itemize{
 \item the eval-point column(s), named by the actual model predictor(s)
 (e.g. the time covariate for a slope model, or each \code{newdata} column);

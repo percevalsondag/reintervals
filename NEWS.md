@@ -54,6 +54,33 @@
 
 ## New features
 
+* **Vectorised `P`, `level` / `alpha` and `sides`.** `ti_lmm()` accepts vectors
+  of `P`, `level` (or `alpha`) and `sides`; `ci_lmm()`, `pi_lmm()`,
+  `new_group_mean_lmm()` and `lmm_predict()` accept vectors of `level` (or
+  `alpha`) and `sides`. Values must be unique, with no `NA`; each is validated
+  as before. The result has one row per combination of evaluation point x
+  `sides` x `P` x `level`, the full cross product, with the evaluation point
+  varying fastest, then `sides`, then `P`, then `level` (each in the order
+  given); the `P`, `level` and `sides` columns identify each row. `over` stays
+  a single value. Scalar inputs give exactly the previous output. The
+  default of `sides` is now the single value "two.sided" (it was the
+  match.arg choice vector, which meant the same); a vector of sides gives one
+  block of rows per side.
+* **One GPQ draw set per call.** A vectorised GPQ call (the random-slope
+  tolerance interval, both targets, and the `slope_ngm_method = "gpq"` arm)
+  draws the pivots once and solves for the between-lot variance once per time
+  point, then evaluates every content, confidence and side on those same
+  draws; each row keeps its own Monte-Carlo SE. With an explicit `seed`, every
+  row is identical to the corresponding scalar call. With `seed = NULL` a
+  vectorised call draws one seed (one draw set), while separate scalar calls
+  each draw their own, so the equality then holds only with an explicit seed.
+  `gpq_seed`, `rng_kind` and `mc_sections` stay per call. The other engines
+  compute each combination with their scalar code. Warnings (extrapolation,
+  df fallback, unvalidated arm, limitation, singular fit) are signalled once
+  per call. Per-call diagnostics of the scalar anova-mls engine that depend on
+  the combination or the time point (`n_E`, `U`, `C1`, `C2`) are row-aligned
+  vectors in a vectorised call.
+
 * **Degrees-of-freedom validation arms** in `lmm_interval_control()`, for the
   1.0.0 validation study. The defaults are unchanged and remain the validated
   rules; every non-default value below is a validation arm whose coverage is

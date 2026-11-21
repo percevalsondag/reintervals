@@ -143,11 +143,12 @@
 ## output contract is handled at the unify step). `boundary` is NA: the GPQ
 ## method has no fitted-boundary notion (frac_boundary is an internal MC
 ## diagnostic, reported in the diagnostics).
-.gpq_rows <- function(g, design, sides, singular) {
+.gpq_rows <- function(g, design, sides = NULL, singular) {
   out <- data.frame(
     time = g$time, type = "TI", estimate = g$estimate,
     lower = g$lower, upper = g$upper,
-    content = g$content, conf = g$conf, df = g$df_resid, sides = sides,
+    content = g$content, conf = g$conf, df = g$df_resid,
+    sides = if ("sides" %in% names(g)) g$sides else sides,
     design = design, method = "gpq",
     singular = singular, boundary = NA,
     ## GPQ audit fields carried through (-> attr(.,"diagnostics") at unify)
@@ -286,7 +287,21 @@
 #' SE of a specification limit has a seed-dependent pass/fail. In a sleepstudy
 #' check at `M = 2000` the sectioning estimate ran about 8% below the observed
 #' run-to-run SD (sections of 100 draws); the gap is expected to shrink at the
-#' default `M = 20000`. The GPQ route requires
+#' default `M = 20000`.
+#'
+#' **Vectorised calls.** `P`, `level` (or `alpha`) and `sides` accept vectors;
+#' the result is their full cross product with the time points (see Value).
+#' On the GPQ route one call draws the pivots once and solves for the
+#' between-lot variance once per time point, then evaluates every content,
+#' confidence and side on those same draws, each row with its own Monte-Carlo
+#' SE. With an explicit `seed`, each row is identical to the scalar call with
+#' that `P`, `level` and `sides`. With `seed = NULL` a vectorised call draws
+#' one seed (one draw set) for all its rows, whereas separate scalar calls each
+#' draw their own seed, so the equality holds only with an explicit seed. The
+#' closed-form engines compute each combination with their scalar code.
+#' Warnings are signalled once per call.
+#'
+#' The GPQ route requires
 #' every lot to have at least two distinct time points and otherwise signals
 #' an error of class `reintervals_error_time_points`. The GPQ interval works
 #' from the per-lot OLS fits of the raw data and ignores the fitted
@@ -306,14 +321,17 @@
 #' @param newdata Row(s) giving the fixed-effect combination(s); the time column
 #'   supplies the evaluation point(s). `NULL` uses the first model-frame row.
 #' @param P Content proportion (the population fraction covered). Default 0.95
-#'   (pharma stability work typically passes `P = 0.99`).
+#'   (pharma stability work typically passes `P = 0.99`). A vector of unique
+#'   values (no `NA`) gives one block of rows per value (see Value).
 #' @param over What the interval covers: `"observation"` (default; a proportion
 #'   `P` of future observations --- the ordinary tolerance interval) or
 #'   `"group_mean"` (a proportion `P` of new group means --- the batch-mean
 #'   tolerance interval).
 #' @param alpha,level The confidence, as a mutually-exclusive pair: give at most
-#'   one. `level` is `1 - alpha`; default `alpha = 0.05`.
-#' @param sides `"two.sided"` (default), `"lower"`, or `"upper"`. One-sided
+#'   one. `level` is `1 - alpha`; default `alpha = 0.05`. A vector of unique
+#'   values gives one block of rows per value.
+#' @param sides `"two.sided"` (default), `"lower"` or `"upper"`, or a vector
+#'   of them (unique; one block of rows per side). One-sided
 #'   tolerance limits: `anova-mls` uses Hoffman's (2010) one-sided limit;
 #'   `ems-mls` uses the package's extension of it, validated by simulation;
 #'   random-slope models use the one-sided GPQ limit. See [reintervals-models].
@@ -355,26 +373,31 @@
 ti_lmm <- function(model, newdata = NULL, P = 0.95,
                    over = c("observation", "group_mean"),
                    alpha = NULL, level = NULL,
-                   sides = c("two.sided", "lower", "upper"),
+                   sides = "two.sided",
                    method = "auto", control = lmm_interval_control()) {
   .assert_lmm(model)
   over   <- match.arg(over)
-  sides  <- match.arg(sides)
   ## "reml-mls" stays in the list only so the defunct error below can fire
   method <- match.arg(method, c("auto", "ems-mls", "reml-mls", "anova-mls", "gpq"))
   if (method == "reml-mls") .reml_mls_defunct()
+  ## B3: P, level / alpha and sides may be vectors; the output is their full
+  ## cross product with t0 (t0 fastest, then sides, then P, then level).
+  sides  <- .resolve_sides(sides)
   ## boundary: public alpha/level -> internal `conf` (gamma); public `P` is the
   ## content proportion passed straight to the engines as `content`.
-  conf   <- 1 - .resolve_alpha(alpha, level)
-  if (!is.numeric(P) || length(P) != 1L || is.na(P) || P <= 0 || P >= 1) {
-    .abort("`P` must be a single number strictly between 0 and 1.",
-           class = "reintervals_error_input")
+  conf   <- 1 - .resolve_alpha(alpha, level, vector = TRUE)
+  if (length(P) > 1L) {
+    .check_unit_vector(P, "P")
+  } else if (!is.numeric(P) || length(P) != 1L || is.na(P) || P <= 0 || P >= 1) {
+    .abort("`P` must be a single number strictly between 0 and 1, or a vector ",
+           "of unique such numbers.", class = "reintervals_error_input")
   }
   seed <- control$seed
   M    <- control$M
   target <- if (over == "observation") "observable" else "true_value"
 
   ## ---- random slope present -> GPQ (both targets, all sides) -----------------
+  ## one GPQ call: one draw set and one tau2 solve per t0 for every combination
   if (.has_random_slope(model)) {
     if (!method %in% c("auto", "gpq")) {
       .abort(sprintf("method = \"%s\" is not available for a %s model; use ",
@@ -385,7 +408,7 @@ ti_lmm <- function(model, newdata = NULL, P = 0.95,
     out <- .ti_slope_path(model, newdata = newdata, content = P, conf = conf,
                           target = target, sides = sides,
                           forced = method == "gpq", seed = seed, M = M)
-    return(.unify_intervals(out, model, kind = "ti", P_value = P))
+    return(.unify_intervals(out, model, kind = "ti", P_value = out$content))
   }
 
   ## ---- random intercept only -------------------------------------------------
@@ -414,40 +437,56 @@ ti_lmm <- function(model, newdata = NULL, P = 0.95,
   ## (a no-op without a time covariate)
   .slope_newdata_guard(model, newdata)
 
-  ## Intercept-only one-way -> Hoffman-Kringle (the slope-free branch of the
-  ## anova-mls core), unless method = "ems-mls" asks for Francq.
-  if (.is_oneway_intercept_only(model) && method %in% c("auto", "anova-mls")) {
-    ## one-sided: Hoffman's (2010) published limit (see .montes_core)
-    out <- .montes_core(as.numeric(lme4::getME(model, "y")), time = NULL,
-                        lot = lme4::getME(model, "flist")[[1]], t0 = NULL,
-                        content = P, conf = conf, sides = sides)
-    out$singular <- .is_singular(model)   # report the fit's flag, like the other verbs
-    return(.unify_intervals(out, model, kind = "ti", P_value = P))  # carries anova-mls
-  }
-
   ## Fixed-slope single-obs / staggered -> Montes ANOVA; else EMS. `method` can
   ## force. (.m1_not_clean_balanced is the routing predicate; the coverage-verb
-  ## warning uses the narrower .m1_has_single_obs_lot.)
-  use_montes <- .m1_not_clean_balanced(model)
-  if (method == "anova-mls") {
-    if (!is_m1) {
-      .abort("method = \"anova-mls\" needs a fixed-slope (random intercept + ",
-             "fixed slope) model or an intercept-only one-way model.",
-             class = "reintervals_error_method")
+  ## warning uses the narrower .m1_has_single_obs_lot.) The route depends on the
+  ## model and `method` only, never on P / level / sides.
+  hk <- .is_oneway_intercept_only(model) && method %in% c("auto", "anova-mls")
+  use_montes <- FALSE
+  if (!hk) {
+    use_montes <- .m1_not_clean_balanced(model)
+    if (method == "anova-mls") {
+      if (!is_m1) {
+        .abort("method = \"anova-mls\" needs a fixed-slope (random intercept + ",
+               "fixed slope) model or an intercept-only one-way model.",
+               class = "reintervals_error_method")
+      }
+      use_montes <- TRUE
     }
-    use_montes <- TRUE
-  }
-  if (method == "ems-mls") use_montes <- FALSE
-
-  if (use_montes) {
-    out <- .ti_m1_montes_path(model, newdata = newdata, content = P, conf = conf,
-                              sides = sides, time_name = time_name)
-    return(.unify_intervals(out, model, kind = "ti", P_value = P))  # carries anova-mls
+    if (method == "ems-mls") use_montes <- FALSE
   }
 
-  ## one-sided EMS TI: the package's extension of Hoffman (2010), validated by
-  ## simulation (see ti_francq)
-  out <- .ti_ems(model, newdata = newdata, level = P, conf = conf, target = target,
-                 sides = sides)
-  .unify_intervals(out, model, kind = "ti", P_value = P, method_tag = "ems-mls")
+  ## the scalar engine of the route, for one (P, conf, sides) combination
+  native <- function(P, conf, sides) {
+    if (hk) {
+      ## Intercept-only one-way -> Hoffman-Kringle (the slope-free branch of the
+      ## anova-mls core), unless method = "ems-mls" asks for Francq.
+      ## one-sided: Hoffman's (2010) published limit (see .montes_core)
+      out <- .montes_core(as.numeric(lme4::getME(model, "y")), time = NULL,
+                          lot = lme4::getME(model, "flist")[[1]], t0 = NULL,
+                          content = P, conf = conf, sides = sides)
+      out$singular <- .is_singular(model)   # report the fit's flag, like the other verbs
+      out                                   # carries anova-mls
+    } else if (use_montes) {
+      .ti_m1_montes_path(model, newdata = newdata, content = P, conf = conf,
+                         sides = sides, time_name = time_name)  # carries anova-mls
+    } else {
+      ## one-sided EMS TI: the package's extension of Hoffman (2010), validated by
+      ## simulation (see ti_francq)
+      .ti_ems(model, newdata = newdata, level = P, conf = conf, target = target,
+              sides = sides)
+    }
+  }
+  tag <- if (hk || use_montes) NULL else "ems-mls"
+  combos <- .combo_grid(sides = sides, P = P, level = conf)
+  if (nrow(combos) == 1L) {
+    out <- native(P, conf, sides)
+    return(.unify_intervals(out, model, kind = "ti", P_value = P, method_tag = tag))
+  }
+  ## vectorised: loop the scalar engine over the combinations (warnings once)
+  blocks <- .loop_combos(nrow(combos), function(j)
+    native(combos$P[j], combos$level[j], combos$sides[j]))
+  P_row <- unlist(Map(function(b, p) rep(p, nrow(b)), blocks, combos$P))
+  out <- .bind_natives(blocks)
+  .unify_intervals(out, model, kind = "ti", P_value = P_row, method_tag = tag)
 }

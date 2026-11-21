@@ -230,7 +230,7 @@
 ## intervals_lmm, new_group_mean via .ngm_ems); random-slope -> the slope ports.
 .interval_lmm <- function(model, newdata = NULL,
                           kind = c("CI", "PI", "new_group_mean"),
-                          level = 0.95, sides = c("two.sided", "lower", "upper"),
+                          level = 0.95, sides = "two.sided",
                           control = lmm_interval_control(),
                           applied = .applied_arms(model, kind, control)) {
   if (!inherits(model, "lmerMod")) {
@@ -238,7 +238,10 @@
            class = "reintervals_error_input")
   }
   kind  <- match.arg(kind)
-  sides <- match.arg(sides)
+  ## vector level / sides (B3) reach this function only for the GPQ
+  ## new-group-mean arm, which evaluates every combination on one draw set;
+  ## every other route is called once per combination by .coverage_verb
+  sides <- .resolve_sides(sides)
   ## df arms (lmm_interval_control): each option is read only where it applies
   ci_df       <- .arm_value(control, "ci_df")
   slope_ci_df <- .arm_value(control, "slope_ci_df")
@@ -262,6 +265,7 @@
     ## t0: the GPQ arm uses common random numbers across t0)
     slope_ngm <- if (kind == "new_group_mean" && "slope_ngm_method" %in% names(applied))
       applied[["slope_ngm_method"]] else "reml"
+    if (slope_ngm != "gpq") .assert_scalar_combo(level, sides)
     if (slope_ngm != "reml") {
       return(.ngm_rs_arm(model, t0s, time_var, level = level, sides = sides,
                          arm = slope_ngm, control = control))
@@ -286,6 +290,7 @@
   }
 
   ## random intercept (incl. fixed-slope): EMS engine.
+  .assert_scalar_combo(level, sides)
   if (kind == "new_group_mean") {
     ngm <- if ("ngm_method" %in% names(applied)) applied[["ngm_method"]] else "package"
     if (ngm != "package") {
@@ -297,6 +302,15 @@
   out <- intervals_lmm(model, newdata = newdata, level = level, conf = level,
                        which = kind, ci_method = ci_df, pi_method = pi_df)
   .one_sided_t(out, level = level, sides = sides)
+}
+
+## Internal guard (B3): a scalar engine route received a vector level / sides.
+.assert_scalar_combo <- function(level, sides) {
+  if (length(level) != 1L || length(sides) != 1L) {
+    .abort("Internal: this interval route takes one level and one side per call.",
+           class = "reintervals_error_internal")
+  }
+  invisible(TRUE)
 }
 
 ## Random-slope CI df arm (slope_ci_df) applied to a vfun_components container

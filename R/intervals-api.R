@@ -37,7 +37,8 @@
 #' tag; the arm is read from these fields.
 #'
 #' @param seed Optional integer seed for the GPQ draws (reproducibility / GxP
-#'   traceability). With the default `NULL`, one integer seed is drawn from the
+#'   traceability). One seed and one draw set serve the whole call, including
+#'   every `P`, `level` and `sides` of a vectorised call. With the default `NULL`, one integer seed is drawn from the
 #'   caller's RNG stream (`sample.int(.Machine$integer.max, 1L)`), so a
 #'   `set.seed()` before the call still controls the result; this advances the
 #'   caller's stream by exactly one draw. The GPQ draws then run under that seed
@@ -253,26 +254,93 @@ lmm_interval_control <- function(seed = NULL, M = 20000L,
 
 ## alpha / level as a mutually-exclusive pair.
 ## Returns alpha. both -> error; neither -> 0.05; level -> 1 - level.
-.resolve_alpha <- function(alpha, level) {
+## vector = TRUE (the verbs, B3): alpha / level may be a vector of unique
+## values, each in (0, 1), no NA; a length-1 input is validated as before.
+.resolve_alpha <- function(alpha, level, vector = FALSE) {
   if (!is.null(alpha) && !is.null(level)) {
     .abort("Supply only one of `alpha` or `level` (they are the same quantity).",
            class = "reintervals_error_input")
   }
   if (is.null(alpha) && is.null(level)) return(0.05)
-  if (!is.null(level)) {
-    if (!is.numeric(level) || length(level) != 1L || is.na(level) ||
-          level <= 0 || level >= 1) {
-      .abort("`level` must be a single number in (0, 1).",
-             class = "reintervals_error_input")
-    }
-    return(1 - level)
-  }
-  if (!is.numeric(alpha) || length(alpha) != 1L || is.na(alpha) ||
-        alpha <= 0 || alpha >= 1) {
-    .abort("`alpha` must be a single number in (0, 1).",
+  nm <- if (!is.null(level)) "level" else "alpha"
+  v  <- if (!is.null(level)) level else alpha
+  if (vector && length(v) > 1L) {
+    .check_unit_vector(v, nm)
+  } else if (!is.numeric(v) || length(v) != 1L || is.na(v) || v <= 0 || v >= 1) {
+    .abort(sprintf("`%s` must be a single number in (0, 1)%s.", nm,
+                   if (vector) " or a vector of unique such numbers" else ""),
            class = "reintervals_error_input")
   }
-  alpha
+  if (!is.null(level)) 1 - level else alpha
+}
+
+## A vector of unique values strictly inside (0, 1), no NA (B3: P, level,
+## alpha of the verbs).
+.check_unit_vector <- function(v, nm) {
+  if (!is.numeric(v) || !length(v) || anyNA(v) || any(v <= 0 | v >= 1) ||
+        anyDuplicated(v)) {
+    .abort(sprintf(paste0("`%s` must be a number, or a vector of unique numbers, ",
+                          "strictly between 0 and 1 (no NA)."), nm),
+           class = "reintervals_error_input")
+  }
+  invisible(v)
+}
+
+## `sides` of a verb or engine (B3): one or more of "two.sided", "lower",
+## "upper" (unique, no NA; partial matching as match.arg), kept in the order
+## given. The formal default is the single value "two.sided"; the result
+## depends only on the value passed, never on whether it was supplied.
+.resolve_sides <- function(sides) {
+  choices <- c("two.sided", "lower", "upper")
+  if (!is.character(sides) || !length(sides) || anyNA(sides)) {
+    .abort("`sides` must be one or more of \"two.sided\", \"lower\", \"upper\".",
+           class = "reintervals_error_input")
+  }
+  out <- match.arg(sides, choices, several.ok = TRUE)
+  if (length(out) != length(sides) || anyDuplicated(out)) {
+    .abort("`sides` must be unique values among \"two.sided\", \"lower\", \"upper\".",
+           class = "reintervals_error_input")
+  }
+  out
+}
+
+## Run f(j) for every combination j of a vectorised call (B3, the engines
+## without a vectorised core), with each warning signalled once per call: a
+## warning whose class and message were already signalled by an earlier
+## combination is muffled (the first occurrence propagates in place).
+.loop_combos <- function(n, f) {
+  seen <- character(0)
+  withCallingHandlers(lapply(seq_len(n), f), warning = function(w) {
+    key <- paste(c(class(w), conditionMessage(w)), collapse = "\r")
+    if (key %in% seen) invokeRestart("muffleWarning")
+    seen <<- c(seen, key)
+  })
+}
+
+## Row-bind the native frames of the combinations of a vectorised call (B3).
+## Attributes: those in `per_row` (per-call scalars or per-t0 vectors of the
+## scalar engine that depend on the combination, e.g. the anova-mls C1, C2, U,
+## n_E) become row-aligned vectors; `df_fallback_reason` is the union; every
+## other attribute must be the same in every block (per call) and is kept once.
+.per_row_attrs <- c("n_E", "U", "C1", "C2")
+.bind_natives <- function(blocks, per_row = .per_row_attrs) {
+  out <- do.call(rbind, blocks); rownames(out) <- NULL
+  skip <- c("names", "row.names", "class")
+  nms <- unique(unlist(lapply(blocks, function(b) setdiff(names(attributes(b)), skip))))
+  for (a in nms) {
+    vals <- lapply(blocks, attr, a)
+    if (a %in% per_row) {
+      attr(out, a) <- unlist(Map(function(v, b) rep_len(v, nrow(b)), vals, blocks))
+    } else if (a == "df_fallback_reason") {
+      attr(out, a) <- unique(unlist(vals))
+    } else if (all(vapply(vals, identical, logical(1), vals[[1]]))) {
+      attr(out, a) <- vals[[1]]
+    } else {
+      .abort("Internal: attribute '", a, "' differs between the combinations ",
+             "of a vectorised call.", class = "reintervals_error_internal")
+    }
+  }
+  out
 }
 
 ## defensive front-door class check (clear error at the door).
@@ -382,7 +450,9 @@ lmm_interval_control <- function(seed = NULL, M = 20000L,
   core <- data.frame(
     type = .type_tag(kind), estimate = native$estimate,
     lower = native$lower, upper = native$upper,
-    level = level_out, P = rep(if (kind %in% c("ti", "TI")) P_value else NA_real_, n),
+    level = level_out,
+    ## P_value: one value, or one per row (a vectorised ti_lmm call)
+    P = rep_len(if (kind %in% c("ti", "TI")) P_value else NA_real_, n),
     sides = if ("sides" %in% names(native)) native$sides else rep("two.sided", n),
     method = method_out, design = design_out,
     singular = singular_out, boundary = pick("boundary"),
@@ -446,9 +516,12 @@ print.lmm_interval <- function(x, ...) {
 #'   `NULL` uses the first model-frame row.
 #' @param alpha,level The interval confidence, as a mutually-exclusive pair: give
 #'   at most one. `level` is `1 - alpha`; the default is `alpha = 0.05` (95%).
-#' @param sides `"two.sided"` (default), `"lower"`, or `"upper"`. A one-sided
-#'   interval keeps the two-sided interval's center, variance, and df and uses
-#'   `t_{1 - alpha}` in place of `t_{1 - alpha/2}`.
+#'   A vector of unique values (no `NA`) gives one block of rows per value (see
+#'   Value).
+#' @param sides `"two.sided"` (default), `"lower"` or `"upper"`, or a vector
+#'   of them (unique; one block of rows per side, see Value). A
+#'   one-sided interval keeps the two-sided interval's center, variance, and df
+#'   and uses `t_{1 - alpha}` in place of `t_{1 - alpha/2}`.
 #' @param method `"auto"` (default) chooses the algorithm by structure; one of
 #'   `"ems-mls"`, `"anova-mls"` (new-group mean only), `"reml"` (random-slope
 #'   models) forces that engine and errors if it is incompatible with the model.
@@ -458,8 +531,13 @@ print.lmm_interval <- function(x, ...) {
 #'   the model or verb is ignored and recorded as `"not_applicable"` in the
 #'   diagnostics).
 #'
-#' @return An `lmm_interval` object (a data frame), one row per evaluation point,
-#'   with columns, in order:
+#' @return An `lmm_interval` object (a data frame), one row per evaluation point
+#'   for scalar `level` and `sides` (and `P`, for [ti_lmm()]). With vector
+#'   arguments there is one row per combination of evaluation point x `sides` x
+#'   `P` x `level`, the full cross product, in this order: the evaluation point
+#'   varies fastest, then `sides`, then `P`, then `level`, each in the order
+#'   given; the `sides`, `P` and `level` columns identify each row, and every
+#'   per-row diagnostic is row-aligned. Columns, in order:
 #'   \itemize{
 #'     \item the eval-point column(s), named by the actual model predictor(s)
 #'       (e.g. the time covariate for a slope model, or each `newdata` column);
@@ -500,12 +578,14 @@ print.lmm_interval <- function(x, ...) {
 #' ci_lmm(fm, newdata = data.frame(Days = 0))
 #' @export
 ci_lmm <- function(model, newdata = NULL, alpha = NULL, level = NULL,
-                   sides = c("two.sided", "lower", "upper"),
+                   sides = "two.sided",
                    method = "auto", control = lmm_interval_control()) {
   .assert_lmm(model)
-  sides <- match.arg(sides)
+  ## B3: level / alpha and sides may be vectors (full cross product with the
+  ## evaluation points)
+  sides <- .resolve_sides(sides)
   ## boundary: public alpha/level -> internal coverage `level` (1 - alpha).
-  lvl <- 1 - .resolve_alpha(alpha, level)
+  lvl <- 1 - .resolve_alpha(alpha, level, vector = TRUE)
   .coverage_verb(model, newdata, kind = "CI", level = lvl, sides = sides,
                  method = method, control = control)
 }
@@ -536,12 +616,14 @@ ci_lmm <- function(model, newdata = NULL, alpha = NULL, level = NULL,
 #' pi_lmm(fm, newdata = data.frame(Days = 0))
 #' @export
 pi_lmm <- function(model, newdata = NULL, alpha = NULL, level = NULL,
-                   sides = c("two.sided", "lower", "upper"),
+                   sides = "two.sided",
                    method = "auto", control = lmm_interval_control()) {
   .assert_lmm(model)
-  sides <- match.arg(sides)
+  ## B3: level / alpha and sides may be vectors (full cross product with the
+  ## evaluation points)
+  sides <- .resolve_sides(sides)
   ## boundary: public alpha/level -> internal coverage `level` (1 - alpha).
-  lvl <- 1 - .resolve_alpha(alpha, level)
+  lvl <- 1 - .resolve_alpha(alpha, level, vector = TRUE)
   .coverage_verb(model, newdata, kind = "PI", level = lvl, sides = sides,
                  method = method, control = control)
 }
@@ -627,13 +709,15 @@ pi_lmm <- function(model, newdata = NULL, alpha = NULL, level = NULL,
 #' new_group_mean_lmm(fm, newdata = data.frame(Days = 5))
 #' @export
 new_group_mean_lmm <- function(model, newdata = NULL, alpha = NULL, level = NULL,
-                               sides = c("two.sided", "lower", "upper"),
+                               sides = "two.sided",
                                method = "auto",
                                control = lmm_interval_control()) {
   .assert_lmm(model)
-  sides <- match.arg(sides)
+  ## B3: level / alpha and sides may be vectors (full cross product with the
+  ## evaluation points)
+  sides <- .resolve_sides(sides)
   ## boundary: public alpha/level -> internal coverage `level` (1 - alpha).
-  lvl <- 1 - .resolve_alpha(alpha, level)
+  lvl <- 1 - .resolve_alpha(alpha, level, vector = TRUE)
   .coverage_verb(model, newdata, kind = "new_group_mean", level = lvl,
                  sides = sides, method = method, control = control)
 }
@@ -703,8 +787,23 @@ new_group_mean_lmm <- function(model, newdata = NULL, alpha = NULL, level = NULL
   }
   applied <- .applied_arms(model, kind, control)
   .warn_unvalidated(applied)
-  out <- .interval_lmm(model, newdata = newdata, kind = kind, level = level,
-                       sides = sides, control = control, applied = applied)
+  ## B3: one row per evaluation point x sides x level (evaluation point
+  ## fastest, then sides, then level). The GPQ new-group-mean arm evaluates
+  ## every combination on one draw set (one call); the other engines loop
+  ## their scalar code over the combinations, with warnings once per call.
+  combos <- .combo_grid(sides = sides, level = level)
+  gpq_vec <- kind == "new_group_mean" &&
+    identical(unname(applied["slope_ngm_method"]), "gpq")
+  if (nrow(combos) == 1L || gpq_vec) {
+    out <- .interval_lmm(model, newdata = newdata, kind = kind, level = level,
+                         sides = sides, control = control, applied = applied)
+  } else {
+    blocks <- .loop_combos(nrow(combos), function(j)
+      .interval_lmm(model, newdata = newdata, kind = kind,
+                    level = combos$level[j], sides = combos$sides[j],
+                    control = control, applied = applied))
+    out <- .bind_natives(blocks)
+  }
   .warn_df_fallback(out, model, kind, applied)
   ## the df arm of every option: the value applied here, or "not_applicable"
   for (r in names(rules <- .arm_rules(applied))) out[[r]] <- rules[[r]]
@@ -723,8 +822,9 @@ new_group_mean_lmm <- function(model, newdata = NULL, alpha = NULL, level = NULL
 #' @param interval Which interval: `"confidence"`, `"prediction"`, `"tolerance"`,
 #'   or `"new_group_mean"`.
 #' @param P,over Content proportion and tolerance target; honored only for
-#'   `interval = "tolerance"` (forwarded to [ti_lmm()]). Supplying a non-default
-#'   `P`/`over` with any other `interval` is an error.
+#'   `interval = "tolerance"` (forwarded to [ti_lmm()]; `P` may be a vector,
+#'   as there). Supplying a non-default `P`/`over` with any other `interval` is
+#'   an error.
 #' @inherit ci_lmm return
 #' @seealso [ci_lmm()], [pi_lmm()], [ti_lmm()], [new_group_mean_lmm()],
 #'   [reintervals-models].
@@ -738,11 +838,11 @@ lmm_predict <- function(model,
                         newdata = NULL, P = 0.95,
                         over = c("observation", "group_mean"),
                         alpha = NULL, level = NULL,
-                        sides = c("two.sided", "lower", "upper"),
+                        sides = "two.sided",
                         method = "auto", control = lmm_interval_control()) {
   .assert_lmm(model)
   interval <- match.arg(interval)
-  sides    <- match.arg(sides)
+  sides    <- .resolve_sides(sides)
   over     <- match.arg(over)
   if (interval != "tolerance" && (!isTRUE(all.equal(P, 0.95)) ||
         over != "observation")) {

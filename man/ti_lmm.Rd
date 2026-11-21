@@ -11,7 +11,7 @@ ti_lmm(
   over = c("observation", "group_mean"),
   alpha = NULL,
   level = NULL,
-  sides = c("two.sided", "lower", "upper"),
+  sides = "two.sided",
   method = "auto",
   control = lmm_interval_control()
 )
@@ -23,7 +23,8 @@ ti_lmm(
 supplies the evaluation point(s). \code{NULL} uses the first model-frame row.}
 
 \item{P}{Content proportion (the population fraction covered). Default 0.95
-(pharma stability work typically passes \code{P = 0.99}).}
+(pharma stability work typically passes \code{P = 0.99}). A vector of unique
+values (no \code{NA}) gives one block of rows per value (see Value).}
 
 \item{over}{What the interval covers: \code{"observation"} (default; a proportion
 \code{P} of future observations --- the ordinary tolerance interval) or
@@ -31,9 +32,11 @@ supplies the evaluation point(s). \code{NULL} uses the first model-frame row.}
 tolerance interval).}
 
 \item{alpha, level}{The confidence, as a mutually-exclusive pair: give at most
-one. \code{level} is \code{1 - alpha}; default \code{alpha = 0.05}.}
+one. \code{level} is \code{1 - alpha}; default \code{alpha = 0.05}. A vector of unique
+values gives one block of rows per value.}
 
-\item{sides}{\code{"two.sided"} (default), \code{"lower"}, or \code{"upper"}. One-sided
+\item{sides}{\code{"two.sided"} (default), \code{"lower"} or \code{"upper"}, or a vector
+of them (unique; one block of rows per side). One-sided
 tolerance limits: \code{anova-mls} uses Hoffman's (2010) one-sided limit;
 \code{ems-mls} uses the package's extension of it, validated by simulation;
 random-slope models use the one-sided GPQ limit. See \link{reintervals-models}.}
@@ -47,8 +50,13 @@ models. \code{"reml-mls"} is defunct (removed in 1.0.0) and errors.}
 \item{control}{\code{\link[=lmm_interval_control]{lmm_interval_control()}} tuning (GPQ seed / M).}
 }
 \value{
-An \code{lmm_interval} object (a data frame), one row per evaluation point,
-with columns, in order:
+An \code{lmm_interval} object (a data frame), one row per evaluation point
+for scalar \code{level} and \code{sides} (and \code{P}, for \code{\link[=ti_lmm]{ti_lmm()}}). With vector
+arguments there is one row per combination of evaluation point x \code{sides} x
+\code{P} x \code{level}, the full cross product, in this order: the evaluation point
+varies fastest, then \code{sides}, then \code{P}, then \code{level}, each in the order
+given; the \code{sides}, \code{P} and \code{level} columns identify each row, and every
+per-row diagnostic is row-aligned. Columns, in order:
 \itemize{
 \item the eval-point column(s), named by the actual model predictor(s)
 (e.g. the time covariate for a slope model, or each \code{newdata} column);
@@ -129,7 +137,21 @@ computation, not statistical uncertainty: a limit within approximately 2 MC
 SE of a specification limit has a seed-dependent pass/fail. In a sleepstudy
 check at \code{M = 2000} the sectioning estimate ran about 8\% below the observed
 run-to-run SD (sections of 100 draws); the gap is expected to shrink at the
-default \code{M = 20000}. The GPQ route requires
+default \code{M = 20000}.
+
+\strong{Vectorised calls.} \code{P}, \code{level} (or \code{alpha}) and \code{sides} accept vectors;
+the result is their full cross product with the time points (see Value).
+On the GPQ route one call draws the pivots once and solves for the
+between-lot variance once per time point, then evaluates every content,
+confidence and side on those same draws, each row with its own Monte-Carlo
+SE. With an explicit \code{seed}, each row is identical to the scalar call with
+that \code{P}, \code{level} and \code{sides}. With \code{seed = NULL} a vectorised call draws
+one seed (one draw set) for all its rows, whereas separate scalar calls each
+draw their own seed, so the equality holds only with an explicit seed. The
+closed-form engines compute each combination with their scalar code.
+Warnings are signalled once per call.
+
+The GPQ route requires
 every lot to have at least two distinct time points and otherwise signals
 an error of class \code{reintervals_error_time_points}. The GPQ interval works
 from the per-lot OLS fits of the raw data and ignores the fitted

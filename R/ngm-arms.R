@@ -235,8 +235,8 @@
     g <- .gpq_ngm_core(yts$y, yts$time, yts$batch, t0 = t0s, level = level,
                        sides = sides, M = control$M, seed = control$seed)
     out <- data.frame(time = g$time, type = "new_group_mean", estimate = g$estimate,
-                      lower = g$lower, upper = g$upper, level = level,
-                      df = NA_real_, df_rule = "gpq", sides = sides,
+                      lower = g$lower, upper = g$upper, level = g$level,
+                      df = NA_real_, df_rule = "gpq", sides = g$sides,
                       design = .slope_design(model), method = "reml",
                       singular = singular, boundary = NA, vg_floored = NA,
                       tau2_med = g$tau2_med, s2e_med = g$s2e_med,

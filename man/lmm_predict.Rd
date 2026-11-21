@@ -12,7 +12,7 @@ lmm_predict(
   over = c("observation", "group_mean"),
   alpha = NULL,
   level = NULL,
-  sides = c("two.sided", "lower", "upper"),
+  sides = "two.sided",
   method = "auto",
   control = lmm_interval_control()
 )
@@ -27,13 +27,16 @@ or \code{"new_group_mean"}.}
 supplies the evaluation point(s). \code{NULL} uses the first model-frame row.}
 
 \item{P, over}{Content proportion and tolerance target; honored only for
-\code{interval = "tolerance"} (forwarded to \code{\link[=ti_lmm]{ti_lmm()}}). Supplying a non-default
-\code{P}/\code{over} with any other \code{interval} is an error.}
+\code{interval = "tolerance"} (forwarded to \code{\link[=ti_lmm]{ti_lmm()}}; \code{P} may be a vector,
+as there). Supplying a non-default \code{P}/\code{over} with any other \code{interval} is
+an error.}
 
 \item{alpha, level}{The confidence, as a mutually-exclusive pair: give at most
-one. \code{level} is \code{1 - alpha}; default \code{alpha = 0.05}.}
+one. \code{level} is \code{1 - alpha}; default \code{alpha = 0.05}. A vector of unique
+values gives one block of rows per value.}
 
-\item{sides}{\code{"two.sided"} (default), \code{"lower"}, or \code{"upper"}. One-sided
+\item{sides}{\code{"two.sided"} (default), \code{"lower"} or \code{"upper"}, or a vector
+of them (unique; one block of rows per side). One-sided
 tolerance limits: \code{anova-mls} uses Hoffman's (2010) one-sided limit;
 \code{ems-mls} uses the package's extension of it, validated by simulation;
 random-slope models use the one-sided GPQ limit. See \link{reintervals-models}.}
@@ -47,8 +50,13 @@ models. \code{"reml-mls"} is defunct (removed in 1.0.0) and errors.}
 \item{control}{\code{\link[=lmm_interval_control]{lmm_interval_control()}} tuning (GPQ seed / M).}
 }
 \value{
-An \code{lmm_interval} object (a data frame), one row per evaluation point,
-with columns, in order:
+An \code{lmm_interval} object (a data frame), one row per evaluation point
+for scalar \code{level} and \code{sides} (and \code{P}, for \code{\link[=ti_lmm]{ti_lmm()}}). With vector
+arguments there is one row per combination of evaluation point x \code{sides} x
+\code{P} x \code{level}, the full cross product, in this order: the evaluation point
+varies fastest, then \code{sides}, then \code{P}, then \code{level}, each in the order
+given; the \code{sides}, \code{P} and \code{level} columns identify each row, and every
+per-row diagnostic is row-aligned. Columns, in order:
 \itemize{
 \item the eval-point column(s), named by the actual model predictor(s)
 (e.g. the time covariate for a slope model, or each \code{newdata} column);

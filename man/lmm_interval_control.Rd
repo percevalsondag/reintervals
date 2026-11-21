@@ -16,7 +16,8 @@ lmm_interval_control(
 }
 \arguments{
 \item{seed}{Optional integer seed for the GPQ draws (reproducibility / GxP
-traceability). With the default \code{NULL}, one integer seed is drawn from the
+traceability). One seed and one draw set serve the whole call, including
+every \code{P}, \code{level} and \code{sides} of a vectorised call. With the default \code{NULL}, one integer seed is drawn from the
 caller's RNG stream (\code{sample.int(.Machine$integer.max, 1L)}), so a
 \code{set.seed()} before the call still controls the result; this advances the
 caller's stream by exactly one draw. The GPQ draws then run under that seed

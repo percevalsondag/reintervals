@@ -874,6 +874,43 @@ the time of writing.
   `new_group_mean_lmm` before 1.0.0. (Done now for the `ti_lmm` @details GPQ
   paragraph and the `lmm_interval_control` `slope_ngm_method` entry.)
 
+**B3 status: DONE on `dev`** (vectorised P / level / sides; prereg §6 "one
+pivot draw set per dataset"; API freeze item, Percy approves). Not committed
+at the time of writing. Plumbing only: no interval's mathematics changed.
+- API: `ti_lmm()` takes vector `P`, `level` / `alpha`, `sides`; `ci_lmm()`,
+  `pi_lmm()`, `new_group_mean_lmm()`, `lmm_predict()` vector `level` / `alpha`,
+  `sides` (unique, no NA, each validated as before; `over` scalar). Rows: the
+  full cross product, t0 (evaluation point) fastest, then sides, then P, then
+  level, each in the order given. Scalar inputs give the 0.2.0.9000 output
+  exactly: 1352 / 1353 scalar calls `identical()` (attributes included, errors
+  by message) to a `7250dfb` build; the one difference is the internal
+  `.gpq_ngm_core` frame, which gained `level` / `sides` columns. The formal
+  default of `sides` is the single `"two.sided"` in every verb and engine
+  (`.resolve_sides()`; no code branches on `missing(sides)`), so an explicit
+  vector always means those sides.
+- Item 0 finding: in a GPQ call only the final step depends on (P, level,
+  side): the content quantile `zP` / `zP2`, the one-sided pivot
+  `Rdelta = Rtheta -/+ zP sqrt(content_var)`, and the quantile at `conf` /
+  `1 - conf` (NGM: `alpha/2`, `alpha`). The pivots (U, Q, Z, Z_new), the tau2
+  solve, `Rtheta`, `content_var` and `Rzeta` are not. Nothing else depends on
+  them.
+- Engines: `.gpq_core` / `.gpq_ngm_core` draw once, then `.gpq_eval_t0` runs
+  `.gpq_theta_draws` (tau2 solve) once per t0 and the quantile step per
+  combination (`.combo_grid`). Every other engine loops its scalar code
+  (`.loop_combos`: a warning with the same class and message as an earlier
+  combination's is muffled, so engine-internal warnings are once per call;
+  `.bind_natives`: the anova-mls `n_E`, `U`, `C1`, `C2` become row-aligned,
+  other attributes stay per call). gpq_seed, rng_kind, mc_sections per call.
+- Tests: test-vectorised.R (identity on 7 fits: one-way, nested, crossed,
+  fixed slope balanced, fixed slope single-obs, RS UN, RS `||`; CI / PI / NGM
+  x all 16 arm values of the 5 options; TI on 11 route cases incl. both GPQ
+  targets, P = c(0.90, 0.95, 0.99) x level = c(0.90, 0.95) x 3 sides x 3 t0;
+  lmm_predict; order; seed = NULL; warnings once; validation).
+- Timing (sleepstudy RS UN, K = 18, t0 = 0, 5, 9, M = 20000; loaded machine,
+  median of 3): 24 scalar TI calls 24.35 s; 2 vectorised TI calls + 1
+  vectorised GPQ NGM 3.20 s (ratio 7.6; the 2 TI calls alone 2.14 s, and they
+  return 36 rows per target against the 12 asked of the scalar calls).
+
 Current control: intervals-api.R:34-45 (`seed`, `M`, `ci_df`). Only `ci_df`
 reaches the engines (intervals-api.R:395-397 → slope-intervals.R:192-201 →
 intervals-lmm.R:45-47). **Plumbing change shared by all arms:** pass the whole
@@ -1105,6 +1142,10 @@ defaults unchanged unless stated):
    `2e09497` build, 16/16 limits `identical()`).
 9. Step 13 (simstudy) chooses the defaults for the B arms; flip the defaults in one
    commit with NEWS.
+   - **Harness (B3):** the step-13 harness calls each verb once per dataset
+     and target with vector `P` / `level` / `sides` (one GPQ draw set per
+     dataset and target, prereg §6), not once per (P, level, side): B3 cut the
+     GPQ cost of the timing pilot's 27 calls per dataset to 3.
    - **Open:** Random-slope TI with single-time-point lots is unsupported in
      1.0.0 (A1 + A2). Quantify in step 13 how often this occurs in the G-grids'
      staggered designs, and evaluate the fallback advice (random intercept +
