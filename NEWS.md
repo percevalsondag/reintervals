@@ -117,7 +117,9 @@
     prediction of a new group: `W = V_F` plus every between-group variance
     component, Satterthwaite df on the variance scale; it reproduces SAS
     DDFM=SATTERTH on the package's SAS fixtures; NA limits and
-    `ngm_df_failed = TRUE`, no fallback, when the df fails); `"hts"` (Higgins,
+    `ngm_df_failed = TRUE`, no fallback, only when the df cannot be computed
+    or is non-finite or not positive; a positive df below 1 is used as is);
+    `"hts"` (Higgins,
     Thompson & Spiegelhalter 2009, with the REML between-group variance;
     intercept-only one-way, `I >= 3`); `"classical"` (Hahn & Meeker 1991 on the
     group means; intercept-only one-way, balanced, where it equals the default).
@@ -126,7 +128,9 @@
     lot: the default's center and variance `V_F + V_G`, with the Satterthwaite
     df of the whole `V_F + V_G` instead of `V_G` alone; it reproduces SAS
     DDFM=SATTERTH on the package's SAS fixtures; NA limits and
-    `ngm_df_failed = TRUE`, no fallback, when the df fails); `"gpq"` (a
+    `ngm_df_failed = TRUE`, no fallback, only when the df cannot be computed
+    or is non-finite or not positive; a positive df below 1 is used as is);
+    `"gpq"` (a
     generalized prediction interval on the GPQ tolerance-interval pivots, with
     the GPQ seed contract, common random numbers across `t0` and Monte-Carlo
     SE; the tolerance-interval draws are unchanged); `"fv-anova"`
@@ -161,6 +165,28 @@
   through `ti_lmm()`.
 
 ## Bug fixes
+
+* The default random-slope new-group-mean interval (and the random-slope
+  confidence and prediction intervals) could return `(-Inf, Inf)` when the
+  Hessian-Satterthwaite df was a tiny positive number (for example 0.004 on a
+  three-lot fit with an independent intercept/slope structure). Every default
+  df rule now applies one rule: a Satterthwaite df that is non-finite **or
+  below 1** falls back to the containment df, reported as
+  `df_rule = "containment"` (`df_method = "containment"` for the
+  random-intercept CI) with the reason `"df below 1"` in the
+  `reintervals_warning_df_fallback` warning. This was already the rule for the
+  random-intercept confidence interval; it is now also the rule for the
+  random-slope CI / PI / new-group-mean dfs (which fell back only on a
+  non-finite or non-positive df), the random-intercept prediction interval's
+  Francq generalized-Satterthwaite df (which fell back only when the Hessian
+  route was unusable) and the crossed new-group-mean Satterthwaite df (which
+  fell back only on a non-finite or non-positive df). No fit in the package's
+  tests or fixtures has a df below 1, so no pinned result changes.
+* The `"broad-inference"` new-group-mean arms (`ngm_method`,
+  `slope_ngm_method`) returned `NA` limits whenever the df was below 1. They
+  now return `NA` (with `ngm_df_failed = TRUE`) only when the df cannot be
+  computed or is non-finite or not positive, and otherwise use the fractional
+  df in `qt()`.
 
 * `ti_gpq_raw(sides = "lower")` / `"upper"` reported `sides = "two.sided"` in
   its output (the limits themselves were one-sided and correct). It now uses

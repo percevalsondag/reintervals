@@ -101,10 +101,13 @@ mean squares, synthesis coefficients when unbalanced) with the top
 factor's df \code{A - 1} (\code{"top-factor"}, \code{"ems-mls"});
 \item crossed with interaction: the same \code{W}, with a Satterthwaite df in
 which \code{V_F} is attached to the two main-effect terms
-(\code{"satterthwaite-vf"}, \code{"ems-mls"});
+(\code{"satterthwaite-vf"}, \code{"ems-mls"}), falling back to the containment df
+\code{min(A, B) - 1} (\code{"containment"}) when that df is undefined or below 1;
 \item random slope: the REML-based t-interval
 \eqn{\mu(t_0) \pm t_{\nu_G}\sqrt{V_F + V_G}} (\code{"reml"}), with
-\eqn{\nu_G} the Satterthwaite df of \eqn{V_G} alone (SAS DDFM=SATTERTH
+\eqn{\nu_G} the Satterthwaite df of \eqn{V_G} alone, falling back to
+the containment df \code{K - 2} (\code{"containment"}) when it is unavailable or
+below 1 (SAS DDFM=SATTERTH
 uses the df of \eqn{V_F + V_G}, which is larger; that df is the
 validation arm \code{slope_ngm_method = "broad-inference"}).
 }

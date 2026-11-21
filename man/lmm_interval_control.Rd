@@ -48,7 +48,7 @@ random-intercept models: \code{"satterthwaite"} (default; Satterthwaite with the
 observed-information covariance of the variance components, falling back to
 the SAS-style containment df --- e.g. \code{A - 1} for a one-way or nested
 design, \code{min(A, B) - 1} for a crossed one --- when it is unavailable, as on
-a singular fit) or \code{"kenward-roger"} (Kenward & Roger 1997 as implemented
+a singular fit, or below 1) or \code{"kenward-roger"} (Kenward & Roger 1997 as implemented
 in \pkg{pbkrtest}: the standard error uses the KR-adjusted covariance
 \code{pbkrtest::vcovAdj()} and the df is the KR df, \code{pbkrtest::Lb_ddf()};
 requires \pkg{pbkrtest} and errors if it is not installed --- never a
@@ -67,7 +67,8 @@ Not applied to random-slope models (see \code{slope_ci_df}).}
 (\code{\link[=ci_lmm]{ci_lmm()}}) on random-slope models: \code{"hessian-satterthwaite"} (default;
 the generalized Satterthwaite df from the observed-information covariance
 of the variance components, falling back to \code{K - 2}, \code{K} lots, when it is
-unavailable; reported as \code{df_rule = "satterthwaite"} / \code{"containment"}).
+unavailable or below 1; the same fallback applies to the random-slope
+prediction and new-group-mean dfs; reported as \code{df_rule = "satterthwaite"} / \code{"containment"}).
 Validation arms: \code{"kenward-roger"} (\pkg{pbkrtest} \code{vcovAdj()} +
 \code{Lb_ddf()} on the random-slope fit; the standard error uses the
 KR-adjusted covariance; requires \pkg{pbkrtest}) and \code{"k-minus-1"}
@@ -78,7 +79,7 @@ Not applied to random-intercept models (see \code{ci_df}).}
 \item{pi_df}{Denominator-df rule for the prediction interval (\code{\link[=pi_lmm]{pi_lmm()}}) on
 random-intercept models: \code{"francq-satterthwaite"} (default; the Francq et
 al. 2019 generalized Satterthwaite df, with the containment df as its
-singular-fit fallback) or the validation arm \code{"containment"} (the same
+fallback on a singular fit or a df below 1) or the validation arm \code{"containment"} (the same
 variance with the containment df of \code{ci_df = "containment"}). There is no
 Kenward-Roger prediction interval: KR adjusts fixed-effect contrasts only,
 and the prediction variance includes estimated variance components. Not
@@ -91,9 +92,12 @@ see \code{\link[=new_group_mean_lmm]{new_group_mean_lmm()}}) or a validation arm
 group, McLean, Sanders & Stroup 1991: \code{W = V_F} plus the REML estimates of
 every between-group variance component, with the Satterthwaite df
 \verb{2 W^2 / (g' A g)}, \code{g} the gradient of \code{W} in the variance components and
-\code{A} their observed-information covariance, as DDFM=SATTERTH; when that df is
-not finite or below 1 the limits are \code{NA} and \code{ngm_df_failed = TRUE}, with
-no fallback; every random-intercept design the default accepts),
+\code{A} their observed-information covariance, as DDFM=SATTERTH; when that df
+cannot be computed (no covariance of the variance components, e.g. a
+singular fit) or is not finite or not positive, the limits are \code{NA} and
+\code{ngm_df_failed = TRUE}, with no fallback; any positive df, including one
+below 1, is used as is in \code{qt()}; every random-intercept design the default
+accepts),
 \code{"hts"} (Higgins, Thompson & Spiegelhalter 2009 prediction interval,
 \verb{mu +/- t_\{I-2\} sqrt(sigma2_L + V_F)}, with the REML between-group variance
 in place of their DerSimonian-Laird \code{tau^2}; intercept-only one-way models
@@ -110,8 +114,10 @@ a new lot, McLean, Sanders & Stroup 1991: the same center and variance
 \verb{2 W^2 / (g' A g)}, \code{g} the gradient of \code{V_F + V_G} in the
 variance-covariance parameters and \code{A} their observed-information
 covariance, as DDFM=SATTERTH; \code{"reml"} uses the df of \code{V_G} alone; when the
-df is not finite or below 1 the limits are \code{NA} and \code{ngm_df_failed = TRUE},
-with no fallback; it accepts lots with a single time point, as the
+df cannot be computed (no covariance of the variance parameters, e.g. a
+singular fit) or is not finite or not positive, the limits are \code{NA} and
+\code{ngm_df_failed = TRUE}, with no fallback; any positive df, including one
+below 1, is used as is in \code{qt()}; it accepts lots with a single time point, as the
 default does), \code{"gpq"} (a generalized prediction interval on the tolerance
 interval's pivots, Oliva-Aviles & Hauser 2025 with the generalized
 prediction construction of Krishnamoorthy & Mathew 2009:

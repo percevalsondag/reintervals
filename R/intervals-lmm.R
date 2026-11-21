@@ -22,7 +22,7 @@
 #'   `NULL` (default) uses `ci_method`.
 #' @param ci_method CI df rule: `"satterthwaite"` (default; Satterthwaite with
 #'   the observed-information covariance of the variance components, falling
-#'   back to the SAS-style containment df when it is unavailable) or
+#'   back to the SAS-style containment df when it is unavailable or below 1) or
 #'   `"kenward-roger"` (requires \pkg{pbkrtest}; errors otherwise): the KR
 #'   (1997) df with the KR-adjusted covariance `pbkrtest::vcovAdj()` for the
 #'   standard error.
@@ -126,7 +126,8 @@ intervals_lmm <- function(model, newdata = NULL, level = 0.95, conf = 0.95,
   if ("CI" %in% which && is.null(ci_df) && ci_method == "satterthwaite" &&
         any(blocks$CI$df_method == "containment")) {
     attr(out, "df_fallback_reason") <- c(attr(out, "df_fallback_reason"),
-      if (is.null(theta$cov_theta)) theta$fallback_reason else "non-finite df")
+      if (is.null(theta$cov_theta)) theta$fallback_reason else
+        unique(unlist(lapply(dd, function(x) x$reason))))
   }
   ## set whether or not theta was computed (a CI-only call skips .theta_cov), so
   ## the CI reports lme4::isSingular() like the PI / new-group-mean / TI.

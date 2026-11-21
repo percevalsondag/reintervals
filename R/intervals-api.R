@@ -67,7 +67,7 @@
 #'   observed-information covariance of the variance components, falling back to
 #'   the SAS-style containment df --- e.g. `A - 1` for a one-way or nested
 #'   design, `min(A, B) - 1` for a crossed one --- when it is unavailable, as on
-#'   a singular fit) or `"kenward-roger"` (Kenward & Roger 1997 as implemented
+#'   a singular fit, or below 1) or `"kenward-roger"` (Kenward & Roger 1997 as implemented
 #'   in \pkg{pbkrtest}: the standard error uses the KR-adjusted covariance
 #'   `pbkrtest::vcovAdj()` and the df is the KR df, `pbkrtest::Lb_ddf()`;
 #'   requires \pkg{pbkrtest} and errors if it is not installed --- never a
@@ -85,7 +85,8 @@
 #'   ([ci_lmm()]) on random-slope models: `"hessian-satterthwaite"` (default;
 #'   the generalized Satterthwaite df from the observed-information covariance
 #'   of the variance components, falling back to `K - 2`, `K` lots, when it is
-#'   unavailable; reported as `df_rule = "satterthwaite"` / `"containment"`).
+#'   unavailable or below 1; the same fallback applies to the random-slope
+#'   prediction and new-group-mean dfs; reported as `df_rule = "satterthwaite"` / `"containment"`).
 #'   Validation arms: `"kenward-roger"` (\pkg{pbkrtest} `vcovAdj()` +
 #'   `Lb_ddf()` on the random-slope fit; the standard error uses the
 #'   KR-adjusted covariance; requires \pkg{pbkrtest}) and `"k-minus-1"`
@@ -95,7 +96,7 @@
 #' @param pi_df Denominator-df rule for the prediction interval ([pi_lmm()]) on
 #'   random-intercept models: `"francq-satterthwaite"` (default; the Francq et
 #'   al. 2019 generalized Satterthwaite df, with the containment df as its
-#'   singular-fit fallback) or the validation arm `"containment"` (the same
+#'   fallback on a singular fit or a df below 1) or the validation arm `"containment"` (the same
 #'   variance with the containment df of `ci_df = "containment"`). There is no
 #'   Kenward-Roger prediction interval: KR adjusts fixed-effect contrasts only,
 #'   and the prediction variance includes estimated variance components. Not
@@ -107,9 +108,12 @@
 #'   group, McLean, Sanders & Stroup 1991: `W = V_F` plus the REML estimates of
 #'   every between-group variance component, with the Satterthwaite df
 #'   `2 W^2 / (g' A g)`, `g` the gradient of `W` in the variance components and
-#'   `A` their observed-information covariance, as DDFM=SATTERTH; when that df is
-#'   not finite or below 1 the limits are `NA` and `ngm_df_failed = TRUE`, with
-#'   no fallback; every random-intercept design the default accepts),
+#'   `A` their observed-information covariance, as DDFM=SATTERTH; when that df
+#'   cannot be computed (no covariance of the variance components, e.g. a
+#'   singular fit) or is not finite or not positive, the limits are `NA` and
+#'   `ngm_df_failed = TRUE`, with no fallback; any positive df, including one
+#'   below 1, is used as is in `qt()`; every random-intercept design the default
+#'   accepts),
 #'   `"hts"` (Higgins, Thompson & Spiegelhalter 2009 prediction interval,
 #'   `mu +/- t_{I-2} sqrt(sigma2_L + V_F)`, with the REML between-group variance
 #'   in place of their DerSimonian-Laird `tau^2`; intercept-only one-way models
@@ -125,8 +129,10 @@
 #'   `2 W^2 / (g' A g)`, `g` the gradient of `V_F + V_G` in the
 #'   variance-covariance parameters and `A` their observed-information
 #'   covariance, as DDFM=SATTERTH; `"reml"` uses the df of `V_G` alone; when the
-#'   df is not finite or below 1 the limits are `NA` and `ngm_df_failed = TRUE`,
-#'   with no fallback; it accepts lots with a single time point, as the
+#'   df cannot be computed (no covariance of the variance parameters, e.g. a
+#'   singular fit) or is not finite or not positive, the limits are `NA` and
+#'   `ngm_df_failed = TRUE`, with no fallback; any positive df, including one
+#'   below 1, is used as is in `qt()`; it accepts lots with a single time point, as the
 #'   default does), `"gpq"` (a generalized prediction interval on the tolerance
 #'   interval's pivots, Oliva-Aviles & Hauser 2025 with the generalized
 #'   prediction construction of Krishnamoorthy & Mathew 2009:
@@ -659,10 +665,13 @@ pi_lmm <- function(model, newdata = NULL, alpha = NULL, level = NULL,
 #'     factor's df `A - 1` (`"top-factor"`, `"ems-mls"`);
 #'   \item crossed with interaction: the same `W`, with a Satterthwaite df in
 #'     which `V_F` is attached to the two main-effect terms
-#'     (`"satterthwaite-vf"`, `"ems-mls"`);
+#'     (`"satterthwaite-vf"`, `"ems-mls"`), falling back to the containment df
+#'     `min(A, B) - 1` (`"containment"`) when that df is undefined or below 1;
 #'   \item random slope: the REML-based t-interval
 #'     \eqn{\mu(t_0) \pm t_{\nu_G}\sqrt{V_F + V_G}} (`"reml"`), with
-#'     \eqn{\nu_G} the Satterthwaite df of \eqn{V_G} alone (SAS DDFM=SATTERTH
+#'     \eqn{\nu_G} the Satterthwaite df of \eqn{V_G} alone, falling back to
+#'     the containment df `K - 2` (`"containment"`) when it is unavailable or
+#'     below 1 (SAS DDFM=SATTERTH
 #'     uses the df of \eqn{V_F + V_G}, which is larger; that df is the
 #'     validation arm `slope_ngm_method = "broad-inference"`).
 #' }

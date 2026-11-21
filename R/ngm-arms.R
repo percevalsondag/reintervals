@@ -9,8 +9,12 @@
 #                      (REML, as lme4 returns them), Satterthwaite df
 #                      2 W^2 / (g' A g) on the variance scale (SAS PROC MIXED
 #                      broad-inference prediction of a new group, DDFM=SATTERTH;
-#                      McLean, Sanders & Stroup 1991). No df fallback: a
-#                      non-finite or < 1 df gives NA limits, ngm_df_failed.
+#                      McLean, Sanders & Stroup 1991). No df fallback: a df
+#                      that cannot be formed (no covariance of the variance
+#                      parameters, e.g. a singular fit), is non-finite or is
+#                      <= 0 gives NA limits, ngm_df_failed; any positive df,
+#                      including 0 < df < 1, is used as is (qt takes a
+#                      fractional df).
 #   "hts"              mu +/- t_{I-2} sqrt(sigma2_L + V_F) (Higgins, Thompson &
 #                      Spiegelhalter 2009, with the REML between-group variance
 #                      in place of the DerSimonian-Laird tau^2); intercept-only
@@ -68,19 +72,10 @@
     theta <- .theta_cov(model)
     k <- theta$parts$k
     between <- sum(theta$components[-k])     # REML, bounded at 0 by lme4
-    a01 <- c(rep(1, k - 1L), 0)              # dW / d(variance components) beyond V_F
     W <- fx$var_fix + between
-    df <- vapply(seq_along(W), function(i) {
-      if (is.null(theta$cov_theta)) return(NA_real_)
-      cg <- .contrast_var_grad(fx$L[i, ], theta$parts)
-      if (is.null(cg)) return(NA_real_)
-      g <- cg$grad + a01
-      v <- as.numeric(t(g) %*% theta$cov_theta %*% g)
-      if (!is.finite(v) || v <= 0) return(NA_real_)
-      2 * W[i]^2 / v
-    }, numeric(1))
+    df <- .ngm_ri_broad_df(fx, theta, W)
     est <- fx$fit
-    failed <- !is.finite(df) | df < 1
+    failed <- !is.finite(df) | df <= 0
     rule <- "satterthwaite-broad"
   } else if (arm == "hts") {
     I <- nlevels(lme4::getME(model, "flist")[[1]])
@@ -108,7 +103,7 @@
            "ngm_method = \"", arm, "\" interval is not available.",
            class = "reintervals_error_numerical")
   }
-  hw <- ifelse(failed, NA_real_, tcrit(pmax(df, 1)) * sqrt(W))
+  hw <- ifelse(failed, NA_real_, tcrit(ifelse(failed, 1, df)) * sqrt(W))
   rows <- data.frame(type = "new_group_mean", estimate = est,
                      lower = if (sides == "upper") -Inf else est - hw,
                      upper = if (sides == "lower")  Inf else est + hw,
@@ -125,6 +120,23 @@
   rownames(out) <- NULL
   attr(out, "singular") <- .is_singular(model)
   out
+}
+
+## Satterthwaite df 2 W^2 / (g' A g) of the random-intercept broad-inference
+## variance W = V_F + sum of the between-group components, one per row of fx$L;
+## NA where it cannot be formed (no covariance A, no gradient, g' A g <= 0).
+.ngm_ri_broad_df <- function(fx, theta, W) {
+  k <- theta$parts$k
+  a01 <- c(rep(1, k - 1L), 0)                # dW / d(variance components) beyond V_F
+  vapply(seq_along(W), function(i) {
+    if (is.null(theta$cov_theta)) return(NA_real_)
+    cg <- .contrast_var_grad(fx$L[i, ], theta$parts)
+    if (is.null(cg)) return(NA_real_)
+    g <- cg$grad + a01
+    v <- as.numeric(t(g) %*% theta$cov_theta %*% g)
+    if (!is.finite(v) || v <= 0) return(NA_real_)
+    2 * W[i]^2 / v
+  }, numeric(1))
 }
 
 ## Per-lot OLS lines at t0 (base R; the package port of the simstudy pilot's
@@ -201,7 +213,8 @@
 
 ## slope_ngm_method = "broad-inference": the default "reml" rows (same center
 ## and W, so the same SE) with the df replaced by the Satterthwaite df of W.
-## No fallback: a non-finite or < 1 df gives NA limits and ngm_df_failed = TRUE.
+## No fallback: a df that cannot be formed, is non-finite or is <= 0 gives NA
+## limits and ngm_df_failed = TRUE; any positive df (also 0 < df < 1) is used.
 .ngm_rs_broad <- function(model, t0s, level, sides) {
   parsed <- .vfun_parse(model)
   rows <- lapply(t0s, function(t0) {
@@ -209,7 +222,7 @@
     row <- .vfun_interval(comp, kind = "new_group_mean", level = level, sides = sides)
     df <- .ngm_rs_broad_df(parsed, comp$phi, comp$cov, t0,
                            W = comp$var_mean + comp$V_G)[["df"]]
-    failed <- !is.finite(df) || df < 1
+    failed <- !is.finite(df) || df <= 0
     row$df <- df; row$df_rule <- "satterthwaite-broad"; row$ngm_df_failed <- failed
     if (failed) {
       row$lower <- NA_real_; row$upper <- NA_real_

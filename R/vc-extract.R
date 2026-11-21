@@ -120,9 +120,14 @@
   ## The former bounded-Satterthwaite fallback on REML-implied mean squares
   ## gave df of 8-70 on singular fits whose stratum df is 1-4, and the PI then
   ## under-covered; the containment df restores coverage (validation W5).
-  df_pi <- if (use_hessian) 2 * sigmaT2^2 / vS else .ddf_containment(model)
+  ## A Hessian df below 1 falls back too (the default-rule alignment: non-finite
+  ## or < 1 -> containment, as .ci_ddf); the covariance is still used elsewhere.
+  df_hess <- if (use_hessian) .pi_df_hessian(sigmaT2, vS) else NA_real_
+  pi_ok <- isTRUE(is.finite(df_hess) && df_hess >= 1)
+  df_pi <- if (pi_ok) df_hess else .ddf_containment(model)
   ## why the Hessian route is unusable (read by the df-fallback warning)
-  fallback_reason <- if (use_hessian) NA_character_
+  fallback_reason <- if (pi_ok) NA_character_
+    else if (use_hessian && is.finite(df_hess)) "df below 1"
     else if (is.na(singular)) "singularity check failed; treated as singular"
     else if (singular) "singular fit"
     else if (is.null(hmat)) "the REML Hessian could not be computed"
@@ -130,7 +135,7 @@
     else "non-finite df"
   list(sigmaT2 = sigmaT2,
        df_pi = df_pi,
-       pi_df_fallback = !use_hessian,
+       pi_df_fallback = !pi_ok,
        fallback_reason = fallback_reason,
        singular = singular,
        components = stats::setNames(th, c(gn, "Residual")),
@@ -192,6 +197,10 @@
        var_fix = diag(l %*% c11 %*% t(l)))
 }
 
+## Francq et al. (2019) generalized-Satterthwaite PI df, 2 sigma2_T^2 / vS, with
+## vS the summed observed-information covariance of the variance components.
+.pi_df_hessian <- function(sigmaT2, vS) 2 * sigmaT2^2 / vS
+
 ## ---- CI denominator df ------------------------------------------------------
 ## Default: Satterthwaite on the contrast variance l C11 l', with theta's
 ## observed-information covariance COMPUTED (.theta_cov); when that df is NA,
@@ -235,7 +244,8 @@
   if (isTRUE(is.finite(d) && d >= 1)) {
     return(list(df = d, method = "satterthwaite", var_mean = NULL))
   }
-  list(df = .ddf_containment(model), method = "containment", var_mean = NULL)
+  list(df = .ddf_containment(model), method = "containment", var_mean = NULL,
+       reason = if (isTRUE(is.finite(d))) "df below 1" else "non-finite df")
 }
 
 ## Kenward-Roger pieces, computed ONCE per call: the unadjusted REML covariance

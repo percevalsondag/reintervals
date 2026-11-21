@@ -206,11 +206,14 @@
     ## Undefined Satterthwaite term (k_A EMS_A + k_B EMS_B not positive, so pA
     ## is NaN/Inf, or a non-finite / non-positive df): never return a NaN
     ## limit. Fall back to the containment df min(A, B) - 1, reported per row.
-    bad  <- !is.finite(df) | df <= 0
+    ## limit. A finite df below 1 falls back too (the default-rule alignment:
+    ## non-finite or < 1 -> containment, as .ci_ddf).
+    bad  <- !is.finite(df) | df < 1
     rule <- ifelse(bad, "containment", "satterthwaite-vf")
-    if (any(bad)) df[bad] <- .ddf_containment(model)
     fb_reason <- if (!any(bad)) NULL else if (!is.finite(pA))
-      "k_A EMS_A + k_B EMS_B is not positive" else "non-finite df"
+      "k_A EMS_A + k_B EMS_B is not positive" else
+      unique(ifelse(is.finite(df[bad]), "df below 1", "non-finite df"))
+    if (any(bad)) df[bad] <- .ddf_containment(model)
   } else {
     df <- rep(dfj[[1]], length(VF))        # Gm: top-factor stratum df (A - 1,
                                            # less any between-group fixed columns)
@@ -277,10 +280,12 @@
       row <- .vfun_interval(comp, kind = kind, level = level, sides = sides)
       ## why the Hessian-Satterthwaite df fell back (read by .warn_df_fallback)
       if (identical(row$df_rule, "containment")) {
+        key <- c(CI = "F", PI = "T", new_group_mean = "G")[[kind]]
+        why <- attr(comp, "df_fallback_why")[[key]]
         reasons <<- c(reasons, paste0(
           if (!isFALSE(comp$singular)) "singular fit (or singularity check failed); ",
           if (is.null(comp$cov)) "non-PD or unavailable covariance of the variance parameters"
-          else "non-finite df"))
+          else if (!is.null(why) && !is.na(why)) why else "non-finite df"))
       }
       row
     })

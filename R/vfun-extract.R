@@ -248,7 +248,8 @@
 #'   `y ~ time + (1 | g) + (0 + time | g)` (independent random slope).
 #' @param t0 A single time point at which to evaluate the payload.
 #' @param df_method `"satterthwaite"` (default; generalized Satterthwaite with a
-#'   containment fallback on degenerate df) or `"containment"` (integer df).
+#'   containment fallback when that df is non-finite or below 1) or
+#'   `"containment"` (integer df).
 #' @param boundary_tol A component is flagged near-boundary if below this
 #'   fraction of total variance. Default `1e-4`.
 #'
@@ -304,13 +305,17 @@ vfun_extract <- function(model, t0,
   gVT <- .vfun_grad_VT(type, t0)[names(phi)]
   grad_vF <- numDeriv::grad(function(p) parsed$vF_fun(p, x0), phi)
 
-  ## Each returns c(df, fell_back): fell_back = 1 when the Satterthwaite df was
-  ## unavailable and the containment df was used (NA when containment is forced).
+  ## Each returns c(df, fell_back, why): fell_back = 1 when the Satterthwaite df
+  ## was unavailable (non-finite) or below 1 and the containment df was used (NA
+  ## when containment is forced); why = 1 non-finite, 2 below 1 (NA otherwise).
+  ## Same rule as the random-intercept CI df (.ci_ddf): non-finite or < 1 ->
+  ## containment.
   resolve_df <- function(value, grad_vec, w_between) {
-    if (df_method == "containment") return(c(.vfun_df_containment(parsed, w_between), NA))
+    if (df_method == "containment")
+      return(c(.vfun_df_containment(parsed, w_between), NA, NA))
     d <- .vfun_df_satterthwaite(value, grad_vec, cov)
-    if (is.finite(d) && d > 0) return(c(d, 0))
-    c(.vfun_df_containment(parsed, w_between), 1)  # fallback on degenerate df
+    if (is.finite(d) && d >= 1) return(c(d, 0, NA))
+    c(.vfun_df_containment(parsed, w_between), 1, if (is.finite(d)) 2 else 1)
   }
   rF <- resolve_df(V_F, grad_vF, w_between = 1)
   rT <- resolve_df(V_T, gVT, w_between = if (V_T > 0) V_G / V_T else 0)
@@ -326,6 +331,9 @@ vfun_extract <- function(model, t0,
   )
   attr(out, "vg_floored") <- vg$floored
   attr(out, "df_fallback") <- c(F = rF[2] == 1, T = rT[2] == 1, G = rG[2] == 1)
+  ## why each fallen-back df fell back (NA where it did not)
+  why <- c("non-finite df", "df below 1")
+  attr(out, "df_fallback_why") <- c(F = why[rF[3]], T = why[rT[3]], G = why[rG[3]])
   ## design sizes for .vfun_df_containment(), so a container whose df is later
   ## found non-finite can reuse the same containment rule (.vfun_interval)
   attr(out, "containment") <- parsed[c("B", "k_re", "n", "p")]

@@ -234,6 +234,30 @@ test_that("B2 (b): broad-inference gives NA limits, no fallback, when its df fai
   expect_true(is.na(r$lower) && is.na(r$upper))
   expect_true(is.finite(r$estimate))
   expect_true(attr(r, "diagnostics")$ngm_df_failed)
+  ## a non-positive df also fails (mocked; no fallback)
+  fx <- F_b2$oneway_unbal
+  for (bad in c(0, -1, Inf)) {
+    local_mocked_bindings(.ngm_ri_broad_df = function(fx, theta, W) rep(bad, length(W)))
+    r <- ngm(fx, ngm_method = "broad-inference")
+    expect_true(all(is.na(r$lower) & is.na(r$upper)), info = bad)
+    expect_true(all(attr(r, "diagnostics")$ngm_df_failed), info = bad)
+  }
+})
+
+test_that("B2 (b): broad-inference uses a positive df below 1 as is (fractional qt)", {
+  fx <- F_b2$oneway_unbal
+  local_mocked_bindings(.ngm_ri_broad_df = function(fx, theta, W) rep(0.4, length(W)))
+  for (sd in c("two.sided", "lower", "upper")) {
+    r <- ngm(fx, ngm_method = "broad-inference", sides = sd)
+    d <- attr(r, "diagnostics")
+    expect_false(any(d$ngm_df_failed), info = sd)
+    expect_identical(d$df, rep(0.4, nrow(r)), info = sd)
+    tq <- if (sd == "two.sided") stats::qt(0.975, 0.4) else stats::qt(0.95, 0.4)
+    expect_true(is.finite(tq))
+    if (sd != "upper") expect_equal(r$lower, r$estimate - tq * d$se, tolerance = 1e-12, info = sd)
+    if (sd != "lower") expect_equal(r$upper, r$estimate + tq * d$se, tolerance = 1e-12, info = sd)
+    expect_true(all(is.finite(c(r$lower, r$upper)[c(sd != "upper", sd != "lower")])), info = sd)
+  }
 })
 
 test_that("B2 (b): hts and classical recompute from their formulas; classical == 2b on balanced data", {
@@ -572,6 +596,33 @@ test_that("B2b: random-slope broad-inference: NA limits when the df fails", {
   r <- ngm(fx, slope_ngm_method = "broad-inference")
   expect_true(all(is.na(r$lower) & is.na(r$upper)))
   expect_true(all(is.finite(r$estimate)))
+  expect_true(all(attr(r, "diagnostics")$ngm_df_failed))
+})
+
+test_that("B2b: random-slope broad-inference uses a positive df below 1 as is (fractional qt)", {
+  fx <- F_b2$rs_un
+  local_mocked_bindings(.ngm_rs_broad_df = function(parsed, phi, cov, t0, W = NULL)
+    c(W = W, df = 0.4))
+  for (sd in c("two.sided", "lower", "upper")) {
+    r <- ngm(fx, slope_ngm_method = "broad-inference", sides = sd)
+    d <- attr(r, "diagnostics")
+    expect_false(any(d$ngm_df_failed), info = sd)
+    expect_true(all(d$df == 0.4), info = sd)
+    tq <- if (sd == "two.sided") stats::qt(0.975, 0.4) else stats::qt(0.95, 0.4)
+    if (sd != "upper") {
+      expect_true(all(is.finite(r$lower)), info = sd)
+      expect_equal(r$lower, r$estimate - tq * d$se, tolerance = 1e-12, info = sd)
+    }
+    if (sd != "lower") {
+      expect_true(all(is.finite(r$upper)), info = sd)
+      expect_equal(r$upper, r$estimate + tq * d$se, tolerance = 1e-12, info = sd)
+    }
+  }
+  ## a non-positive df still fails, without fallback
+  local_mocked_bindings(.ngm_rs_broad_df = function(parsed, phi, cov, t0, W = NULL)
+    c(W = W, df = 0))
+  r <- ngm(fx, slope_ngm_method = "broad-inference")
+  expect_true(all(is.na(r$lower) & is.na(r$upper)))
   expect_true(all(attr(r, "diagnostics")$ngm_df_failed))
 })
 

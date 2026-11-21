@@ -180,6 +180,77 @@ test_that("df_fallback fires on a random-slope fit whose Hessian-Satterthwaite d
   expect_match(msg_class(out, "reintervals_warning_df_fallback"), "(non-finite df)", fixed = TRUE)
 })
 
+test_that("a random-slope Hessian-Satterthwaite df below 1 falls back to containment (mocked 0.004)", {
+  skip_if_not_installed("lme4")
+  fm <- fit_rs()
+  nd <- data.frame(Days = c(2, 5))
+  ref <- quiet_df_fallback(new_group_mean_lmm(fm, nd))
+  expect_identical(attr(ref, "diagnostics")$df_rule, rep("satterthwaite", 2))
+  local_mocked_bindings(.vfun_df_satterthwaite = function(value, grad_vec, vc_cov) 0.004)
+  K <- nlevels(ss$Subject)
+  for (v in c("ci", "pi", "ngm")) {
+    out <- catch_warnings(verbs[[v]](fm, nd))
+    d <- attr(out$value, "diagnostics")
+    expect_true(all(is.finite(c(out$value$lower, out$value$upper))), info = v)
+    expect_identical(d$df_rule, rep("containment", 2), info = v)
+    expect_identical(n_class(out, "reintervals_warning_df_fallback"), 1L, info = v)
+    expect_match(msg_class(out, "reintervals_warning_df_fallback"), "(df below 1)",
+                 fixed = TRUE, info = v)
+  }
+  ## new-group mean: containment df K - 2, same center and SE as the default
+  ngm <- quiet_df_fallback(new_group_mean_lmm(fm, nd))
+  d <- attr(ngm, "diagnostics")
+  expect_identical(d$df, rep(K - 2, 2))
+  expect_equal(ngm$estimate, ref$estimate)
+  expect_equal(d$se, attr(ref, "diagnostics")$se)
+  expect_equal(ngm$upper, ngm$estimate + stats::qt(0.975, K - 2) * d$se, tolerance = 1e-12)
+})
+
+test_that("a constructed K = 3 independent random-slope fit with df_G < 1 gives finite containment limits", {
+  skip_if_not_installed("lme4")
+  set.seed(16); K <- 3; tt <- c(0, 3, 6, 9, 12, 18)
+  d <- expand.grid(time = tt, lot = factor(1:K))
+  b0 <- rnorm(K, 0, 1); b1 <- rnorm(K, 0, 0.05)
+  d$y <- 100 + b0[d$lot] + (-0.3 + b1[d$lot]) * d$time + rnorm(nrow(d), 0, 0.5)
+  fm <- lmer_a5(y ~ time + (1 | lot) + (0 + time | lot), d)
+  p <- .vfun_parse(fm); vc <- .vfun_vc_cov(p)
+  skip_if(is.null(vc$cov), "no covariance of the variance parameters on this platform")
+  dG <- .vfun_df_satterthwaite(.vfun_value_VG(p$type, p$phi, 24),
+                               .vfun_grad_VG(p$type, 24)[names(p$phi)], vc$cov)
+  skip_if_not(is.finite(dG) && dG < 1, "the fit's Satterthwaite df_G is not below 1 here")
+  out <- catch_warnings(new_group_mean_lmm(fm, data.frame(time = 24)))
+  dd <- attr(out$value, "diagnostics")
+  expect_identical(dd$df_rule, "containment")
+  expect_identical(dd$df, max(1, K - 2))                       # .vfun_df_between
+  expect_true(all(is.finite(c(out$value$lower, out$value$upper))))
+  expect_match(msg_class(out, "reintervals_warning_df_fallback"), "(df below 1)", fixed = TRUE)
+})
+
+test_that("a random-intercept Francq PI df below 1 falls back to containment (mocked)", {
+  skip_if_not_installed("lme4")
+  fm <- fit_52()
+  ref <- pi_lmm(fm)
+  local_mocked_bindings(.pi_df_hessian = function(sigmaT2, vS) 0.004)
+  out <- catch_warnings(pi_lmm(fm))
+  d <- attr(out$value, "diagnostics")
+  expect_true(d$pi_df_fallback)
+  expect_identical(d$df, .ddf_containment(fm))
+  expect_true(all(is.finite(c(out$value$lower, out$value$upper))))
+  expect_identical(n_class(out, "reintervals_warning_df_fallback"), 1L)
+  expect_match(msg_class(out, "reintervals_warning_df_fallback"), "(df below 1)", fixed = TRUE)
+  ## the CI df is unaffected (the covariance is still used)
+  expect_identical(attr(quiet_df_fallback(ci_lmm(fm)), "diagnostics")$df_method, "satterthwaite")
+})
+
+test_that("a random-intercept Satterthwaite CI df below 1 falls back, reason 'df below 1' (mocked)", {
+  skip_if_not_installed("lme4")
+  fm <- fit_52()
+  local_mocked_bindings(.ci_ddf_satterthwaite = function(model, Lrow, theta) 0.004)
+  out <- catch_warnings(ci_lmm(fm))
+  expect_identical(attr(out$value, "diagnostics")$df_method, "containment")
+  expect_match(msg_class(out, "reintervals_warning_df_fallback"), "(df below 1)", fixed = TRUE)
+})
+
 test_that("df_fallback fires on the crossed new-group-mean containment fallback", {
   skip_if_not_installed("lme4")
   set.seed(1); A <- 3; B <- 4; n <- 2
@@ -199,6 +270,14 @@ test_that("df_fallback fires on the crossed new-group-mean containment fallback"
                "new_group_mean_lmm(): the default Satterthwaite (crossed Gv) df", fixed = TRUE)
   expect_match(msg_class(out, "reintervals_warning_df_fallback"),
                "k_A EMS_A + k_B EMS_B is not positive", fixed = TRUE)
+  ## a finite Satterthwaite df below 1 falls back too (tiny stratum dfs, mocked)
+  local_mocked_bindings(.design_components_fit = function(...) {
+    dc <- real(...); dc$ems$df[1:3] <- 1e-3; dc
+  })
+  out <- catch_warnings(new_group_mean_lmm(fm))
+  expect_identical(attr(out$value, "diagnostics")$df_rule, "containment")
+  expect_identical(attr(out$value, "diagnostics")$df, .ddf_containment(fm))
+  expect_match(msg_class(out, "reintervals_warning_df_fallback"), "(df below 1)", fixed = TRUE)
   ## a non-default ngm_method arm: no fallback warning
   arm <- catch_warnings(new_group_mean_lmm(fm, control =
                           lmm_interval_control(ngm_method = "broad-inference")))

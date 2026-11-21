@@ -46,7 +46,7 @@
 #'     (default `1e-4`) times the total variance (sum of all `s2_*`, residual
 #'     included). Distinct from `singular`. It is advisory only: it does not
 #'     drive the Satterthwaite -> containment df fallback, which triggers on a
-#'     missing `cov` or a non-finite / non-positive Satterthwaite df. Because
+#'     missing `cov` or a non-finite or below-1 Satterthwaite df. Because
 #'     `s2_1` is a slope variance (in units of y^2 per squared time unit), the
 #'     flag depends on the time scale: rescaling time (e.g. months to years)
 #'     can switch it.}
