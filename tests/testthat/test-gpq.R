@@ -120,3 +120,29 @@ test_that("REGRESSION PIN (not an oracle): random-slope GPQ TI limits, sleepstud
 ##     expect_lt(abs(r$upper - L$upper), max(0.5 * 10^-L$dp, 3 * d$mc_se_upper))
 ##   }
 ## })
+
+## ---- PENDING oracle: liao2005-sulfur (fixtures/oracles.csv) -------------------
+## Liao, Lin & Iyer (2005) Technometrics 47(3):323-335, sulfur example (GPQ
+## tolerance intervals, general balanced mixed model). To collect: transcribe the
+## data and the printed limits to fixtures/liao2005_sulfur/ (data.csv;
+## limits.csv: P, level, side, lower, upper, dp; `#` header with the reference,
+## transcriber, date); confirm the model and the GPQ construction match the
+## package engine, then compare at the larger of the printed precision and
+## 3 x the MC SE (M = 20000, recorded seed), as oliva2025-worked-example.
+## test_that("liao2005-sulfur: GPQ TI reproduces the sulfur example", {
+##   fx <- oracle_fixture("liao2005-sulfur")
+##   fm <- lme4::lmer(<model as printed>, data = fx$data)
+##   ## loop over fx$limits as in oliva2025-worked-example
+## })
+
+## ---- PENDING oracle: lin2008-arsenic (fixtures/oracles.csv) -------------------
+## Lin, Liao & Iyer (2008) JABES 13(2):211-241, arsenic example (unbalanced
+## one-way random effects with covariates and heterogeneous variances). To
+## collect: transcribe to fixtures/lin2008_arsenic/ (same layout as
+## liao2005-sulfur). The heterogeneous-variance model may be outside the package
+## model: record that in the registry notes and compare only the quantities that
+## share a definition (e.g. a homogeneous-variance case, if printed).
+## test_that("lin2008-arsenic: GPQ TI reproduces the arsenic example", {
+##   fx <- oracle_fixture("lin2008-arsenic")
+##   ## fit, then loop over fx$limits as in oliva2025-worked-example
+## })

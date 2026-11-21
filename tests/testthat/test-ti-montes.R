@@ -117,3 +117,21 @@ test_that("one-sided limits are Hoffman's (2010) H: Montes et al. (2019) Tables 
 ##     expect_equal(round(got, L$dp), L$limit, info = paste("x0 =", L$x0))
 ##   }
 ## })
+
+## ---- PENDING oracle: hoffman2010-s51 (fixtures/oracles.csv) -------------------
+## Hoffman (2010) Technometrics 52(3):303-312, Section 5.1 example: one-sided
+## tolerance limits for a random effects model. To collect: transcribe the
+## example data and the printed limits to fixtures/hoffman2010_s51/ (data.csv;
+## limits.csv: P, level, side, limit, dp; `#` header with the reference and
+## section, transcriber, date), confirm the model matches ti_anova_raw() (or
+## ti_lmm(method = "anova-mls")), then compare at the printed precision.
+## test_that("hoffman2010-s51: one-sided limits reproduce Hoffman (2010) Section 5.1", {
+##   fx <- oracle_fixture("hoffman2010-s51")
+##   for (i in seq_len(nrow(fx$limits))) {
+##     L <- fx$limits[i, ]
+##     r <- ti_anova_raw(fx$data$y, NULL, fx$data$group, P = L$P, level = L$level,
+##                       sides = L$side)
+##     got <- if (L$side == "lower") r$lower else r$upper
+##     expect_equal(round(got, L$dp), L$limit)
+##   }
+## })

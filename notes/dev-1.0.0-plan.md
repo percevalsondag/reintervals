@@ -1100,6 +1100,38 @@ so the distinction is visible. Size: all CSV/txt, well under 100 KB. Check the
 
 ---
 
+## R. Robustness and maintenance (before or alongside 1.0.0)
+
+R1, R2, R4 and R5 can run while step 13 runs.
+
+- **R1 CI:** GitHub Actions R CMD check (`r-lib/actions` `check-r-package`) on
+  Windows, macOS, Ubuntu x R release, devel, oldrel-1, on push and PR to `dev`
+  and `main`. *Done when* all jobs pass on `dev`.
+- **R2 Test coverage:** `covr::package_coverage()` reported (badge or README
+  line) and every uncovered exported-function path either tested or justified in
+  this plan. *Done when* coverage is published and the uncovered list is empty or
+  justified.
+- **R3 Independent review:** informal post-1.0 review by statisticians Percy
+  invites; to count as evidence, each reviewer files findings as GitHub issues or
+  a short dated note naming the version reviewed; resolved items referenced in
+  NEWS. *Done when* at least two documented reviews exist.
+- **R4 Numerical reproducibility across BLAS:** run the oracle and pin tests
+  under reference BLAS and under Apple Accelerate (or OpenBLAS) and record the
+  maximum difference per oracle; state the tolerance in the test README. *Done
+  when* both runs pass and the tolerance is recorded.
+- **R5 riskmetric:** run `riskmetric::pkg_ref()` / `pkg_assess()` /
+  `pkg_score()` on the built tarball and record the scores and any low metric
+  with its remedy. *Done when* the assessment is archived and low metrics are
+  addressed or justified.
+- **R6 Maintenance signals:** pkgdown site (GitHub Pages), issue templates (bug,
+  feature, validation question), CONTRIBUTING.md, and a versioning and
+  deprecation policy in the README or a vignette (semantic versioning; deprecate
+  with a classed warning for one minor release, then defunct with
+  `reintervals_error_defunct`, as `reml-mls` was). *Done when* all four exist on
+  `main` after 1.0.0.
+
+---
+
 ## 9. Dependencies and proposed order
 
 ```
@@ -1140,6 +1172,15 @@ defaults unchanged unless stated):
    the phase-0 harness against the A2 build. A2 kept the draw order: a
    single-t0 call is bit-identical to A1 (checked in the A2 review against a
    `2e09497` build, 16/16 limits `identical()`).
+
+**Oracles before freeze (Percy, 2026-11-21):** Chow & Shao 1991 Table 2 is a
+prereg gate for H2 and must be transcribed and pass as an oracle test before the
+prereg is frozen; the corrected Francq et al. 2019 Table 2 (doi:10.1002/sim.8548,
+PMC8097569) and NIST RECIPE example 4 (ex4.dat / ex4.out) are collected and
+tested before the real run, so an engine bug found by them costs a code fix, not
+a 60 h rerun. Oliva-Aviles & Hauser 2025, Hoffman 2010 §5.1, Liao, Lin & Iyer
+2005 and Lin, Liao & Iyer 2008 may follow the run.
+
 9. Step 13 (simstudy) chooses the defaults for the B arms; flip the defaults in one
    commit with NEWS.
    - **Harness (B3):** the step-13 harness calls each verb once per dataset
