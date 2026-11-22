@@ -94,7 +94,12 @@ test_that("B1 (a): defaults unchanged -- default == explicit default == pre-B1 p
     pin <- default_pins[[paste(nm, vb, sep = "_")]]
     expect_equal(a$lower, pin$lower, tolerance = 1e-10, info = info)
     expect_equal(a$upper, pin$upper, tolerance = 1e-10, info = info)
-    expect_equal(attr(a, "diagnostics")$df, pin$df, tolerance = 1e-10, info = info)
+    ## df: 1e-9 (was 1e-10). The scale-free derivatives (.nd_deriv: steps in
+    ## psi = phi / s) evaluate at s * (phi / s), which differs from phi by an
+    ## ulp; the numerical Hessian / gradient carry that to 1.2e-10 - 2.3e-10
+    ## relative in these dfs (crossed CI, fixed-slope CI / PI, rs_ind CI); a
+    ## 1-ulp perturbation of phi alone moves them 3e-10 - 1e-9 on the old code.
+    expect_equal(attr(a, "diagnostics")$df, pin$df, tolerance = 1e-9, info = info)
     d <- attr(a, "diagnostics")
     rs <- nm %in% rs_designs
     expect_identical(unique(d$ci_df_rule),

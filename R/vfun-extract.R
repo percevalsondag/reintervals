@@ -221,8 +221,13 @@
 ## retry is accepted only if NO evaluation hit the sentinel, every entry is
 ## finite, solve() succeeds and the inverse passes .is_pd_cov(). The default
 ## computation is unchanged (a global smaller step moves the sleepstudy pins).
+## Both Hessians are taken in the standardized parameters phi / s (.nd_deriv),
+## so the steps (10% and 0.1%) are relative to the unit-free psi. On a fit with
+## some |psi_j| < 1.78e-5 the accepted covariance must also pass the half-step
+## stability guard at the t0 values `guard_t0` (.nd_unstable_psi): otherwise
+## the route is "unavailable" with reason "unstable numerical Hessian".
 ## vc_cov_route: "default", "retry-d1e-3" or "unavailable" (cov NULL).
-.vfun_vc_cov <- function(parsed, boundary_tol = 1e-4) {
+.vfun_vc_cov <- function(parsed, boundary_tol = 1e-4, guard_t0 = NULL) {
   phi <- parsed$phi
   boundary <- .vfun_is_boundary(phi, boundary_tol)  # variances-only (see helper)
 
@@ -231,24 +236,60 @@
     cv <- tryCatch(solve(H), error = function(e) NULL)
     if (.is_pd_cov(cv)) cv else NULL
   }
-  H <- tryCatch(numDeriv::hessian(parsed$reml_nll, phi), error = function(e) NULL)
-  cov <- cov_from(H)
-  route <- "default"
-  if (is.null(cov)) {
+  s <- .nd_scale(phi)    # residual variance: derivatives in phi / s (.nd_deriv)
+  ## Hessian at step d; `hit` records any evaluation that returned the sentinel
+  hess <- function(d) {
     hit <- FALSE
     f <- function(p) {
       v <- parsed$reml_nll(p)
       if (!is.finite(v) || v >= 1e10) hit <<- TRUE
       v
     }
-    H2 <- tryCatch(numDeriv::hessian(f, phi, method.args = list(d = 1e-3)),
-                   error = function(e) NULL)
-    cov <- if (hit) NULL else cov_from(H2)
+    H <- tryCatch(.nd_deriv("hessian", f, phi, s, method.args = list(d = d)),
+                  error = function(e) NULL)
+    list(H = H, hit = hit)
+  }
+  d <- 0.1                                   # numDeriv's default first step
+  cov <- cov_from(hess(d)$H)
+  route <- "default"
+  if (is.null(cov)) {
+    d <- 1e-3
+    h2 <- hess(d)
+    cov <- if (h2$hit) NULL else cov_from(h2$H)
     route <- if (is.null(cov)) "unavailable" else "retry-d1e-3"
+  }
+  ## half-step stability guard (.nd_unstable_psi): the Satterthwaite F, T, G
+  ## dfs at every guard_t0 from the step-d and step-d/2 Hessians must agree to
+  ## 1e-3 relative (the d/2 Hessian under the same acceptance rule as its route:
+  ## no sentinel hit on the retry)
+  reason <- NA_character_
+  if (!is.null(cov) && .nd_unstable_psi(phi, s)) {
+    h3 <- hess(d / 2)
+    cov2 <- if (route == "retry-d1e-3" && h3$hit) NULL else cov_from(h3$H)
+    t0s <- if (is.null(guard_t0)) numeric(0) else guard_t0
+    dfs_of <- function(cv) unlist(lapply(t0s, function(t0) .vfun_sat_dfs(parsed, cv, t0)))
+    if (is.null(cov2) || !.df_stable(dfs_of(cov), dfs_of(cov2))) {
+      cov <- NULL; route <- "unavailable"; reason <- "unstable numerical Hessian"
+    }
   }
 
   list(cov = cov, phi = phi, boundary = boundary, ok = !is.null(cov),
-       vc_cov_route = route)
+       vc_cov_route = route, reason = reason)
+}
+
+## The Satterthwaite F, T, G dfs at t0 for covariance `cov` (before any
+## containment fallback; NA where not formed), as vfun_extract() builds them.
+## Used by the half-step stability guard.
+.vfun_sat_dfs <- function(parsed, cov, t0) {
+  phi <- parsed$phi; type <- parsed$type
+  x0 <- stats::setNames(c(1, t0), c("(Intercept)", parsed$fe_time))
+  V_F <- as.numeric(t(x0) %*% parsed$vcov_beta %*% x0)
+  V_G <- max(0, .vfun_value_VG(type, phi, t0))
+  gF <- tryCatch(.nd_deriv("grad", function(p) parsed$vF_fun(p, x0), phi,
+                           .nd_scale(phi)), error = function(e) NULL)
+  c(F = if (is.null(gF)) NA_real_ else .vfun_df_satterthwaite(V_F, gF, cov),
+    T = .vfun_df_satterthwaite(V_G + parsed$s2e, .vfun_grad_VT(type, t0)[names(phi)], cov),
+    G = .vfun_df_satterthwaite(V_G, .vfun_grad_VG(type, t0)[names(phi)], cov))
 }
 
 #' Build a `vfun_components` from a fitted slope (or fixed-slope) lmer model
@@ -279,6 +320,8 @@
 #'   `"containment"` (integer df).
 #' @param boundary_tol A component is flagged near-boundary if below this
 #'   fraction of total variance. Default `1e-4`.
+#' @param guard_t0 The time points of the calling verb, at which the half-step
+#'   stability guard of `Cov(phi)` compares the F, T and G dfs (default `t0`).
 #'
 #' @return A `vfun_components` object at `t0`, with `attr(., "df_fallback")`, a
 #'   logical vector over `F`, `T`, `G` that is `TRUE` where the Satterthwaite df
@@ -294,14 +337,14 @@
 #' @noRd
 vfun_extract <- function(model, t0,
                          df_method = c("satterthwaite", "containment"),
-                         boundary_tol = 1e-4) {
+                         boundary_tol = 1e-4, guard_t0 = t0) {
   df_method <- match.arg(df_method)
   if (!is.numeric(t0) || length(t0) != 1L || !is.finite(t0))
     .abort("`t0` must be a single finite numeric value (the container holds one ",
            "time point).", class = "reintervals_error_input")
 
   parsed <- .vfun_parse(model)
-  vc     <- .vfun_vc_cov(parsed, boundary_tol = boundary_tol)
+  vc     <- .vfun_vc_cov(parsed, boundary_tol = boundary_tol, guard_t0 = guard_t0)
   sing   <- .is_singular(model)    # NA when the check failed (not "non-singular")
 
   phi   <- parsed$phi; type <- parsed$type; s2e <- parsed$s2e
@@ -330,16 +373,22 @@ vfun_extract <- function(model, t0,
   ## fallback (SAFEGUARD 3).
   gVG <- .vfun_grad_VG(type, t0)[names(phi)]
   gVT <- .vfun_grad_VT(type, t0)[names(phi)]
-  grad_vF <- numDeriv::grad(function(p) parsed$vF_fun(p, x0), phi)
+  ## NULL when the numerical gradient fails (e.g. a failed Cholesky of V at a
+  ## step point): the F df then falls back to containment, reason "numerical
+  ## derivative failed"
+  grad_vF <- tryCatch(.nd_deriv("grad", function(p) parsed$vF_fun(p, x0), phi,
+                                .nd_scale(phi)), error = function(e) NULL)
 
   ## Each returns c(df, fell_back, why): fell_back = 1 when the Satterthwaite df
   ## was unavailable (non-finite) or below 1 and the containment df was used (NA
-  ## when containment is forced); why = 1 non-finite, 2 below 1 (NA otherwise).
+  ## when containment is forced); why = 1 non-finite, 2 below 1, 3 numerical
+  ## derivative failed (grad_vec NULL) (NA otherwise).
   ## Same rule as the random-intercept CI df (.ci_ddf): non-finite or < 1 ->
   ## containment.
   resolve_df <- function(value, grad_vec, w_between) {
     if (df_method == "containment")
       return(c(.vfun_df_containment(parsed, w_between), NA, NA))
+    if (is.null(grad_vec)) return(c(.vfun_df_containment(parsed, w_between), 1, 3))
     d <- .vfun_df_satterthwaite(value, grad_vec, cov)
     if (is.finite(d) && d >= 1) return(c(d, 0, NA))
     c(.vfun_df_containment(parsed, w_between), 1, if (is.finite(d)) 2 else 1)
@@ -358,9 +407,10 @@ vfun_extract <- function(model, t0,
   )
   attr(out, "vg_floored") <- vg$floored
   attr(out, "vc_cov_route") <- vc$vc_cov_route   # how Cov(phi) was obtained
+  attr(out, "vc_cov_reason") <- vc$reason         # why it is unavailable (or NA)
   attr(out, "df_fallback") <- c(F = rF[2] == 1, T = rT[2] == 1, G = rG[2] == 1)
   ## why each fallen-back df fell back (NA where it did not)
-  why <- c("non-finite df", "df below 1")
+  why <- c("non-finite df", "df below 1", "numerical derivative failed")
   attr(out, "df_fallback_why") <- c(F = why[rF[3]], T = why[rT[3]], G = why[rG[3]])
   ## design sizes for .vfun_df_containment(), so a container whose df is later
   ## found non-finite can reuse the same containment rule (.vfun_interval)

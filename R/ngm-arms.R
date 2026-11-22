@@ -69,7 +69,7 @@
   method <- if (uses_anova) "anova-mls" else "ems-mls"
 
   if (arm == "broad-inference") {
-    theta <- .theta_cov(model)
+    theta <- .theta_cov(model, L = fx$L)
     k <- theta$parts$k
     between <- sum(theta$components[-k])     # REML, bounded at 0 by lme4
     W <- fx$var_fix + between
@@ -206,7 +206,9 @@
 .ngm_rs_broad_df <- function(parsed, phi, cov, t0, W = NULL) {
   x0 <- stats::setNames(c(1, t0), c("(Intercept)", parsed$fe_time))
   if (is.null(W)) W <- parsed$vF_fun(phi, x0) + .vfun_value_VG(parsed$type, phi, t0)
-  gF <- numDeriv::grad(function(p) parsed$vF_fun(p, x0), phi)
+  gF <- tryCatch(.nd_deriv("grad", function(p) parsed$vF_fun(p, x0), phi,
+                           .nd_scale(phi)), error = function(e) NULL)
+  if (is.null(gF)) return(c(W = W, df = NA_real_))   # cannot be formed -> NA
   gG <- .vfun_grad_VG(parsed$type, t0)[names(phi)]
   c(W = W, df = .vfun_df_satterthwaite(W, gF + gG, cov))
 }
@@ -218,7 +220,7 @@
 .ngm_rs_broad <- function(model, t0s, level, sides) {
   parsed <- .vfun_parse(model)
   rows <- lapply(t0s, function(t0) {
-    comp <- vfun_extract(model, t0 = t0)
+    comp <- vfun_extract(model, t0 = t0, guard_t0 = t0s)
     row <- .vfun_interval(comp, kind = "new_group_mean", level = level, sides = sides)
     df <- .ngm_rs_broad_df(parsed, comp$phi, comp$cov, t0,
                            W = comp$var_mean + comp$V_G)[["df"]]

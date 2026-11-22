@@ -78,11 +78,95 @@
 ## TRUE / FALSE, or NA when the check failed (see .singular_status)
 .is_singular <- function(model) .singular_status(model)$singular
 
+## ---- numerical derivatives on a scale-free parameterization ----------------
+## The ONE entry point to numDeriv in the package. numDeriv's step for x_i is
+## d * |x_i|, except below zero.tol (default sqrt(eps / 7e-7) ~ 1.78e-5) where
+## it is an absolute eps = 1e-4. On variance-scale parameters that absolute
+## step made the derivatives (and every df built on them) depend on the
+## measurement units once a component fell below ~1.8e-5 (the random-intercept
+## PI / CI dfs fell back to containment and the random-slope verbs could stop
+## with a chol() error on data in small units). Every derivative is therefore
+## taken in the standardized parameters psi = phi / s, with s a positive scalar
+## that scales like the variances (s -> c^2 s under y -> c y), so psi is
+## unit-free, and back-transformed exactly:
+##   f'(phi) = d/dpsi f(s psi) / s,   f''(phi) = d2/dpsi2 f(s psi) / s^2
+## (the covariance from an inverse Hessian is thereby scaled by s^2).
+##
+## s is the residual variance of the fit (.nd_scale): present in every model
+## the package accepts, strictly positive on every fit lme4 returns (singular
+## fits included: there a random variance is 0, never the residual), and the
+## denominator of lme4's own relative parameterization (psi_g = theta_g^2 for a
+## random intercept). A non-positive or non-finite s is an error, which every
+## caller catches (-> its df fallback).
+##
+## zero.tol = 1e-12 in psi (unless the caller sets it): only a psi_j that is
+## (numerically) zero -- a singular component -- gets numDeriv's absolute step
+## 1e-4 (in psi, i.e. 1e-4 * s); every other parameter gets the relative step
+## d * |psi_j|. With numDeriv's default zero.tol a small-but-positive component
+## (psi_j < 1.78e-5, e.g. a slope variance near the boundary) got a step many
+## times its own size, which left the PD cone of Sigma and lost the
+## covariance; a relative step is also equivariant under a rescaling of time
+## (s2_1 -> s2_1 / c^2), which an absolute one is not. Parameters with
+## |psi_j| >= 1.78e-5 get the same relative steps as before the change, so
+## results there move only at floating-point level. Covariances built on a
+## Hessian where some |psi_j| < 1.78e-5 are checked by the half-step stability
+## guard (.nd_unstable_psi, .df_stable; used by .theta_cov and .vfun_vc_cov).
+## `...` (e.g. method.args = list(d = 1e-3)) is passed to numDeriv and applies
+## in psi.
+.nd_deriv <- function(type = c("grad", "hessian"), f, x, s, ...) {
+  type <- match.arg(type)
+  if (!(length(s) == 1L && is.finite(s) && s > 0)) {
+    .abort("Internal: the derivative scale s must be a positive finite number.",
+           class = "reintervals_error_internal")
+  }
+  dots <- list(...)
+  ma <- if (is.null(dots$method.args)) list() else dots$method.args
+  if (is.null(ma$zero.tol)) ma$zero.tol <- .nd_zero_tol
+  dots$method.args <- ma
+  fs <- function(psi) f(s * psi)
+  psi <- x / s
+  switch(type,
+         grad    = do.call(numDeriv::grad, c(list(fs, psi), dots)) / s,
+         hessian = do.call(numDeriv::hessian, c(list(fs, psi), dots)) / s^2)
+}
+.nd_zero_tol <- 1e-12
+
+## The scale s of .nd_deriv(): the residual variance (last component of the EMS
+## theta, "s2e" of the slope-engine phi).
+.nd_scale <- function(x) {
+  unname(if (!is.null(names(x)) && "s2e" %in% names(x)) x[["s2e"]] else x[[length(x)]])
+}
+
+## Half-step stability guard, trigger: TRUE when some |psi_j| = |x_j / s| is
+## below numDeriv's DEFAULT zero.tol (sqrt(eps / 7e-7) ~ 1.78e-5), i.e. a
+## parameter whose step changed from numDeriv's absolute 1e-4 to a relative one
+## (or a singular component, still on the absolute step). On such a fit a
+## covariance from the Hessian at step d is accepted only if the Hessian at d / 2
+## also gives a PD covariance and every Satterthwaite df built on the two
+## agrees to 1e-3 relative (.df_stable); otherwise the covariance is
+## unavailable (reason "unstable numerical Hessian"). Fits with every
+## |psi_j| >= 1.78e-5 skip the guard.
+.nd_unstable_psi <- function(x, s = .nd_scale(x)) {
+  any(abs(x / s) < sqrt(.Machine$double.eps / 7e-7))
+}
+
+## Do two df vectors agree? Both non-finite counts as agreement (the df is
+## unavailable either way); one finite and one not, or a relative difference
+## above tol, does not.
+.df_stable <- function(a, b, tol = 1e-3) {
+  fa <- is.finite(a); fb <- is.finite(b)
+  if (any(fa != fb)) return(FALSE)
+  all(abs(a[fa] - b[fb]) <= tol * abs(b[fb]))
+}
+
 ## ---- total variance, its variance, df_PI (observed Fisher information) -------
 ## Cov(theta_hat) from the observed information: a numerical Hessian of the
 ## REML log-likelihood on the variance scale (theta = the variance components),
 ## with beta at its GLS value for each theta (== PROC MIXED ASYCOV).
-.theta_cov <- function(model) {
+## `L` (optional): the fixed-effect rows of the call (.fixed()$L), at which the
+## half-step stability guard also compares the Satterthwaite CI df (the PI df is
+## always compared).
+.theta_cov <- function(model, L = NULL) {
   vc <- .assert_random_intercepts(model)
   Zl <- lme4::getME(model, "Ztlist")
   gn <- sub("\\.\\(Intercept\\)$", "", names(Zl))          # grouping name per block
@@ -107,11 +191,30 @@
   }
   sigmaT2 <- sum(th)
   singular <- .is_singular(model)              # NA (check failed) -> singular branch
-  hmat <- if (!isFALSE(singular)) NULL else tryCatch(numDeriv::hessian(ll, th),
-                                           error = function(e) NULL)
-  cov_theta <- if (is.null(hmat)) NULL else tryCatch(solve(-hmat),
-                                                     error = function(e) NULL)
-  if (!.is_pd_cov(cov_theta)) cov_theta <- NULL   # not a covariance -> fallbacks
+  s <- .nd_scale(th)    # residual variance: derivatives in th / s (.nd_deriv)
+  hess_cov <- function(d) {
+    h <- tryCatch(.nd_deriv("hessian", ll, th, s, method.args = list(d = d)),
+                  error = function(e) NULL)
+    cv <- if (is.null(h)) NULL else tryCatch(solve(-h), error = function(e) NULL)
+    list(h = h, cov = if (.is_pd_cov(cv)) cv else NULL)  # not a covariance -> NULL
+  }
+  hc <- if (!isFALSE(singular)) list(h = NULL, cov = NULL) else hess_cov(0.1)
+  hmat <- hc$h; cov_theta <- hc$cov
+  ## half-step stability guard (.nd_unstable_psi): the PI df and the CI df at
+  ## each row of L, from the d = 0.1 and d = 0.05 Hessians, must agree to 1e-3
+  unstable <- FALSE
+  if (!is.null(cov_theta) && .nd_unstable_psi(th, s)) {
+    cov2 <- hess_cov(0.05)$cov
+    dfs_of <- function(cv) {
+      ci <- if (is.null(L)) numeric(0) else vapply(seq_len(nrow(L)), function(i)
+        .ci_ddf_satterthwaite(model, L[i, ], list(cov_theta = cv, parts = parts)),
+        numeric(1))
+      c(.pi_df_hessian(sum(th), sum(cv)), ci)
+    }
+    parts <- list(Al = Al, th = th, X = X, N = N, k = k)
+    unstable <- is.null(cov2) || !.df_stable(dfs_of(cov_theta), dfs_of(cov2))
+    if (unstable) cov_theta <- NULL
+  }
   vS <- if (is.null(cov_theta)) NA_real_ else sum(cov_theta)
   use_hessian <- isTRUE(is.finite(vS) && vS > 0) && isFALSE(singular)
   ## PI df: observed-information Satterthwaite when the Hessian route is usable;
@@ -131,6 +234,7 @@
     else if (is.na(singular)) "singularity check failed; treated as singular"
     else if (singular) "singular fit"
     else if (is.null(hmat)) "the REML Hessian could not be computed"
+    else if (unstable) "unstable numerical Hessian"
     else if (is.null(cov_theta)) "non-PD covariance of the variance components"
     else "non-finite df"
   list(sigmaT2 = sigmaT2,
@@ -143,20 +247,28 @@
        parts = list(Al = Al, th = th, X = X, N = N, k = k))
 }
 
-## Is M a usable covariance matrix of variance-component estimates? Symmetric
-## (to 1e-8 relative) and positive definite with every eigenvalue
-## > tol * max|eigenvalue|, tol = 1e-8 (relative, so scale-free). An indefinite
-## or numerically singular inverse Hessian is not a covariance: the quadratic
-## forms g' M g behind every Satterthwaite df can then be ~0 or negative, giving
-## arbitrarily large (anti-conservative) df. Used by .theta_cov() (EMS path: PI
-## df and CI Satterthwaite) and .vfun_vc_cov() (random-slope path); a FALSE
-## result makes the caller drop the matrix (NULL) and use its df fallback.
+## Is M a usable covariance matrix of variance-component estimates? Positive
+## diagonal, and its correlation form R = D^-1/2 M D^-1/2 (D = diag(M))
+## symmetric (to 1e-8) and positive definite with every eigenvalue
+## > tol * max|eigenvalue|, tol = 1e-8. Judged on R, the check is invariant to
+## rescaling any parameter (y -> c y scales every variance by c^2; t -> c t
+## scales the slope variance by c^-2 and the covariance by c^-1): on M itself
+## the eigenvalue ratio is not, and a slope variance in fine time units made a
+## well-conditioned covariance look numerically singular. An indefinite or
+## numerically singular inverse Hessian is not a covariance: the quadratic
+## forms g' M g behind every Satterthwaite df can then be ~0 or negative,
+## giving arbitrarily large (anti-conservative) df. Used by .theta_cov() (EMS
+## path: PI df and CI Satterthwaite) and .vfun_vc_cov() (random-slope path); a
+## FALSE result makes the caller drop the matrix (NULL) and use its df fallback.
 .is_pd_cov <- function(M, tol = 1e-8) {
   if (is.null(M) || !is.matrix(M) || nrow(M) != ncol(M) || any(!is.finite(M))) {
     return(FALSE)
   }
-  if (max(abs(M - t(M))) > tol * max(abs(M))) return(FALSE)
-  ev <- eigen((M + t(M)) / 2, symmetric = TRUE, only.values = TRUE)$values
+  dg <- diag(M)
+  if (!all(dg > 0)) return(FALSE)
+  R <- M / sqrt(outer(dg, dg))
+  if (max(abs(R - t(R))) > tol) return(FALSE)
+  ev <- eigen((R + t(R)) / 2, symmetric = TRUE, only.values = TRUE)$values
   all(ev > tol * max(abs(ev)))
 }
 
@@ -239,7 +351,7 @@
   if (df_method == "containment") {
     return(list(df = .ddf_containment(model), method = "containment", var_mean = NULL))
   }
-  if (is.null(theta)) theta <- .theta_cov(model)
+  if (is.null(theta)) theta <- .theta_cov(model, L = matrix(as.numeric(Lrow), nrow = 1L))
   d <- .ci_ddf_satterthwaite(model, Lrow, theta)
   if (isTRUE(is.finite(d) && d >= 1)) {
     return(list(df = d, method = "satterthwaite", var_mean = NULL))
@@ -306,7 +418,7 @@ requireNamespace <- NULL
     c11 <- solve(crossprod(X, solve(V, X)))
     as.numeric(t(l) %*% c11 %*% l)
   }
-  g <- tryCatch(numDeriv::grad(cvar, th), error = function(e) NULL)
+  g <- tryCatch(.nd_deriv("grad", cvar, th, .nd_scale(th)), error = function(e) NULL)
   if (is.null(g)) return(NULL)
   list(value = cvar(th), grad = g)
 }
@@ -417,9 +529,9 @@ vc_extract <- function(model, design = NULL,
   n_obs <- length(lme4::getME(model, "y"))
   desc <- if (is.null(design)) classify_design(flist, n_obs) else design
 
-  theta <- .theta_cov(model)
-  dc <- .design_components_fit(model, desc, theta$components, target)
   fx <- .fixed(model, newdata)
+  theta <- .theta_cov(model, L = fx$L[1, , drop = FALSE])
+  dc <- .design_components_fit(model, desc, theta$components, target)
   ci_ddf <- .ci_ddf(model, fx$L[1, ], theta = theta)$df
 
   comp <- re_components(

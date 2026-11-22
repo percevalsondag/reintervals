@@ -177,7 +177,7 @@ test_that("EMS and slope df fallbacks are distinct functions (not shared)", {
   expect_identical(.vfun_df_containment(parsed, w_between = 0), max(1, 26 - 2 - 11))
 })
 
-test_that("a boundary-adjacent non-singular random-slope fit: Cov(phi) recovered by the Hessian retry, TI is GPQ", {
+test_that("a boundary-adjacent non-singular random-slope fit: the half-step stability guard rejects Cov(phi), TI is GPQ", {
   skip_if_not_installed("lme4")
   skip_on_cran()   # the fit sits near the variance-component boundary (the
                    # mechanism behind the df failure), so its singular /
@@ -187,31 +187,40 @@ test_that("a boundary-adjacent non-singular random-slope fit: Cov(phi) recovered
   # (the coverage study's DGP, scripts/coverage_reml.R). Non-singular by
   # lme4::isSingular() (the package's singular criterion, kept as is; the fit is
   # boundary-adjacent, delta = -9.9e-6), and the default Hessian of Cov(phi) is
-  # unusable (its first 10% step leaves the valid region). Until the Hessian retry
-  # (.vfun_vc_cov, d = 1e-3) this test expected the containment df; the retry now
-  # recovers a PD Cov(phi), so nu_G is Satterthwaite. The containment fallback is
-  # still covered by the singular-fit and mocked-df tests in test-a5-warnings.R
-  # ("df_fallback fires on a random-slope fit whose Hessian-Satterthwaite df
-  # falls back", "... below 1 falls back to containment (mocked 0.004)") and by
-  # the "retry also hits the sentinel" test below.
+  # unusable (its first 10% step leaves the valid region). The d = 1e-3 retry
+  # gives a PD Cov(phi), but s2_1 / s2e = 4.2e-6 is below numDeriv's default
+  # zero.tol, so the half-step stability guard (.nd_unstable_psi) compares the
+  # F, T, G dfs at the call's t0 from the d = 1e-3 and d = 5e-4 Hessians: at
+  # t0 = 12, nu_F 19.13 vs 19.08 and nu_T 24.19 vs 24.12 (0.26% and 0.33%,
+  # above the 1e-3 tolerance; nu_G at t0 = 12 is 12.16 at d = 0.05 and 11.87
+  # at d = 2.5e-4), so Cov(phi) is unavailable ("unstable numerical Hessian")
+  # and nu_G falls back to containment. (Before the scale-free derivatives the
+  # retry was accepted here only because s2_1 = 1.83e-5 sat just above
+  # zero.tol in these units; at y x 0.9 it was not.)
   set.seed(20261026L + 100000L * 3L + 1084L)
   d <- expand.grid(time = c(0, 3, 6, 9, 12), batch = factor(1:20))
   b0 <- rnorm(20, 0, 3); b1 <- rnorm(20, 0, 0.10)
   d$y <- 100 - 2 * d$time + b0[d$batch] + b1[d$batch] * d$time + rnorm(nrow(d), 0, 2)
   fm <- suppressWarnings(suppressMessages(lme4::lmer(y ~ time + (time | batch), data = d)))
   expect_false(lme4::isSingular(fm))
-  cp <- vfun_extract(fm, t0 = 12)
-  expect_identical(attr(cp, "vc_cov_route"), "retry-d1e-3")
-  expect_false(attr(cp, "df_fallback")[["G"]])
+  p <- .vfun_parse(fm)
+  expect_true(.nd_unstable_psi(p$phi))
+  nd <- data.frame(time = c(6, 12))
+  cp <- vfun_extract(fm, t0 = 12, guard_t0 = nd$time)
+  expect_identical(attr(cp, "vc_cov_route"), "unavailable")
+  expect_identical(attr(cp, "vc_cov_reason"), "unstable numerical Hessian")
+  expect_null(cp$cov)
+  expect_true(attr(cp, "df_fallback")[["G"]])
 
-  nd <- data.frame(time = c(6, 12)); ctl <- lmm_interval_control(seed = 1, M = 2000)
+  ctl <- lmm_interval_control(seed = 1, M = 2000)
   x <- ti_lmm(fm, nd, P = 0.99, control = ctl)              # not an oracle
   expect_identical(x$method, c("gpq", "gpq"))
   expect_identical(attr(x, "diagnostics")$route_reason, c("auto", "auto"))
-  ngm <- quiet_df_fallback(new_group_mean_lmm(fm, nd))
+  expect_warning(ngm <- new_group_mean_lmm(fm, nd), "unstable numerical Hessian",
+                 class = "reintervals_warning_df_fallback")
   expect_identical(ngm$method, c("reml", "reml"))
-  expect_identical(attr(ngm, "diagnostics")$df_rule, c("satterthwaite", "satterthwaite"))
-  expect_identical(attr(ngm, "diagnostics")$vc_cov_route, c("retry-d1e-3", "retry-d1e-3"))
+  expect_identical(attr(ngm, "diagnostics")$df_rule, c("containment", "containment"))
+  expect_identical(attr(ngm, "diagnostics")$vc_cov_route, c("unavailable", "unavailable"))
 })
 
 test_that("route_reason is 'auto' for every dispatched random-slope TI and 'method' when gpq is forced", {
@@ -230,8 +239,16 @@ test_that(".is_pd_cov accepts a PD covariance and rejects indefinite / singular 
   expect_true(.is_pd_cov(matrix(c(2, 0.5, 0.5, 1), 2)))                  # PD
   expect_false(.is_pd_cov(matrix(c(1, 2, 2, 1), 2)))                     # eigen 3, -1
   expect_false(.is_pd_cov(matrix(c(1, 1, 1, 1), 2)))                     # singular
-  expect_false(.is_pd_cov(matrix(c(1, 0, 0, 1e-12), 2)))                 # below 1e-8 * max
-  expect_true(.is_pd_cov(matrix(c(1, 0, 0, 1e-6), 2)))                   # above it
+  ## judged on the correlation form, so scale-free: a tiny variance of a
+  ## parameter in fine units is not "numerically singular"
+  expect_true(.is_pd_cov(matrix(c(1, 0, 0, 1e-12), 2)))
+  expect_true(.is_pd_cov(matrix(c(1, 0, 0, 1e-6), 2)))
+  r <- 1 - 1e-10                                                         # corr eigen 1e-10
+  expect_false(.is_pd_cov(matrix(c(1, r, r, 1), 2)))                     # below 1e-8 * max
+  expect_false(.is_pd_cov(matrix(c(1, r, r, 1) * c(1, 1e-3, 1e-3, 1e-6), 2)))  # same, rescaled
+  r <- 1 - 1e-6
+  expect_true(.is_pd_cov(matrix(c(1, r, r, 1), 2)))                      # above it
+  expect_false(.is_pd_cov(matrix(c(1, 0, 0, 0), 2)))                     # zero variance
   expect_false(.is_pd_cov(matrix(c(2, 0.5, 0.4, 1), 2)))                 # not symmetric
   expect_false(.is_pd_cov(NULL))
   expect_false(.is_pd_cov(matrix(c(1, NA, NA, 1), 2)))

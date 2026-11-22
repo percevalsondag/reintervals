@@ -277,7 +277,7 @@
     }
     reasons <- character(0)
     rows <- lapply(t0s, function(t0) {
-      comp <- vfun_extract(model, t0 = t0)
+      comp <- vfun_extract(model, t0 = t0, guard_t0 = t0s)
       if (arm != "hessian-satterthwaite") comp <- .slope_ci_arm(comp, model, arm, kr)
       row <- .vfun_interval(comp, kind = kind, level = level, sides = sides)
       ## why the Hessian-Satterthwaite df fell back (read by .warn_df_fallback)
@@ -286,7 +286,11 @@
         why <- attr(comp, "df_fallback_why")[[key]]
         reasons <<- c(reasons, paste0(
           if (!isFALSE(comp$singular)) "singular fit (or singularity check failed); ",
-          if (is.null(comp$cov)) "non-PD or unavailable covariance of the variance parameters"
+          if (is.null(comp$cov)) {
+            r <- attr(comp, "vc_cov_reason")
+            if (!is.null(r) && !is.na(r)) r
+            else "non-PD or unavailable covariance of the variance parameters"
+          }
           else if (!is.null(why) && !is.na(why)) why else "non-finite df"))
       }
       row

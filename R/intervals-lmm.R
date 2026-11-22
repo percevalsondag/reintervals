@@ -61,7 +61,7 @@ intervals_lmm <- function(model, newdata = NULL, level = 0.95, conf = 0.95,
   ## Satterthwaite CI df; a Kenward-Roger or overridden CI-only call skips it.
   need_theta <- "PI" %in% which ||
     ("CI" %in% which && is.null(ci_df) && ci_method == "satterthwaite")
-  theta <- if (need_theta) .theta_cov(model) else NULL
+  theta <- if (need_theta) .theta_cov(model, L = fx$L) else NULL
   comps <- if (!is.null(theta)) theta$components else .var_components(model)
   nr <- nrow(fx$L)
   base <- fx$newdata

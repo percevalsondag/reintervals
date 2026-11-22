@@ -67,12 +67,17 @@ for the random-slope tolerance interval the GPQ \code{route_reason}; for the
 random-slope confidence, prediction and new-group-mean intervals
 \code{vc_cov_route}, how the observed-information covariance of the variance
 parameters behind their Satterthwaite dfs was obtained --- \code{"default"}
-(the numerical REML Hessian at numDeriv's default step), \code{"retry-d1e-3"}
+(the numerical REML Hessian at numDeriv's default relative step), \code{"retry-d1e-3"}
 (the default Hessian left the valid region, e.g. a strong
 intercept-slope correlation, and a retry with a 0.1\% first step that stayed
-inside it was used) or \code{"unavailable"} (no valid covariance; the default
-dfs fall back to containment and the \code{"broad-inference"} arm reports \code{NA}
-limits); standard error \code{se}; and any GPQ / ANOVA intermediates);
+inside it was used) or \code{"unavailable"} (no valid covariance, or, on a fit
+with a variance parameter below about 1.8e-5 of the residual variance, a
+covariance whose dfs changed by more than 1e-3 relative when the Hessian
+step was halved; the default dfs fall back to containment and the
+\code{"broad-inference"} arm reports \code{NA} limits); the Hessian is taken on the
+variance parameters divided by the residual variance, so the route and
+every df are unchanged by the units of the response or of time; standard
+error \code{se}; and any GPQ / ANOVA intermediates);
 \code{attr(., "grouping")} is the random-intercept topology (\code{"oneway"},
 \code{"nested"}, \code{"crossed"}, or \code{NA} for slope models).
 }

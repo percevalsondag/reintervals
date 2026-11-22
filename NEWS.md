@@ -166,6 +166,35 @@
 
 ## Bug fixes
 
+* **Dfs and intervals could depend on the measurement units** when variance
+  components were below about 1.8e-5 (numerical derivatives used an absolute
+  step there): the random-intercept PI / CI Satterthwaite dfs could fall back
+  to containment and the random-slope verbs could stop with a `chol()` error on
+  data in small units (e.g. an impurity in %, or the same data in g/mL instead
+  of mg/mL). Derivatives are now taken on a scale-free parameterization (the
+  variance parameters divided by the residual variance, back-transformed
+  exactly), and every interval and df is scale-equivariant (tested from 1e-4
+  to 1e4). In the scale-free parameters every non-zero parameter gets a
+  relative step (numDeriv's `zero.tol` is set to 1e-12, so only an exactly
+  zero, singular component gets the absolute step), so results are also
+  unchanged when time is rescaled (e.g. months to years; tested from 1e-2 to
+  1e2); and the positive-definiteness check of the covariance is made on its
+  correlation form, which rescaling a parameter does not change. Where a
+  parameter is below 1.8e-5 of the residual variance (a variance near the
+  boundary), the covariance is now accepted only if the Hessian at half the
+  step agrees: both positive definite, and every Satterthwaite df built on
+  them (random slope: the mean-line, future-observation and between-group dfs
+  at the call's time points; random intercept: the PI df and the CI df at the
+  call's rows) within 1e-3 relative. Otherwise it is unavailable (random slope:
+  `vc_cov_route = "unavailable"`), the default dfs fall back to containment
+  with the reason "unstable numerical Hessian" in the df-fallback warning, and
+  the `"broad-inference"` arms report `NA` limits. Fits with every parameter
+  above 1.8e-5 of the residual variance are unaffected (their numbers move at
+  floating-point level, about 1e-10 relative in the dfs). A failure of the
+  numerical gradient of the mean-line variance now gives the containment df
+  with the reason "numerical derivative failed" (and the df-fallback warning)
+  instead of an error.
+
 * The random-slope variance-parameter covariance could be unavailable on
   non-singular fits with a strong intercept-slope correlation (`|rho|` above
   about 0.86), because the numerical Hessian's first step (10% of each

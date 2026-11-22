@@ -174,9 +174,14 @@ test_that("B2 (a): default NGM outputs are unchanged (pinned before the B2 edits
     r <- quiet(new_group_mean_lmm(F_b2[[nm]]$fit, newdata = F_b2[[nm]]$nd, sides = sd))
     d <- attr(r, "diagnostics")
     expect_equal(r$estimate, p$estimate, tolerance = 1e-12, info = key)
-    expect_equal(r$lower, p$lower, tolerance = 1e-12, info = key)
-    expect_equal(r$upper, p$upper, tolerance = 1e-12, info = key)
-    expect_equal(d$df, p$df, tolerance = 1e-12, info = key)
+    ## limits and df: 1e-9 (was 1e-12). The scale-free derivatives
+    ## (.nd_deriv: steps in psi = phi / s) evaluate at s * (phi / s), an ulp
+    ## from phi; on the random-slope fits that moves nu_G by up to 1.1e-10 and
+    ## the limits by up to 4e-12 relative (a 1-ulp perturbation of phi alone
+    ## moves these dfs 3e-10 - 1e-9 on the old code). Estimates are unaffected.
+    expect_equal(r$lower, p$lower, tolerance = 1e-9, info = key)
+    expect_equal(r$upper, p$upper, tolerance = 1e-9, info = key)
+    expect_equal(d$df, p$df, tolerance = 1e-9, info = key)
     expect_identical(unique(r$method), p$method, info = key)
     expect_identical(d$df_rule, p$df_rule, info = key)
     rs <- grepl("^rs_", nm)
