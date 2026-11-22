@@ -663,27 +663,8 @@ test_that("B2 (g): the unvalidated warning fires once per call for each applied 
   expect_match(conditionMessage(w), "ngm_method = \"package\"", fixed = TRUE)
 })
 
-## ---- PENDING oracle: chow-shao1991-t23 (fixtures/oracles.csv) -----------------
-## Chow & Shao (1991), Biometrics 47(3):1071-1079: the stability data and the
-## exact t_23 limits. To collect: transcribe the data and the printed limits to
-## fixtures/chow_shao1991/ (data.csv: batch, time, y; limits.csv: t0, side,
-## estimate, limit, dp; `#` header: reference, table, transcriber, date), then
-## compare slope_ngm_method = "fv-anova" (mean of the per-lot OLS lines; df
-## K - 1, which is 23 only if the data have 24 batches: check, and record any
-## other df in the notes) at each printed t0: estimate and limit at the printed
-## precision, and the df exactly (23).
-## test_that("chow-shao1991-t23: fv-anova reproduces the Chow & Shao (1991) limits", {
-##   fx <- oracle_fixture("chow-shao1991-t23")
-##   fm <- lme4::lmer(y ~ time + (1 + time | batch), data = fx$data)
-##   for (sd in unique(fx$limits$side)) {
-##     L <- fx$limits[fx$limits$side == sd, ]
-##     r <- quiet_arm(new_group_mean_lmm(fm, newdata = data.frame(time = L$t0), sides = sd,
-##                    control = lmm_interval_control(slope_ngm_method = "fv-anova")))
-##     expect_identical(unique(attr(r, "diagnostics")$df), 23)
-##     expect_equal(round(r$estimate, L$dp), L$estimate)
-##     expect_equal(round(if (sd == "lower") r$lower else r$upper, L$dp), L$limit)
-##   }
-## })
+## Chow & Shao (1991): collected as a random-slope CI oracle (slope_ci_df arms
+## vs the exact t_23 limits) in test-oracle-chow-shao.R.
 
 ## ---- PENDING oracle: sas-part2-ngm-rs-unbal (fixtures/oracles.csv) ------------
 ## SAS part 2 (simstudy oracles/sas_ngm/part2, ngm_sas_check_part2.sas; data
