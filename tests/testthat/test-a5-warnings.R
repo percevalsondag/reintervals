@@ -166,8 +166,11 @@ test_that("df_fallback fires on a random-slope fit whose Hessian-Satterthwaite d
     expect_identical(n_class(out, "reintervals_warning_df_fallback"), 1L, info = v)
     expect_match(msg_class(out, "reintervals_warning_df_fallback"),
                  "default Hessian-Satterthwaite df", fixed = TRUE, info = v)
+    ## a singular fit gets no covariance (no Hessian): the reason says so
     expect_match(msg_class(out, "reintervals_warning_df_fallback"),
-                 "covariance of the variance parameters", fixed = TRUE, info = v)
+                 "(singular fit)", fixed = TRUE, info = v)
+    expect_identical(attr(out$value, "diagnostics")$vc_cov_reason,
+                     rep("singular fit", 2), info = v)
   }
   ## a validation arm never falls back and does not warn
   k1 <- catch_warnings(ci_lmm(fn, nd, control = lmm_interval_control(slope_ci_df = "k-minus-1")))
@@ -356,12 +359,19 @@ test_that("a failing isSingular() gives singular = NA, singular_check, and the s
   ti <- catch_warnings(ti_lmm(fh, method = "ems-mls"))
   expect_identical(n_class(ti, "reintervals_warning_singular"), 1L)
   expect_true(is.na(ti$value$singular))
-  ## random slope: CI / NGM / GPQ TI report NA too
-  for (r in list(ci_lmm(fr, data.frame(Days = 5)),
-                 new_group_mean_lmm(fr, data.frame(Days = 5)),
+  ## random slope: CI / NGM / GPQ TI report NA too; the CI / NGM take the
+  ## singular branch (no Hessian, containment df, vc_cov_reason says why)
+  for (r in list(quiet_df_fallback(ci_lmm(fr, data.frame(Days = 5))),
+                 quiet_df_fallback(new_group_mean_lmm(fr, data.frame(Days = 5))),
                  ti_lmm(fr, data.frame(Days = 5), control = ctl_ti))) {
     expect_true(is.na(r$singular))
     expect_identical(attr(r, "diagnostics")$singular_check, "failed: boom")
+    if (r$type[1] != "ti") {
+      expect_identical(attr(r, "diagnostics")$vc_cov_route, "unavailable")
+      expect_identical(attr(r, "diagnostics")$vc_cov_reason,
+                       "singularity check failed; treated as singular")
+      expect_identical(attr(r, "diagnostics")$df_rule, "containment")
+    }
   }
 })
 

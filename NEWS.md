@@ -208,6 +208,20 @@
   `"retry-d1e-3"` or `"unavailable"`) in `attr(., "diagnostics")` of the
   random-slope `ci_lmm()`, `pi_lmm()`, `new_group_mean_lmm()` and
   `lmm_predict()`. Fits whose default Hessian was valid are unchanged.
+  Singular fits never get a variance-parameter covariance, on either engine:
+  when `lme4::isSingular()` is `TRUE` (or the check fails) the random-slope
+  path, like the random-intercept path, computes no Hessian (the REML optimum
+  is on the boundary, where the inverse observed information is not a
+  covariance of the estimates). The route is `"unavailable"`, the default dfs
+  fall back to containment, and the `"broad-inference"` arm returns `NA`
+  limits; before, a singular random-slope fit got a covariance whenever the
+  numerical Hessian happened to be positive definite. Why a covariance or a
+  df is unavailable is now reported per row in `attr(., "diagnostics")`:
+  `vc_cov_reason` on the random-slope rows (`"singular fit"`, `"singularity
+  check failed; treated as singular"`, `"sentinel"`, `"unstable numerical
+  Hessian"` or `"Hessian not PD or not invertible"`; `NA` when a covariance
+  was obtained) and `df_fallback_reason` on the random-intercept CI, PI and
+  new-group-mean rows (`NA` where the df did not fall back).
 * The default random-slope new-group-mean interval (and the random-slope
   confidence and prediction intervals) could return `(-Inf, Inf)` when the
   Hessian-Satterthwaite df was a tiny positive number (for example 0.004 on a

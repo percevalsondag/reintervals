@@ -82,6 +82,14 @@ intervals_lmm <- function(model, newdata = NULL, level = 0.95, conf = 0.95,
       .ci_ddf(model, fx$L[i, ], theta = theta, ci_df = ci_df, df_method = ci_method,
               kr = kr))
     ddf <- vapply(dd, function(x) x$df, numeric(1))
+    ## per-row reason a default Satterthwaite CI df fell back (NA otherwise):
+    ## the .theta_cov reason when there is no covariance, else .ci_ddf's
+    ci_fb <- is.null(ci_df) && ci_method == "satterthwaite"
+    ci_reason <- vapply(dd, function(x) {
+      if (!ci_fb || !identical(x$method, "containment")) return(NA_character_)
+      if (is.null(theta$cov_theta)) theta$fallback_reason
+      else if (is.null(x$reason)) NA_character_ else x$reason
+    }, character(1))
     cis <- lapply(seq_len(nr), function(i) {
       vm <- if (is.null(dd[[i]]$var_mean)) fx$var_fix[i] else dd[[i]]$var_mean
       ci_mean(make_comp(i, ddf[i], var_mean = vm), conf = conf)
@@ -92,6 +100,7 @@ intervals_lmm <- function(model, newdata = NULL, level = 0.95, conf = 0.95,
       lower = vapply(cis, function(x) x$lower, numeric(1)),
       upper = vapply(cis, function(x) x$upper, numeric(1)),
       df = ddf, df_method = vapply(dd, function(x) x$method, character(1)),
+      df_fallback_reason = ci_reason,
       level = conf, stringsAsFactors = FALSE
     ), row.names = NULL)
   }
@@ -107,8 +116,12 @@ intervals_lmm <- function(model, newdata = NULL, level = 0.95, conf = 0.95,
       estimate = vapply(pis, function(x) x$estimate, numeric(1)),
       lower = vapply(pis, function(x) x$lower, numeric(1)),
       upper = vapply(pis, function(x) x$upper, numeric(1)),
-      df = theta$df_pi, df_method = NA_character_, level = level,
-      stringsAsFactors = FALSE
+      df = theta$df_pi, df_method = NA_character_,
+      ## the Francq df fell back (default pi_df only): .theta_cov's reason
+      df_fallback_reason = if (pi_method != "containment" &&
+                                 isTRUE(theta$pi_df_fallback))
+        theta$fallback_reason else NA_character_,
+      level = level, stringsAsFactors = FALSE
     ), row.names = NULL)
   }
 
@@ -123,11 +136,11 @@ intervals_lmm <- function(model, newdata = NULL, level = 0.95, conf = 0.95,
       attr(out, "df_fallback_reason") <- theta$fallback_reason
   }
   ## reason for a default Satterthwaite CI df that fell back to containment
+  ## (the union of the per-row column df_fallback_reason)
   if ("CI" %in% which && is.null(ci_df) && ci_method == "satterthwaite" &&
         any(blocks$CI$df_method == "containment")) {
     attr(out, "df_fallback_reason") <- c(attr(out, "df_fallback_reason"),
-      if (is.null(theta$cov_theta)) theta$fallback_reason else
-        unique(unlist(lapply(dd, function(x) x$reason))))
+      unique(stats::na.omit(ci_reason)))
   }
   ## set whether or not theta was computed (a CI-only call skips .theta_cov), so
   ## the CI reports lme4::isSingular() like the PI / new-group-mean / TI.

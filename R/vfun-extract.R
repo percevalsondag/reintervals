@@ -204,7 +204,8 @@
 }
 
 ## ---- Cov(phi) via inverse observed information  ---------
-## SAFEGUARD (2): cov is NULL when the Hessian fails, cannot be inverted, or its
+## SAFEGUARD (2): cov is NULL on a singular fit (no Hessian is computed; see
+## SINGULAR FITS below), and when the Hessian fails, cannot be inverted, or its
 ## inverse is not a valid covariance (.is_pd_cov: symmetric positive definite,
 ## every eigenvalue > 1e-8 * the largest |eigenvalue|). An indefinite inverse
 ## Hessian makes the Satterthwaite df arbitrarily large (anti-conservative), so
@@ -227,9 +228,30 @@
 ## stability guard at the t0 values `guard_t0` (.nd_unstable_psi): otherwise
 ## the route is "unavailable" with reason "unstable numerical Hessian".
 ## vc_cov_route: "default", "retry-d1e-3" or "unavailable" (cov NULL).
+## reason (vc_cov_reason): NA when a covariance was obtained, else "singular
+## fit", "singularity check failed; treated as singular", "sentinel" (the
+## default Hessian gave no valid covariance and the d = 1e-3 retry also left the
+## valid region), "unstable numerical Hessian", or "Hessian not PD or not
+## invertible" (also a Hessian that could not be evaluated).
+##
+## SINGULAR FITS (the same rule as .theta_cov on the random-intercept path): when
+## lme4::isSingular() is TRUE, or the check failed (.singular_status: NA, read as
+## singular), no Hessian is computed and cov is NULL. On a singular fit the REML
+## optimum is on the boundary of the parameter space (a variance at, or within
+## lme4's tolerance of, 0), so the inverse observed information is not a
+## covariance of the estimates: their sampling distribution is not the local
+## quadratic approximation, and whether numDeriv returns a PD matrix there
+## depends only on whether its steps happen to stay inside the valid region.
 .vfun_vc_cov <- function(parsed, boundary_tol = 1e-4, guard_t0 = NULL) {
   phi <- parsed$phi
   boundary <- .vfun_is_boundary(phi, boundary_tol)  # variances-only (see helper)
+  singular <- .is_singular(parsed$model)            # NA when the check failed
+  if (!isFALSE(singular)) {
+    return(list(cov = NULL, phi = phi, boundary = boundary, ok = FALSE,
+                vc_cov_route = "unavailable",
+                reason = if (is.na(singular))
+                  "singularity check failed; treated as singular" else "singular fit"))
+  }
 
   cov_from <- function(H) {
     if (is.null(H) || !all(is.finite(H))) return(NULL)
@@ -252,17 +274,19 @@
   d <- 0.1                                   # numDeriv's default first step
   cov <- cov_from(hess(d)$H)
   route <- "default"
+  reason <- NA_character_
   if (is.null(cov)) {
     d <- 1e-3
     h2 <- hess(d)
     cov <- if (h2$hit) NULL else cov_from(h2$H)
     route <- if (is.null(cov)) "unavailable" else "retry-d1e-3"
+    if (is.null(cov))
+      reason <- if (h2$hit) "sentinel" else "Hessian not PD or not invertible"
   }
   ## half-step stability guard (.nd_unstable_psi): the Satterthwaite F, T, G
   ## dfs at every guard_t0 from the step-d and step-d/2 Hessians must agree to
   ## 1e-3 relative (the d/2 Hessian under the same acceptance rule as its route:
   ## no sentinel hit on the retry)
-  reason <- NA_character_
   if (!is.null(cov) && .nd_unstable_psi(phi, s)) {
     h3 <- hess(d / 2)
     cov2 <- if (route == "retry-d1e-3" && h3$hit) NULL else cov_from(h3$H)
@@ -306,9 +330,10 @@
 #'
 #' This is a separate path from `vc_extract()` (the EMS engine): it does not
 #' route through it and does not relax its random-slope `stop()`. The slope
-#' engine keeps its own singular handling (advisory `singular`/`boundary` flags)
-#' and its own Satterthwaite -> containment df fallback; neither is shared with
-#' the EMS path.
+#' engine keeps its own Satterthwaite -> containment df fallback. Its singular
+#' rule is the EMS path's: on a singular fit (or a failed singularity check) no
+#' Hessian is computed, `cov` is `NULL` and every Satterthwaite df falls back to
+#' containment; `boundary` stays an advisory flag.
 #'
 #' @param model A fitted `lme4::lmer` stability model with one grouping factor
 #'   and fixed part `~ 1 + time`: `y ~ time + (1 | g)` (random intercept + fixed
@@ -326,7 +351,9 @@
 #' @return A `vfun_components` object at `t0`, with `attr(., "df_fallback")`, a
 #'   logical vector over `F`, `T`, `G` that is `TRUE` where the Satterthwaite df
 #'   was unavailable and the containment df was used (`NA` when
-#'   `df_method = "containment"`). It carries what the random-slope CI / PI /
+#'   `df_method = "containment"`), and `attr(., "vc_cov_route")` /
+#'   `attr(., "vc_cov_reason")` (how `Cov(phi)` was obtained, and why it is
+#'   unavailable: `NA` when it was obtained). It carries what the random-slope CI / PI /
 #'   new-group-mean intervals need (the slope tolerance interval is GPQ, which
 #'   works from the raw data, not from this container).
 #' @seealso `vfun_components()`, `vc_extract()` (the EMS path).
@@ -344,8 +371,9 @@ vfun_extract <- function(model, t0,
            "time point).", class = "reintervals_error_input")
 
   parsed <- .vfun_parse(model)
-  vc     <- .vfun_vc_cov(parsed, boundary_tol = boundary_tol, guard_t0 = guard_t0)
   sing   <- .is_singular(model)    # NA when the check failed (not "non-singular")
+  ## singular (or failed check): no Hessian, cov NULL (.vfun_vc_cov)
+  vc     <- .vfun_vc_cov(parsed, boundary_tol = boundary_tol, guard_t0 = guard_t0)
 
   phi   <- parsed$phi; type <- parsed$type; s2e <- parsed$s2e
   beta  <- parsed$fixef; Vbeta <- parsed$vcov_beta; fe_time <- parsed$fe_time
@@ -407,7 +435,7 @@ vfun_extract <- function(model, t0,
   )
   attr(out, "vg_floored") <- vg$floored
   attr(out, "vc_cov_route") <- vc$vc_cov_route   # how Cov(phi) was obtained
-  attr(out, "vc_cov_reason") <- vc$reason         # why it is unavailable (or NA)
+  attr(out, "vc_cov_reason") <- vc$reason         # why it is unavailable (NA if obtained)
   attr(out, "df_fallback") <- c(F = rF[2] == 1, T = rT[2] == 1, G = rG[2] == 1)
   ## why each fallen-back df fell back (NA where it did not)
   why <- c("non-finite df", "df below 1", "numerical derivative failed")

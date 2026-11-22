@@ -79,13 +79,23 @@ parameters behind their Satterthwaite dfs was obtained --- \code{"default"}
 (the numerical REML Hessian at numDeriv's default relative step), \code{"retry-d1e-3"}
 (the default Hessian left the valid region, e.g. a strong
 intercept-slope correlation, and a retry with a 0.1\% first step that stayed
-inside it was used) or \code{"unavailable"} (no valid covariance, or, on a fit
-with a variance parameter below about 1.8e-5 of the residual variance, a
-covariance whose dfs changed by more than 1e-3 relative when the Hessian
-step was halved; the default dfs fall back to containment and the
-\code{"broad-inference"} arm reports \code{NA} limits); the Hessian is taken on the
-variance parameters divided by the residual variance, so the route and
-every df are unchanged by the units of the response or of time; standard
+inside it was used) or \code{"unavailable"} (a singular fit, on which no
+Hessian is computed, as on the random-intercept path; no valid covariance;
+or, on a fit with a variance parameter below about 1.8e-5 of the residual
+variance, a covariance whose dfs changed by more than 1e-3 relative when
+the Hessian step was halved; the default dfs fall back to containment and
+the \code{"broad-inference"} arm reports \code{NA} limits); the Hessian is taken on
+the variance parameters divided by the residual variance, so the route and
+every df are unchanged by the units of the response or of time; next to it
+\code{vc_cov_reason}, why that covariance is unavailable --- \code{NA} when it was
+obtained, else \code{"singular fit"}, \code{"singularity check failed; treated as singular"}, \code{"sentinel"} (the default and the retried Hessian both left the
+valid region of the variance parameters), \code{"unstable numerical Hessian"},
+or \code{"Hessian not PD or not invertible"}; for the random-intercept
+confidence, prediction and new-group-mean intervals \code{df_fallback_reason},
+per row, why the default Satterthwaite df fell back to containment (e.g.
+\code{"singular fit"}, \code{"df below 1"}, \code{"non-finite df"}; for the
+\code{ngm_method = "broad-inference"} arm, why its df could not be formed, the
+rows with \code{NA} limits), \code{NA} where it did not; standard
 error \code{se}; and any GPQ / ANOVA intermediates);
 \code{attr(., "grouping")} is the random-intercept topology (\code{"oneway"},
 \code{"nested"}, \code{"crossed"}, or \code{NA} for slope models).

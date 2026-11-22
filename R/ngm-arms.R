@@ -74,8 +74,11 @@
     between <- sum(theta$components[-k])     # REML, bounded at 0 by lme4
     W <- fx$var_fix + between
     df <- .ngm_ri_broad_df(fx, theta, W)
+    why <- attr(df, "reason"); df <- as.numeric(df)
+    if (is.null(why)) why <- rep(NA_character_, length(df))
     est <- fx$fit
     failed <- !is.finite(df) | df <= 0
+    why[failed & is.na(why)] <- "non-finite or non-positive df"
     rule <- "satterthwaite-broad"
   } else if (arm == "hts") {
     I <- nlevels(lme4::getME(model, "flist")[[1]])
@@ -109,6 +112,9 @@
                      upper = if (sides == "lower")  Inf else est + hw,
                      level = level, df = df, df_rule = rule, W = W, se = sqrt(W),
                      sides = sides, method = method, stringsAsFactors = FALSE)
+  ## why the df could not be formed (broad-inference only; the other arms have
+  ## fixed dfs): NA where it was formed
+  rows$df_fallback_reason <- if (arm == "broad-inference") why else NA_character_
   if (arm == "broad-inference") {
     rows$ngm_df_failed <- failed
     ## NA limits on both sides when the df failed (no fallback)
@@ -124,19 +130,27 @@
 
 ## Satterthwaite df 2 W^2 / (g' A g) of the random-intercept broad-inference
 ## variance W = V_F + sum of the between-group components, one per row of fx$L;
-## NA where it cannot be formed (no covariance A, no gradient, g' A g <= 0).
+## NA where it cannot be formed (no covariance A, no gradient, g' A g <= 0),
+## with attr(., "reason") the per-row reason (NA where the df was formed): the
+## .theta_cov reason when there is no covariance (e.g. "singular fit"),
+## "numerical derivative failed", or "non-positive or non-finite g' A g".
 .ngm_ri_broad_df <- function(fx, theta, W) {
   k <- theta$parts$k
   a01 <- c(rep(1, k - 1L), 0)                # dW / d(variance components) beyond V_F
-  vapply(seq_along(W), function(i) {
-    if (is.null(theta$cov_theta)) return(NA_real_)
+  no_cov <- if (is.na(theta$fallback_reason)) "no covariance of the variance components"
+            else theta$fallback_reason
+  res <- lapply(seq_along(W), function(i) {
+    if (is.null(theta$cov_theta)) return(list(NA_real_, no_cov))
     cg <- .contrast_var_grad(fx$L[i, ], theta$parts)
-    if (is.null(cg)) return(NA_real_)
+    if (is.null(cg)) return(list(NA_real_, "numerical derivative failed"))
     g <- cg$grad + a01
     v <- as.numeric(t(g) %*% theta$cov_theta %*% g)
-    if (!is.finite(v) || v <= 0) return(NA_real_)
-    2 * W[i]^2 / v
-  }, numeric(1))
+    if (!is.finite(v) || v <= 0)
+      return(list(NA_real_, "non-positive or non-finite g' A g"))
+    list(2 * W[i]^2 / v, NA_character_)
+  })
+  structure(vapply(res, `[[`, numeric(1), 1L),
+            reason = vapply(res, `[[`, character(1), 2L))
 }
 
 ## Per-lot OLS lines at t0 (base R; the package port of the simstudy pilot's

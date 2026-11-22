@@ -405,7 +405,8 @@ lmm_interval_control <- function(seed = NULL, M = 20000L,
                  "df_method", "route_reason", "df_rule", "W", "mls_bound",
                  "n_na_draws", "mc_se_lower", "mc_se_upper", "ci_df_rule",
                  "slope_ci_df_rule", "pi_df_rule", "ngm_arm", "slope_ngm_arm",
-                 "ngm_df_failed", "vc_cov_route")
+                 "ngm_df_failed", "vc_cov_route", "vc_cov_reason",
+                 "df_fallback_reason")
 
 ## The output unifier. Maps any engine's native frame to the single tidy
 ## contract; relabels only, never recomputes. Universal columns, in order:
@@ -472,7 +473,7 @@ lmm_interval_control <- function(seed = NULL, M = 20000L,
                "pi_df_rule", "ngm_arm", "slope_ngm_arm", "ngm_df_failed", "W", "se", "tau2_med", "s2e_med",
                "frac_boundary", "K", "df_resid", "phi1", "c_resid",
                "route_reason", "mls_bound", "n_na_draws", "mc_se_lower",
-               "mc_se_upper", "vc_cov_route")) {
+               "mc_se_upper", "vc_cov_route", "vc_cov_reason", "df_fallback_reason")) {
     if (cn %in% names(native)) diag[[cn]] <- native[[cn]]
   }
   for (a in c("beta_hat", "n_E", "U", "Vhat_Y", "C1", "C2", "pi_df_fallback",
@@ -566,13 +567,24 @@ print.lmm_interval <- function(x, ...) {
 #'   (the numerical REML Hessian at numDeriv's default relative step), `"retry-d1e-3"`
 #'   (the default Hessian left the valid region, e.g. a strong
 #'   intercept-slope correlation, and a retry with a 0.1% first step that stayed
-#'   inside it was used) or `"unavailable"` (no valid covariance, or, on a fit
-#'   with a variance parameter below about 1.8e-5 of the residual variance, a
-#'   covariance whose dfs changed by more than 1e-3 relative when the Hessian
-#'   step was halved; the default dfs fall back to containment and the
-#'   `"broad-inference"` arm reports `NA` limits); the Hessian is taken on the
-#'   variance parameters divided by the residual variance, so the route and
-#'   every df are unchanged by the units of the response or of time; standard
+#'   inside it was used) or `"unavailable"` (a singular fit, on which no
+#'   Hessian is computed, as on the random-intercept path; no valid covariance;
+#'   or, on a fit with a variance parameter below about 1.8e-5 of the residual
+#'   variance, a covariance whose dfs changed by more than 1e-3 relative when
+#'   the Hessian step was halved; the default dfs fall back to containment and
+#'   the `"broad-inference"` arm reports `NA` limits); the Hessian is taken on
+#'   the variance parameters divided by the residual variance, so the route and
+#'   every df are unchanged by the units of the response or of time; next to it
+#'   `vc_cov_reason`, why that covariance is unavailable --- `NA` when it was
+#'   obtained, else `"singular fit"`, `"singularity check failed; treated as
+#'   singular"`, `"sentinel"` (the default and the retried Hessian both left the
+#'   valid region of the variance parameters), `"unstable numerical Hessian"`,
+#'   or `"Hessian not PD or not invertible"`; for the random-intercept
+#'   confidence, prediction and new-group-mean intervals `df_fallback_reason`,
+#'   per row, why the default Satterthwaite df fell back to containment (e.g.
+#'   `"singular fit"`, `"df below 1"`, `"non-finite df"`; for the
+#'   `ngm_method = "broad-inference"` arm, why its df could not be formed, the
+#'   rows with `NA` limits), `NA` where it did not; standard
 #'   error `se`; and any GPQ / ANOVA intermediates);
 #'   `attr(., "grouping")` is the random-intercept topology (`"oneway"`,
 #'   `"nested"`, `"crossed"`, or `NA` for slope models).

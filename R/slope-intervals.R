@@ -101,6 +101,9 @@
     vg_floored = isTRUE(attr(comp, "vg_floored")),  # V_G<0 floored at this t0
     vc_cov_route = if (is.null(attr(comp, "vc_cov_route"))) NA_character_
                    else attr(comp, "vc_cov_route"),  # Cov(phi) route (.vfun_vc_cov)
+    ## why Cov(phi) is unavailable (NA when it was obtained, or unknown)
+    vc_cov_reason = if (is.null(attr(comp, "vc_cov_reason"))) NA_character_
+                    else attr(comp, "vc_cov_reason"),
     stringsAsFactors = FALSE
   )
 }
@@ -140,7 +143,7 @@
   ## two-sided: t_{1 - alpha/2}; one-sided: t_{1 - alpha} on the same pivot
   tcrit <- function(df) if (sides == "two.sided") stats::qt(1 - (1 - level) / 2, df)
                         else stats::qt(level, df)
-  value_rows <- function(est, W, df, rule, method) {
+  value_rows <- function(est, W, df, rule, method, reason = NA_character_) {
     if (any(!is.finite(W) | W <= 0)) {
       .abort("The new-group-mean variance W is not positive for this fit (e.g. ",
              "all group means are identical, so the between-group mean square is ",
@@ -151,6 +154,7 @@
                lower = if (sides == "upper") -Inf else est - hw,
                upper = if (sides == "lower")  Inf else est + hw,
                level = level, df = df, df_rule = rule, W = W,
+               df_fallback_reason = reason,   # NA where the df did not fall back
                sides = sides, method = method, stringsAsFactors = FALSE)
   }
 
@@ -212,17 +216,19 @@
     ## non-finite or < 1 -> containment, as .ci_ddf).
     bad  <- !is.finite(df) | df < 1
     rule <- ifelse(bad, "containment", "satterthwaite-vf")
-    fb_reason <- if (!any(bad)) NULL else if (!is.finite(pA))
-      "k_A EMS_A + k_B EMS_B is not positive" else
-      unique(ifelse(is.finite(df[bad]), "df below 1", "non-finite df"))
+    row_reason <- ifelse(!bad, NA_character_,
+                         if (!is.finite(pA)) "k_A EMS_A + k_B EMS_B is not positive"
+                         else ifelse(is.finite(df), "df below 1", "non-finite df"))
+    fb_reason <- if (!any(bad)) NULL else unique(row_reason[bad])
     if (any(bad)) df[bad] <- .ddf_containment(model)
   } else {
     df <- rep(dfj[[1]], length(VF))        # Gm: top-factor stratum df (A - 1,
                                            # less any between-group fixed columns)
     rule <- "top-factor"
     fb_reason <- NULL
+    row_reason <- NA_character_
   }
-  out <- cbind(fx$newdata, value_rows(fx$fit, W, df, rule, "ems-mls"))
+  out <- cbind(fx$newdata, value_rows(fx$fit, W, df, rule, "ems-mls", row_reason))
   rownames(out) <- NULL
   attr(out, "singular") <- .is_singular(model)
   attr(out, "df_fallback_reason") <- fb_reason
@@ -284,14 +290,15 @@
       if (identical(row$df_rule, "containment")) {
         key <- c(CI = "F", PI = "T", new_group_mean = "G")[[kind]]
         why <- attr(comp, "df_fallback_why")[[key]]
-        reasons <<- c(reasons, paste0(
-          if (!isFALSE(comp$singular)) "singular fit (or singularity check failed); ",
+        ## no covariance: its reason (vc_cov_reason; "singular fit" or
+        ## "singularity check failed; treated as singular" on a singular fit)
+        reasons <<- c(reasons,
           if (is.null(comp$cov)) {
             r <- attr(comp, "vc_cov_reason")
             if (!is.null(r) && !is.na(r)) r
             else "non-PD or unavailable covariance of the variance parameters"
           }
-          else if (!is.null(why) && !is.na(why)) why else "non-finite df"))
+          else if (!is.null(why) && !is.na(why)) why else "non-finite df")
       }
       row
     })
