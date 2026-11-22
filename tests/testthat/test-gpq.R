@@ -98,28 +98,8 @@ test_that("REGRESSION PIN (not an oracle): random-slope GPQ TI limits, sleepstud
   }
 })
 
-## ---- PENDING oracle: oliva2025-worked-example (fixtures/oracles.csv) ----------
-## Oliva-Aviles & Hauser (2025) worked example values. To collect: transcribe the
-## example data and the printed TI (and any printed pivot summaries) to
-## fixtures/oliva2025_worked_example/ (data.csv; limits.csv: t0, P, level, side,
-## lower, upper, dp; `#` header with the reference and section, transcriber, date).
-## The engine is Monte Carlo, so compare the limits at the larger of the printed
-## precision and 3 x the MC SE of each limit (diagnostics mc_se_lower /
-## mc_se_upper, A2), at
-## M = 20000 with a recorded seed; the paper's own Monte-Carlo error, if printed,
-## widens the tolerance accordingly and is recorded in the registry notes.
-## test_that("oliva2025-worked-example: GPQ TI reproduces the published example", {
-##   fx <- oracle_fixture("oliva2025-worked-example")
-##   fm <- lme4::lmer(y ~ t + (1 + t | lot), data = fx$data)
-##   for (i in seq_len(nrow(fx$limits))) {
-##     L <- fx$limits[i, ]
-##     r <- ti_lmm(fm, newdata = data.frame(t = L$t0), P = L$P, level = L$level,
-##                 sides = L$side, control = lmm_interval_control(seed = 20261109L))
-##     d <- attr(r, "diagnostics")
-##     expect_lt(abs(r$lower - L$lower), max(0.5 * 10^-L$dp, 3 * d$mc_se_lower))
-##     expect_lt(abs(r$upper - L$upper), max(0.5 * 10^-L$dp, 3 * d$mc_se_upper))
-##   }
-## })
+## oliva2025-worked-example (formerly pending) is merged into oliva2025-pqri:
+## see test-oracle-oliva-pqri.R.
 
 ## ---- PENDING oracle: liao2005-sulfur (fixtures/oracles.csv) -------------------
 ## Liao, Lin & Iyer (2005) Technometrics 47(3):323-335, sulfur example (GPQ
@@ -128,11 +108,11 @@ test_that("REGRESSION PIN (not an oracle): random-slope GPQ TI limits, sleepstud
 ## limits.csv: P, level, side, lower, upper, dp; `#` header with the reference,
 ## transcriber, date); confirm the model and the GPQ construction match the
 ## package engine, then compare at the larger of the printed precision and
-## 3 x the MC SE (M = 20000, recorded seed), as oliva2025-worked-example.
+## 3 x the MC SE (M = 20000, recorded seed), as in test-oracle-oliva-pqri.R.
 ## test_that("liao2005-sulfur: GPQ TI reproduces the sulfur example", {
 ##   fx <- oracle_fixture("liao2005-sulfur")
 ##   fm <- lme4::lmer(<model as printed>, data = fx$data)
-##   ## loop over fx$limits as in oliva2025-worked-example
+##   ## loop over fx$limits as in test-oracle-oliva-pqri.R
 ## })
 
 ## ---- PENDING oracle: lin2008-arsenic (fixtures/oracles.csv) -------------------
@@ -144,5 +124,5 @@ test_that("REGRESSION PIN (not an oracle): random-slope GPQ TI limits, sleepstud
 ## share a definition (e.g. a homogeneous-variance case, if printed).
 ## test_that("lin2008-arsenic: GPQ TI reproduces the arsenic example", {
 ##   fx <- oracle_fixture("lin2008-arsenic")
-##   ## fit, then loop over fx$limits as in oliva2025-worked-example
+##   ## fit, then loop over fx$limits as in test-oracle-oliva-pqri.R
 ## })

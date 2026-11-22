@@ -43,8 +43,39 @@ test_that("hk_assay matches the published summary statistics (HK 2007 Table III)
   expect_equal(round(sum((hk_assay$conc - ybar_i[hk_assay$run])^2) / 12, 6), 0.001167)
 })
 
-# oracle: hk2005-o1 (fixtures/oracles.csv)
-test_that("O1: HK 2005, beta 0.95, gamma 0.90 -> (0.846, 1.114); default route is anova-mls", {
+# oracle: hk2005-example (fixtures/oracles.csv; formerly hk2005-o1)
+## HK 2005 Example: printed Ybar 0.9798, S1^2 0.00325, S2^2 0.00117. Their Table 6
+## prints run 5 / replicate 3 as 1.020, which does not reproduce these summaries;
+## 0.998 (HK 2007 Table III, as shipped in hk_assay) and 0.999 both do at the
+## HK 2005 digits, and only 0.998 matches HK 2007's 6-dp MSB / MSE.
+test_that("hk2005-example: the run 5 / replicate 3 value and the printed summaries", {
+  summ <- function(v) {
+    d <- hk_assay; d$conc[d$run == 5 & d$replicate == 3] <- v
+    yb <- tapply(d$conc, d$run, mean)
+    c(mean(d$conc), 3 * sum((yb - mean(d$conc))^2) / 5, sum((d$conc - yb[d$run])^2) / 12)
+  }
+  expect_identical(hk_assay$conc[hk_assay$run == 5 & hk_assay$replicate == 3], 0.998)
+  hk05 <- function(s) c(round(s[1], 4), round(s[2], 5), round(s[3], 5))
+  expect_equal(hk05(summ(0.998)), c(0.9798, 0.00325, 0.00117))      # as shipped
+  expect_equal(hk05(summ(0.999)), c(0.9798, 0.00325, 0.00117))      # also fits HK 2005 digits
+  expect_false(isTRUE(all.equal(hk05(summ(1.020)), c(0.9798, 0.00325, 0.00117))))  # Table 6 as printed
+  expect_equal(round(summ(0.998)[2:3], 6), c(0.003251, 0.001167))   # HK 2007 6 dp: 0.998 only
+  expect_false(isTRUE(all.equal(round(summ(0.999)[2:3], 6), c(0.003251, 0.001167))))
+})
+
+test_that("hk2005-example: eq. (2) from the printed summaries gives (0.846, 1.114)", {
+  I <- 6; J <- 3; N <- 18; yb <- 0.9798; S1 <- 0.00325; S2 <- 0.00117
+  beta <- 0.95; gamma <- 0.90
+  sT2 <- S1 / J + (J - 1) / J * S2
+  Ne <- I * (S1 + (J - 1) * S2) / S1
+  H1 <- (I - 1) / stats::qchisq(1 - gamma, I - 1) - 1
+  H2 <- (N - I) / stats::qchisq(1 - gamma, N - I) - 1
+  hw <- stats::qnorm((1 + beta) / 2) * sqrt(1 + 1 / Ne) *
+    sqrt(sT2 + sqrt(H1^2 * (S1 / J)^2 + H2^2 * ((J - 1) / J * S2)^2))
+  expect_equal(round(yb + c(-1, 1) * hw, 3), c(0.846, 1.114))
+})
+
+test_that("hk2005-example (O1): HK 2005, beta 0.95, gamma 0.90 -> (0.846, 1.114); default route is anova-mls", {
   skip_if_not_installed("lme4")
   x <- ti_lmm(fit_hk(hk_assay), P = 0.95, level = 0.90)
   expect_identical(x$method, "anova-mls")

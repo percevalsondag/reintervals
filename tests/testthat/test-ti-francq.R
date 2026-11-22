@@ -135,19 +135,4 @@ test_that("ti_francq one-sided (provisional) is Hoffman's (2010) limit on the Fr
 ##   }
 ## })
 
-## ---- PENDING oracle: francq2019-s51-esm (fixtures/oracles.csv) ----------------
-## Francq, Lin & Hoyer (2019) Section 5.1, the orthopedic data, against Table 2
-## as corrected (Statistics in Medicine 2020;39(14):2015). The data are in the
-## paper's online supplement and have not been obtained. To collect: transcribe
-## the supplement to fixtures/francq2019_s51/ (with a README: source, retrieval,
-## SHA-256 in SHA256SUMS). The variance components are estimated per
-## technology, so fit each technology's subset separately (the REML likelihood
-## factorises over technologies when no parameter is shared) and compare every
-## corrected Table 2 quantity at its printed precision.
-## test_that("francq2019-s51-esm: per-technology fits reproduce the corrected Table 2", {
-##   d <- oracle_fixture("francq2019-s51-esm")
-##   for (tech in unique(d$technology)) {
-##     fm <- lme4::lmer(y ~ 1 + (1 | subject), data = d[d$technology == tech, ])
-##     ## compare ci_lmm / pi_lmm / ti_lmm to the corrected Table 2 row for `tech`
-##   }
-## })
+## francq2019-s51-esm is collected: see test-oracle-francq-s51.R.
