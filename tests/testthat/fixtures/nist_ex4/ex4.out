@@ -1,0 +1,18 @@
+recipe
+Filename (without .dat extension) ?
+  ex4
+
+RECIPE : One-Sided Random-Effect Regression Tolerance Limits
+(Version 1.0, April 1995) 
+
+*** Simulated pivot critical value file ex4.crt not found.
+Satterthwaite approximation will be used.
+
+Probability    Confidence   Regression  Tolerance Limit
+0.90           0.95     327.537310     286.895095
+0.90           0.95     326.157386     285.580736
+0.90           0.95     324.128085     283.557672
+0.90           0.95     322.098785     281.470595
+0.90           0.95     320.069485     279.335972
+0.90           0.95     318.040184     277.119935
+0.90           0.95     316.010884     274.783636

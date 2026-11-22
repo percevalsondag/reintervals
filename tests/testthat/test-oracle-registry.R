@@ -66,7 +66,7 @@ test_that("oracle_fixture() reads a collected fixture and refuses pending and in
   expect_identical(nrow(sas$mean), 56L)
   expect_s3_class(oracle_fixture("montes2019-appa-ti"), "data.frame")
   expect_s3_class(oracle_fixture("chow-shao1991-t23"), "data.frame")
-  expect_error(oracle_fixture("nist-recipe-ex4"), "pending")
+  expect_error(oracle_fixture("francq2019-table2-corrected"), "pending")
   expect_error(oracle_fixture("francq2019-s52-ci"), "inline")
   expect_error(oracle_fixture("no-such-oracle"), "no oracle")
 })

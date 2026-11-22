@@ -1,0 +1,103 @@
+#
+#     RECIPE Example #4: Regression model with data from several
+#                        batches
+#
+#  -- In this example, we have 72 strength observations on data
+#     from 8 batches.  A straight-line regression is fit with
+#     two fixed levels (temperatures).  B-basis values are calculated
+#     for 7 points along this curve.
+#
+#  -- ntot, nlvl, nbch, npar, npts, prob, conf
+72 2 8 2 7 .9d0 .95d0
+#
+#  -- There are two fixed levels, corresponding to
+#     75 and -67 degrees.
+1  75
+1 -67
+#
+#  -- The following 72  rows give the fixed level in the
+#     first column, the batch in the second column, and the
+#     strength observation in the third column.
+1   1  328.1174
+1   1  334.7674
+1   1  347.7833
+1   1  346.2661
+1   1  338.7314
+1   2  297.0387
+1   2  293.4595
+1   2  308.0419
+1   2  326.4864
+1   2  318.1297
+1   2  309.0487
+1   3  337.0930
+1   3  317.7319
+1   3  321.4292
+1   3  317.2652
+1   3  291.8881
+1   4  297.6943
+1   4  327.3973
+1   4  303.8629
+1   4  313.0984
+1   4  323.2769
+1   5  312.9743
+1   5  324.5192
+1   5  334.5965
+1   5  314.9458
+1   5  322.7194
+1   6  291.1215
+1   6  309.7852
+1   6  304.8499
+1   6  288.0184
+1   6  294.1995
+2   1  340.8146
+2   1  343.5855
+2   1  334.1746
+2   1  348.6610
+2   1  356.3232
+2   1  344.1524
+2   2  308.6256
+2   2  315.1819
+2   2  317.6867
+2   2  313.9832
+2   2  309.3132
+2   2  275.1758
+2   3  321.4128
+2   3  316.4652
+2   3  331.3724
+2   3  304.8643
+2   3  309.6249
+2   3  347.8449
+2   4  331.5487
+2   4  316.5891
+2   4  303.7171
+2   4  320.3625
+2   4  315.2963
+2   4  322.8280
+2   5  340.0990
+2   5  348.9354
+2   5  331.2500
+2   5  330.0000
+2   5  340.9836
+2   5  329.4393
+2   7  330.9309
+2   7  328.4553
+2   7  344.1026
+2   7  343.3584
+2   7  344.4717
+2   7  351.2776
+2   8  331.0259
+2   8  322.4052
+2   8  327.6699
+2   8  296.8215
+2   8  338.1995
+#
+#    -- The following 7 rows give the points at which 
+#       the B-basis value is to be calculated: these 
+#       correspond to 7 temperatures -67,-50,...,75.
+1 -67
+1 -50
+1 -25
+1  0
+1 25
+1 50
+1 75

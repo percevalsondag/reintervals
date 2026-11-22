@@ -96,42 +96,6 @@ test_that("one-sided limits are Hoffman's (2010) H: Montes et al. (2019) Tables 
   expect_gt(abs(lo$lower - 61.48), 0.5); expect_gt(abs(lo12$lower - 58.13), 0.5)
 })
 
-## ---- PENDING oracle: nist-recipe-ex4 (fixtures/oracles.csv) -------------------
-## Vangel (1995) NIST RECIPE, Example 4 (regression with multiple batches):
-## one-sided tolerance limits for a regression model with between-batch
-## variability. To collect: transcribe the example data and its printed output to
-## fixtures/nist_recipe_ex4/ (data.csv: batch, x, y; limits.csv: x0, P, level,
-## side, limit, with a `#` header giving the reference, who transcribed it and
-## when), confirm that the RECIPE model is the random-intercept + fixed-slope
-## model of ti_anova_raw(), then compare the one-sided limit at each printed x0 at
-## the printed precision (round(limit, <printed dp>) equality). If RECIPE's model
-## or limit construction differs (e.g. not Hoffman's H), record that in the notes
-## and compare only the quantities that share a definition.
-## test_that("nist-recipe-ex4: one-sided limits reproduce NIST RECIPE Example 4", {
-##   fx <- oracle_fixture("nist-recipe-ex4")      # list(data = ..., limits = ...) once collected
-##   for (i in seq_len(nrow(fx$limits))) {
-##     L <- fx$limits[i, ]
-##     r <- ti_anova_raw(fx$data$y, fx$data$x, fx$data$batch, t0 = L$x0,
-##                       P = L$P, level = L$level, sides = L$side)
-##     got <- if (L$side == "lower") r$lower else r$upper
-##     expect_equal(round(got, L$dp), L$limit, info = paste("x0 =", L$x0))
-##   }
-## })
-
-## ---- PENDING oracle: hoffman2010-s51 (fixtures/oracles.csv) -------------------
-## Hoffman (2010) Technometrics 52(3):303-312, Section 5.1 example: one-sided
-## tolerance limits for a random effects model. To collect: transcribe the
-## example data and the printed limits to fixtures/hoffman2010_s51/ (data.csv;
-## limits.csv: P, level, side, limit, dp; `#` header with the reference and
-## section, transcriber, date), confirm the model matches ti_anova_raw() (or
-## ti_lmm(method = "anova-mls")), then compare at the printed precision.
-## test_that("hoffman2010-s51: one-sided limits reproduce Hoffman (2010) Section 5.1", {
-##   fx <- oracle_fixture("hoffman2010-s51")
-##   for (i in seq_len(nrow(fx$limits))) {
-##     L <- fx$limits[i, ]
-##     r <- ti_anova_raw(fx$data$y, NULL, fx$data$group, P = L$P, level = L$level,
-##                       sides = L$side)
-##     got <- if (L$side == "lower") r$lower else r$upper
-##     expect_equal(round(got, L$dp), L$limit)
-##   }
-## })
+## NIST RECIPE Example 4 and Hoffman (2010) section 5.2 (the same data): collected
+## as comparison references for the fixed-slope one-sided TI in
+## test-oracle-nist-ex4.R (different estimators; sanity screen only).
