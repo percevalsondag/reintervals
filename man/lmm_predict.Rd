@@ -65,7 +65,9 @@ per-row diagnostic is row-aligned. Columns, in order:
 \item \code{level} (the confidence, \code{1 - alpha}); \code{P} (content proportion ---
 the value for \code{ti}, \code{NA} for the coverage intervals); \code{sides};
 \item \code{method} (the engine: \code{"ems-mls"}, \code{"anova-mls"}, \code{"reml"}, or
-\code{"gpq"}); \code{design} (the route-independent model class, see
+\code{"gpq"}; \code{"fv-anova"} on random-slope prediction rows computed by
+\code{slope_pi_method = "fv-anova"} or \code{"hybrid"}, see
+\code{\link[=lmm_interval_control]{lmm_interval_control()}}); \code{design} (the route-independent model class, see
 \link{reintervals-models});
 \item the per-row flags \code{singular}, \code{boundary}, \code{vg_floored}.
 }
@@ -91,7 +93,8 @@ every df are unchanged by the units of the response or of time; next to it
 obtained, else \code{"singular fit"}, \code{"singularity check failed; treated as singular"}, \code{"sentinel"} (the default and the retried Hessian both left the
 valid region of the variance parameters), \code{"unstable numerical Hessian"},
 or \code{"Hessian not PD or not invertible"}; for the random-intercept
-confidence, prediction and new-group-mean intervals \code{df_fallback_reason},
+confidence, prediction and new-group-mean intervals and the random-slope
+prediction interval \code{df_fallback_reason},
 per row, why the default Satterthwaite df fell back to containment (e.g.
 \code{"singular fit"}, \code{"df below 1"}, \code{"non-finite df"}; for the
 \code{ngm_method = "broad-inference"} arm, why its df could not be formed, the

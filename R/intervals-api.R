@@ -14,8 +14,8 @@
 #' interval. Algorithm *selection* is the `method` argument, not this.
 #'
 #' @section Validation arms:
-#' The non-default values of `ci_df`, `slope_ci_df`, `pi_df`, `ngm_method` and
-#' `slope_ngm_method` are validation
+#' The non-default values of `ci_df`, `slope_ci_df`, `pi_df`, `ngm_method`,
+#' `slope_ngm_method` and `slope_pi_method` are validation
 #' arms: their coverage is under evaluation in the 1.0.0 validation study, and
 #' the defaults are the validated rules. Applying a non-default arm signals a
 #' warning of class `reintervals_warning_unvalidated` on every call (muffle it
@@ -23,7 +23,8 @@
 #' supported since 0.2.0. Each option applies to one model structure and verb:
 #' `ci_df` to [ci_lmm()] on random-intercept models (including the fixed-slope
 #' design), `slope_ci_df` to [ci_lmm()] on random-slope models, `pi_df` to
-#' [pi_lmm()] on random-intercept models, `ngm_method` to
+#' [pi_lmm()] on random-intercept models, `slope_pi_method` to [pi_lmm()] on
+#' random-slope models, `ngm_method` to
 #' [new_group_mean_lmm()] on random-intercept models and `slope_ngm_method` to
 #' [new_group_mean_lmm()] on random-slope models. Elsewhere an option is a
 #' no-op, never an error, so one control object can be reused across models
@@ -32,9 +33,12 @@
 #' groups, `"classical"` on unbalanced groups): the default is computed. The
 #' diagnostics of every confidence, prediction and new-group-mean interval
 #' record each option as `ci_df_rule`, `slope_ci_df_rule`, `pi_df_rule`,
-#' `ngm_arm` and `slope_ngm_arm`: the value applied, or `"not_applicable"`;
-#' `df` is the df actually used. The `method` column keeps the default route's
-#' tag; the arm is read from these fields.
+#' `ngm_arm`, `slope_ngm_arm` and `slope_pi_arm`: the value applied, or
+#' `"not_applicable"`; `df` is the df actually used. The `method` column keeps
+#' the default route's tag and the arm is read from these fields, except for
+#' `slope_pi_method`: its rows carry the construction actually used in
+#' `method` (`"reml"` or `"fv-anova"`; for `"hybrid"`, whichever it chose for
+#' the fit), while `slope_pi_arm` records the option value.
 #'
 #' @param seed Optional integer seed for the GPQ draws (reproducibility / GxP
 #'   traceability). One seed and one draw set serve the whole call, including
@@ -100,7 +104,7 @@
 #'   variance with the containment df of `ci_df = "containment"`). There is no
 #'   Kenward-Roger prediction interval: KR adjusts fixed-effect contrasts only,
 #'   and the prediction variance includes estimated variance components. Not
-#'   applied to random-slope models, whose prediction interval is unchanged.
+#'   applied to random-slope models (see `slope_pi_method`).
 #' @param ngm_method New-group-mean construction ([new_group_mean_lmm()]) on
 #'   random-intercept models: `"package"` (default; the 0.2.0 constructions,
 #'   see [new_group_mean_lmm()]) or a validation arm:
@@ -148,9 +152,26 @@
 #'   per lot and use the per-lot OLS fits, not the fitted random-effects
 #'   structure (an independent `||` fit gives the same interval as the
 #'   correlated fit).
+#' @param slope_pi_method Prediction-interval construction ([pi_lmm()]) on
+#'   random-slope models. `"reml"` is the current default: the Francq et al.
+#'   (2019, eq. 21/23) interval
+#'   `mu(t0) +/- t(nu_T) sqrt(V_F + V_G(t0) + sigma^2)`, with the REML variance
+#'   function at `t0` and the Hessian-Satterthwaite df `nu_T`, falling back to
+#'   containment as described under `slope_ci_df`. `"fv-anova"` (validation
+#'   arm, package-original) is the `slope_ngm_method = "fv-anova"` construction
+#'   with the pooled within-lot residual variance `S2_E` added:
+#'   `Ybar_fit +/- t_df sqrt(S_L^2 (1 + 1/K) + S2_E)` on the per-lot OLS fitted
+#'   values at `t0`, with the Satterthwaite df of the two mean squares (`K - 1`
+#'   and `n - 2K` df), conservative by `sigma^2 h(t0)` in a balanced design; it
+#'   needs two distinct time points per lot and `n > 2K`, and uses the per-lot
+#'   OLS fits, not the fitted random-effects structure. `"hybrid"` (under
+#'   validation, step 13b) uses `"fv-anova"` when the fit is singular
+#'   (`lme4::isSingular()` is `TRUE`, or the check failed and the fit is treated
+#'   as singular) and `"reml"` otherwise, including on non-singular fits whose
+#'   variance-parameter covariance is unavailable (containment df fallback).
 #' @return An `lmm_interval_control` list (passed to a verb's `control`
 #'   argument); a list with elements `seed`, `M`, `ci_df`, `slope_ci_df`,
-#'   `pi_df`, `ngm_method` and `slope_ngm_method`.
+#'   `pi_df`, `ngm_method`, `slope_ngm_method` and `slope_pi_method`.
 #' @seealso [ci_lmm()], [ti_lmm()], [ti_gpq_raw()].
 #' @examples
 #' lmm_interval_control(seed = 1, M = 5000)
@@ -158,6 +179,7 @@
 #' lmm_interval_control(slope_ci_df = "k-minus-1", pi_df = "containment")
 #' lmm_interval_control(ngm_method = "broad-inference",
 #'                      slope_ngm_method = "broad-inference")
+#' lmm_interval_control(slope_pi_method = "hybrid")
 #' @export
 lmm_interval_control <- function(seed = NULL, M = 20000L,
                                  ci_df = c("satterthwaite", "kenward-roger",
@@ -168,12 +190,14 @@ lmm_interval_control <- function(seed = NULL, M = 20000L,
                                  ngm_method = c("package", "broad-inference", "hts",
                                                 "classical"),
                                  slope_ngm_method = c("reml", "broad-inference", "gpq",
-                                                      "fv-anova")) {
+                                                      "fv-anova"),
+                                 slope_pi_method = c("reml", "fv-anova", "hybrid")) {
   ci_df       <- match.arg(ci_df)
   slope_ci_df <- match.arg(slope_ci_df)
   pi_df       <- match.arg(pi_df)
   ngm_method  <- match.arg(ngm_method)
   slope_ngm_method <- match.arg(slope_ngm_method)
+  slope_pi_method <- match.arg(slope_pi_method)
   if (!is.null(seed) && (!is.numeric(seed) || length(seed) != 1L || is.na(seed) ||
                            abs(seed) > .Machine$integer.max)) {
     .abort("`seed` must be NULL or a single number in the integer range.",
@@ -189,7 +213,8 @@ lmm_interval_control <- function(seed = NULL, M = 20000L,
   }
   structure(list(seed = seed, M = as.integer(M), ci_df = ci_df,
                  slope_ci_df = slope_ci_df, pi_df = pi_df,
-                 ngm_method = ngm_method, slope_ngm_method = slope_ngm_method),
+                 ngm_method = ngm_method, slope_ngm_method = slope_ngm_method,
+                 slope_pi_method = slope_pi_method),
             class = "lmm_interval_control")
 }
 
@@ -208,7 +233,8 @@ lmm_interval_control <- function(seed = NULL, M = 20000L,
   pi_df       = list(default = "francq-satterthwaite", rule = "pi_df_rule",
                      no_warn = "francq-satterthwaite"),
   ngm_method  = list(default = "package", rule = "ngm_arm", no_warn = "package"),
-  slope_ngm_method = list(default = "reml", rule = "slope_ngm_arm", no_warn = "reml")
+  slope_ngm_method = list(default = "reml", rule = "slope_ngm_arm", no_warn = "reml"),
+  slope_pi_method = list(default = "reml", rule = "slope_pi_arm", no_warn = "reml")
 )
 
 ## The arm value of `opt` from a control object, or its default when the
@@ -226,7 +252,7 @@ lmm_interval_control <- function(seed = NULL, M = 20000L,
 .applied_arms <- function(model, kind, control) {
   rs <- .has_random_slope(model)
   opts <- if (kind == "CI") (if (rs) "slope_ci_df" else "ci_df")
-          else if (kind == "PI" && !rs) "pi_df"
+          else if (kind == "PI") (if (rs) "slope_pi_method" else "pi_df")
           else if (kind == "new_group_mean") (if (rs) "slope_ngm_method" else "ngm_method")
           else character(0)
   out <- stats::setNames(vapply(opts, function(o) .arm_value(control, o), ""), opts)
@@ -406,7 +432,7 @@ lmm_interval_control <- function(seed = NULL, M = 20000L,
                  "n_na_draws", "mc_se_lower", "mc_se_upper", "ci_df_rule",
                  "slope_ci_df_rule", "pi_df_rule", "ngm_arm", "slope_ngm_arm",
                  "ngm_df_failed", "vc_cov_route", "vc_cov_reason",
-                 "df_fallback_reason")
+                 "df_fallback_reason", "slope_pi_arm")
 
 ## The output unifier. Maps any engine's native frame to the single tidy
 ## contract; relabels only, never recomputes. Universal columns, in order:
@@ -470,7 +496,7 @@ lmm_interval_control <- function(seed = NULL, M = 20000L,
   ## diagnostics -> attribute (off the core shape, still retrievable)
   diag <- list()
   for (cn in c("df", "df_method", "df_rule", "ci_df_rule", "slope_ci_df_rule",
-               "pi_df_rule", "ngm_arm", "slope_ngm_arm", "ngm_df_failed", "W", "se", "tau2_med", "s2e_med",
+               "pi_df_rule", "ngm_arm", "slope_ngm_arm", "slope_pi_arm", "ngm_df_failed", "W", "se", "tau2_med", "s2e_med",
                "frac_boundary", "K", "df_resid", "phi1", "c_resid",
                "route_reason", "mls_bound", "n_na_draws", "mc_se_lower",
                "mc_se_upper", "vc_cov_route", "vc_cov_reason", "df_fallback_reason")) {
@@ -533,7 +559,8 @@ print.lmm_interval <- function(x, ...) {
 #'   `"ems-mls"`, `"anova-mls"` (new-group mean only), `"reml"` (random-slope
 #'   models) forces that engine and errors if it is incompatible with the model.
 #' @param control An [lmm_interval_control()] object (the GPQ `seed` and `M`,
-#'   the df rules `ci_df`, `slope_ci_df` and `pi_df`, and the new-group-mean
+#'   the df rules `ci_df`, `slope_ci_df` and `pi_df`, the random-slope
+#'   prediction construction `slope_pi_method`, and the new-group-mean
 #'   arms `ngm_method` and `slope_ngm_method`; an option that does not apply to
 #'   the model or verb is ignored and recorded as `"not_applicable"` in the
 #'   diagnostics).
@@ -553,7 +580,9 @@ print.lmm_interval <- function(x, ...) {
 #'     \item `level` (the confidence, `1 - alpha`); `P` (content proportion ---
 #'       the value for `ti`, `NA` for the coverage intervals); `sides`;
 #'     \item `method` (the engine: `"ems-mls"`, `"anova-mls"`, `"reml"`, or
-#'       `"gpq"`); `design` (the route-independent model class, see
+#'       `"gpq"`; `"fv-anova"` on random-slope prediction rows computed by
+#'       `slope_pi_method = "fv-anova"` or `"hybrid"`, see
+#'       [lmm_interval_control()]); `design` (the route-independent model class, see
 #'       [reintervals-models]);
 #'     \item the per-row flags `singular`, `boundary`, `vg_floored`.
 #'   }
@@ -580,7 +609,8 @@ print.lmm_interval <- function(x, ...) {
 #'   singular"`, `"sentinel"` (the default and the retried Hessian both left the
 #'   valid region of the variance parameters), `"unstable numerical Hessian"`,
 #'   or `"Hessian not PD or not invertible"`; for the random-intercept
-#'   confidence, prediction and new-group-mean intervals `df_fallback_reason`,
+#'   confidence, prediction and new-group-mean intervals and the random-slope
+#'   prediction interval `df_fallback_reason`,
 #'   per row, why the default Satterthwaite df fell back to containment (e.g.
 #'   `"singular fit"`, `"df below 1"`, `"non-finite df"`; for the
 #'   `ngm_method = "broad-inference"` arm, why its df could not be formed, the

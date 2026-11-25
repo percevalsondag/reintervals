@@ -11,6 +11,9 @@
 #                     the CInew quantity -- a prediction interval for one new
 #                     group's mean; coverage = `level`, NO content P).
 #
+# The PI has the validation arms slope_pi_method = "fv-anova" / "hybrid"
+# (.pi_fv_anova below, on the per-lot OLS lines of the fv-anova NGM arm).
+#
 # All inputs are already on the vfun_components container (mean, var_mean = V_F,
 # V_G, V_T, dfs[c("F","T","G")]); vfun_extract computes those df with the same
 # resolve_df (Satterthwaite -> containment) logic, so these constructors are
@@ -281,25 +284,44 @@
       return(.ngm_rs_arm(model, t0s, time_var, level = level, sides = sides,
                          arm = slope_ngm, control = control))
     }
+    ## slope_pi_method (PI only): "reml" (default, the code below), "fv-anova",
+    ## or "hybrid" = "fv-anova" on a singular fit (lme4::isSingular() TRUE or
+    ## the check failed, read as singular as everywhere else), "reml" otherwise
+    slope_pi <- if (kind == "PI" && "slope_pi_method" %in% names(applied))
+      applied[["slope_pi_method"]] else "reml"
+    if (slope_pi == "hybrid")
+      slope_pi <- if (isFALSE(.is_singular(model))) "reml" else "fv-anova"
+    if (slope_pi == "fv-anova") {
+      opt <- if (applied[["slope_pi_method"]] == "hybrid")
+        "slope_pi_method = \"hybrid\" (fv-anova on this singular fit)"
+        else "slope_pi_method = \"fv-anova\""
+      return(.pi_rs_fv_anova(model, t0s, time_var, level = level, sides = sides,
+                             opt = opt))
+    }
     reasons <- character(0)
     rows <- lapply(t0s, function(t0) {
       comp <- vfun_extract(model, t0 = t0, guard_t0 = t0s)
       if (arm != "hessian-satterthwaite") comp <- .slope_ci_arm(comp, model, arm, kr)
       row <- .vfun_interval(comp, kind = kind, level = level, sides = sides)
       ## why the Hessian-Satterthwaite df fell back (read by .warn_df_fallback)
+      row_reason <- NA_character_
       if (identical(row$df_rule, "containment")) {
         key <- c(CI = "F", PI = "T", new_group_mean = "G")[[kind]]
         why <- attr(comp, "df_fallback_why")[[key]]
         ## no covariance: its reason (vc_cov_reason; "singular fit" or
         ## "singularity check failed; treated as singular" on a singular fit)
-        reasons <<- c(reasons,
+        row_reason <-
           if (is.null(comp$cov)) {
             r <- attr(comp, "vc_cov_reason")
             if (!is.null(r) && !is.na(r)) r
             else "non-PD or unavailable covariance of the variance parameters"
           }
-          else if (!is.null(why) && !is.na(why)) why else "non-finite df")
+          else if (!is.null(why) && !is.na(why)) why else "non-finite df"
+        reasons <<- c(reasons, row_reason)
       }
+      ## the PI rows carry the reason per row (NA where the df did not fall
+      ## back), as the random-intercept rows do
+      if (kind == "PI") row$df_fallback_reason <- row_reason
       row
     })
     out <- do.call(rbind, rows); rownames(out) <- NULL
@@ -320,6 +342,70 @@
   out <- intervals_lmm(model, newdata = newdata, level = level, conf = level,
                        which = kind, ci_method = ci_df, pi_method = pi_df)
   .one_sided_t(out, level = level, sides = sides)
+}
+
+## slope_pi_method = "fv-anova" (and "hybrid" on a singular fit): a prediction
+## interval for one new observation at t0 from a new lot, on the per-lot OLS
+## lines of the fv-anova new-group-mean arm (.lotline, ngm-arms.R). With K lots,
+## S2L the variance of the K fitted values at t0, S2E the pooled within-lot
+## residual variance on df_E = n - 2K df:
+##   center  Ybar(t0), the mean of the K fitted values (as the NGM arm)
+##   W       S2L (1 + 1/K) + S2E   (the NGM arm's W plus the residual variance)
+##   df      W^2 / [ (S2L (1 + 1/K))^2 / (K - 1) + S2E^2 / df_E ]
+##           (Satterthwaite on the two independent mean squares; K - 1, the
+##           NGM arm's df, when S2E = 0)
+## In a balanced design E[W] - Var(Y_new - Ybar) = sigma^2 h(t0) >= 0 (h the
+## common leverage at t0): conservative, like the NGM arm, and W > 0 whenever
+## S2E > 0. Uses the raw data only, not the fitted random-effects structure.
+## No df fallback. One-sided: t_{1 - alpha}. df_E = 0 (every lot has exactly
+## two observations) is an error: there is no residual variance to add.
+.pi_fv_anova <- function(y, time, batch, t0s, level = 0.95,
+                         sides = c("two.sided", "lower", "upper"),
+                         opt = "slope_pi_method = \"fv-anova\"") {
+  sides <- match.arg(sides)
+  rows <- lapply(t0s, function(t0) {
+    L <- .lotline(y, time, batch, t0, what = "prediction", opt = opt)
+    if (L$df_E < 1L) {
+      .abort(sprintf(paste0("%s needs a within-lot residual variance: every lot has ",
+                            "exactly two observations (n = 2K), so it has no ",
+                            "residual df."), opt),
+             class = "reintervals_error_time_points")
+    }
+    W_L <- L$S2L * (1 + 1 / L$K)           # the fv-anova NGM variance
+    W <- W_L + L$S2E
+    df <- W^2 / (W_L^2 / (L$K - 1) + L$S2E^2 / L$df_E)
+    if (!is.finite(W) || W <= 0 || !is.finite(df) || df <= 0) {
+      .abort("The fv-anova prediction variance at t0 = ", t0, " is zero (equal per-lot ",
+             "fitted values and no residual variation); the interval is not available.",
+             class = "reintervals_error_numerical")
+    }
+    tq <- if (sides == "two.sided") stats::qt(1 - (1 - level) / 2, df) else
+      stats::qt(level, df)
+    hw <- tq * sqrt(W)
+    data.frame(time = t0, estimate = L$Ybar,
+               lower = if (sides == "upper") -Inf else L$Ybar - hw,
+               upper = if (sides == "lower")  Inf else L$Ybar + hw,
+               df = df, W = W, se = sqrt(W), K = L$K, df_resid = L$df_E,
+               stringsAsFactors = FALSE)
+  })
+  out <- do.call(rbind, rows); rownames(out) <- NULL
+  out
+}
+
+## The fv-anova prediction interval in the slope-path row schema. `method` is
+## "fv-anova", the construction used (the rows of the default "reml" PI carry
+## "reml"); df_fallback_reason is NA (no fallback).
+.pi_rs_fv_anova <- function(model, t0s, time_var, level, sides, opt) {
+  yts <- .model_yts(model, time_var)
+  f <- .pi_fv_anova(yts$y, yts$time, yts$batch, t0s, level = level, sides = sides,
+                    opt = opt)
+  data.frame(time = f$time, type = "PI", estimate = f$estimate,
+             lower = f$lower, upper = f$upper, se = f$se, level = level,
+             df = f$df, df_rule = "fv-anova-satterthwaite", W = f$W, sides = sides,
+             design = .slope_design(model), method = "fv-anova",
+             singular = .is_singular(model), boundary = NA, vg_floored = NA,
+             K = f$K, df_resid = f$df_resid, df_fallback_reason = NA_character_,
+             stringsAsFactors = FALSE)
 }
 
 ## Internal guard (B3): a scalar engine route received a vector level / sides.

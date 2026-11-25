@@ -11,7 +11,8 @@ lmm_interval_control(
   slope_ci_df = c("hessian-satterthwaite", "kenward-roger", "k-minus-1"),
   pi_df = c("francq-satterthwaite", "containment"),
   ngm_method = c("package", "broad-inference", "hts", "classical"),
-  slope_ngm_method = c("reml", "broad-inference", "gpq", "fv-anova")
+  slope_ngm_method = c("reml", "broad-inference", "gpq", "fv-anova"),
+  slope_pi_method = c("reml", "fv-anova", "hybrid")
 )
 }
 \arguments{
@@ -83,7 +84,7 @@ fallback on a singular fit or a df below 1) or the validation arm \code{"contain
 variance with the containment df of \code{ci_df = "containment"}). There is no
 Kenward-Roger prediction interval: KR adjusts fixed-effect contrasts only,
 and the prediction variance includes estimated variance components. Not
-applied to random-slope models, whose prediction interval is unchanged.}
+applied to random-slope models (see \code{slope_pi_method}).}
 
 \item{ngm_method}{New-group-mean construction (\code{\link[=new_group_mean_lmm]{new_group_mean_lmm()}}) on
 random-intercept models: \code{"package"} (default; the 0.2.0 constructions,
@@ -133,11 +134,29 @@ cannot truncate). \code{"gpq"} and \code{"fv-anova"} need two distinct time poin
 per lot and use the per-lot OLS fits, not the fitted random-effects
 structure (an independent \code{||} fit gives the same interval as the
 correlated fit).}
+
+\item{slope_pi_method}{Prediction-interval construction (\code{\link[=pi_lmm]{pi_lmm()}}) on
+random-slope models. \code{"reml"} is the current default: the Francq et al.
+(2019, eq. 21/23) interval
+\verb{mu(t0) +/- t(nu_T) sqrt(V_F + V_G(t0) + sigma^2)}, with the REML variance
+function at \code{t0} and the Hessian-Satterthwaite df \code{nu_T}, falling back to
+containment as described under \code{slope_ci_df}. \code{"fv-anova"} (validation
+arm, package-original) is the \code{slope_ngm_method = "fv-anova"} construction
+with the pooled within-lot residual variance \code{S2_E} added:
+\verb{Ybar_fit +/- t_df sqrt(S_L^2 (1 + 1/K) + S2_E)} on the per-lot OLS fitted
+values at \code{t0}, with the Satterthwaite df of the two mean squares (\code{K - 1}
+and \verb{n - 2K} df), conservative by \verb{sigma^2 h(t0)} in a balanced design; it
+needs two distinct time points per lot and \verb{n > 2K}, and uses the per-lot
+OLS fits, not the fitted random-effects structure. \code{"hybrid"} (under
+validation, step 13b) uses \code{"fv-anova"} when the fit is singular
+(\code{lme4::isSingular()} is \code{TRUE}, or the check failed and the fit is treated
+as singular) and \code{"reml"} otherwise, including on non-singular fits whose
+variance-parameter covariance is unavailable (containment df fallback).}
 }
 \value{
 An \code{lmm_interval_control} list (passed to a verb's \code{control}
 argument); a list with elements \code{seed}, \code{M}, \code{ci_df}, \code{slope_ci_df},
-\code{pi_df}, \code{ngm_method} and \code{slope_ngm_method}.
+\code{pi_df}, \code{ngm_method}, \code{slope_ngm_method} and \code{slope_pi_method}.
 }
 \description{
 Tuning knobs only --- the RNG seed and Monte-Carlo size used when the
@@ -147,8 +166,8 @@ interval. Algorithm \emph{selection} is the \code{method} argument, not this.
 }
 \section{Validation arms}{
 
-The non-default values of \code{ci_df}, \code{slope_ci_df}, \code{pi_df}, \code{ngm_method} and
-\code{slope_ngm_method} are validation
+The non-default values of \code{ci_df}, \code{slope_ci_df}, \code{pi_df}, \code{ngm_method},
+\code{slope_ngm_method} and \code{slope_pi_method} are validation
 arms: their coverage is under evaluation in the 1.0.0 validation study, and
 the defaults are the validated rules. Applying a non-default arm signals a
 warning of class \code{reintervals_warning_unvalidated} on every call (muffle it
@@ -156,7 +175,8 @@ by class), except \code{ci_df = "kenward-roger"} on random-intercept models,
 supported since 0.2.0. Each option applies to one model structure and verb:
 \code{ci_df} to \code{\link[=ci_lmm]{ci_lmm()}} on random-intercept models (including the fixed-slope
 design), \code{slope_ci_df} to \code{\link[=ci_lmm]{ci_lmm()}} on random-slope models, \code{pi_df} to
-\code{\link[=pi_lmm]{pi_lmm()}} on random-intercept models, \code{ngm_method} to
+\code{\link[=pi_lmm]{pi_lmm()}} on random-intercept models, \code{slope_pi_method} to \code{\link[=pi_lmm]{pi_lmm()}} on
+random-slope models, \code{ngm_method} to
 \code{\link[=new_group_mean_lmm]{new_group_mean_lmm()}} on random-intercept models and \code{slope_ngm_method} to
 \code{\link[=new_group_mean_lmm]{new_group_mean_lmm()}} on random-slope models. Elsewhere an option is a
 no-op, never an error, so one control object can be reused across models
@@ -165,9 +185,12 @@ and verbs; so is a new-group-mean arm that is not defined for the design
 groups, \code{"classical"} on unbalanced groups): the default is computed. The
 diagnostics of every confidence, prediction and new-group-mean interval
 record each option as \code{ci_df_rule}, \code{slope_ci_df_rule}, \code{pi_df_rule},
-\code{ngm_arm} and \code{slope_ngm_arm}: the value applied, or \code{"not_applicable"};
-\code{df} is the df actually used. The \code{method} column keeps the default route's
-tag; the arm is read from these fields.
+\code{ngm_arm}, \code{slope_ngm_arm} and \code{slope_pi_arm}: the value applied, or
+\code{"not_applicable"}; \code{df} is the df actually used. The \code{method} column keeps
+the default route's tag and the arm is read from these fields, except for
+\code{slope_pi_method}: its rows carry the construction actually used in
+\code{method} (\code{"reml"} or \code{"fv-anova"}; for \code{"hybrid"}, whichever it chose for
+the fit), while \code{slope_pi_arm} records the option value.
 }
 
 \examples{
@@ -176,6 +199,7 @@ lmm_interval_control(ci_df = "kenward-roger")
 lmm_interval_control(slope_ci_df = "k-minus-1", pi_df = "containment")
 lmm_interval_control(ngm_method = "broad-inference",
                      slope_ngm_method = "broad-inference")
+lmm_interval_control(slope_pi_method = "hybrid")
 }
 \seealso{
 \code{\link[=ci_lmm]{ci_lmm()}}, \code{\link[=ti_lmm]{ti_lmm()}}, \code{\link[=ti_gpq_raw]{ti_gpq_raw()}}.

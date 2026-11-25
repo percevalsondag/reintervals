@@ -156,22 +156,26 @@
 ## Per-lot OLS lines at t0 (base R; the package port of the simstudy pilot's
 ## lotline(), commit f4ce68e): the fitted values Y_k(t0), their mean Ybar and
 ## variance S2L, the mean leverage abar and the pooled residual variance S2E.
-## Every lot needs two distinct time points.
-.lotline <- function(y, time, batch, t0) {
+## Every lot needs two distinct time points. `df_E` = n - 2K is the residual df
+## of S2E (0 when every lot has exactly two observations; S2E is then NA).
+## `what` / `opt` name the caller in the error messages (the defaults are the
+## new-group-mean arm's; the fv-anova prediction interval passes its own).
+.lotline <- function(y, time, batch, t0, what = "new-group-mean",
+                     opt = "slope_ngm_method = \"fv-anova\"") {
   batch <- factor(batch)
   ok <- !is.na(y) & !is.na(time) & !is.na(batch)
   y <- y[ok]; time <- time[ok]; batch <- droplevels(batch[ok])
   K <- nlevels(batch); n <- length(y)
   if (K < 2L) {
-    .abort(sprintf("The fv-anova new-group-mean interval needs >= 2 lots; got %d.", K),
+    .abort(sprintf("The fv-anova %s interval needs >= 2 lots; got %d.", what, K),
            class = "reintervals_error_groups")
   }
   n_t <- tapply(time, batch, function(v) length(unique(v)))
   few <- names(n_t)[n_t < 2L]
   if (length(few)) {
-    .abort(sprintf(paste0("slope_ngm_method = \"fv-anova\" fits a line per lot and ",
+    .abort(sprintf(paste0("%s fits a line per lot and ",
                           "needs at least two distinct time points per lot; %d lot(s) ",
-                          "have fewer: %s."), length(few),
+                          "have fewer: %s."), opt, length(few),
                    paste(utils::head(few, 5L), collapse = ", ")),
            class = "reintervals_error_time_points", data = list(lots = few))
   }
@@ -183,7 +187,8 @@
     sse <- sse + sum((y[i] - Z %*% b)^2)
   }
   list(K = K, Ybar = mean(Yk), S2L = stats::var(Yk),
-       S2E = if (n > 2L * K) sse / (n - 2L * K) else NA_real_, abar = mean(a))
+       S2E = if (n > 2L * K) sse / (n - 2L * K) else NA_real_, df_E = n - 2L * K,
+       abar = mean(a))
 }
 
 ## slope_ngm_method = "fv-anova": Ybar_fit +/- t_{K-1} S_L sqrt(1 + 1/K), one

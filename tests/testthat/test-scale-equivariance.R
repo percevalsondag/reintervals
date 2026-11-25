@@ -358,3 +358,41 @@ test_that(".nd_unstable_psi and .df_stable", {
   expect_false(.df_stable(c(NA, 20), c(5, 20)))
   expect_true(.df_stable(numeric(0), numeric(0)))
 })
+
+## slope_pi_method = "fv-anova" (and "hybrid", "reml" for contrast): limits,
+## estimates and SEs scale by c and W by c^2 under y -> c y; every number is
+## unchanged under t -> c t; the df (Satterthwaite on S2_L and S2_E) is invariant
+test_that("slope_pi_method = 'fv-anova' is equivariant under y -> c y and invariant under t -> c t", {
+  skip_if_not_installed("lme4")
+  skip_on_cran()
+  fxs <- sc_fixtures()
+  fxs$rs_un$theta_scale  <- function(c) c(1, 1 / c, 1 / c)
+  fxs$rs_ind$theta_scale <- function(c) c(1, 1 / c)
+  fxs$retry$theta_scale  <- function(c) c(1, 1 / c, 1 / c)
+  pi_calls <- function(fm, nd) lapply(c(fv = "fv-anova", hybrid = "hybrid"), function(m)
+    lapply(c("two.sided", "lower", "upper"), function(sd)
+      run_verb(pi_lmm(fm, nd, sides = sd, control = lmm_interval_control(slope_pi_method = m)))))
+  for (nm in c("rs_un", "rs_ind", "retry")) {
+    fx <- fxs[[nm]]; fx$time <- names(fx$nd)[1]
+    b <- pi_calls(sc_fit(fx, 1), fx$nd)
+    expect_identical(b$fv[[1]]$value$method, rep("fv-anova", nrow(fx$nd)))
+    for (kind in c("y", "time")) {
+      scales <- if (kind == "y") y_scales else t_scales
+      for (c in setdiff(scales, 1)) {
+        if (kind == "y") {
+          fc <- sc_fit(fx, c); nd <- fx$nd
+        } else {
+          fc <- sc_fit_time(fx, c); nd <- fx$nd; nd[[1]] <- nd[[1]] * c
+        }
+        s <- pi_calls(fc, nd)
+        for (m in names(b)) for (j in 1:3) {
+          info <- sprintf("%s / pi:%s side %d / %s x %g", nm, m, j, kind, c)
+          expect_identical(s[[m]][[j]]$warnings, b[[m]][[j]]$warnings, info = info)
+          expect_equivariant(b[[m]][[j]]$value, s[[m]][[j]]$value, c, info, kind = kind,
+                             time_col = if (kind == "time") fx$time,
+                             tol = if (is.null(fx$tol)) list(lim = 1e-8, df = 1e-6) else fx$tol)
+        }
+      }
+    }
+  }
+})

@@ -136,6 +136,20 @@
     SE; the tolerance-interval draws are unchanged); `"fv-anova"`
     (package-original lot-line interval on the per-lot OLS fitted values,
     `Ybar_fit +/- t_{K-1} S_L sqrt(1 + 1/K)`, conservative for the new-lot mean).
+* **`slope_pi_method`** in `lmm_interval_control()`: the random-slope
+  prediction interval. `"reml"` (default) is the existing interval, unchanged
+  bit for bit. `"fv-anova"` (validation arm, package-original) is the
+  `slope_ngm_method = "fv-anova"` construction plus the pooled within-lot
+  residual variance, `Ybar_fit +/- t_df sqrt(S_L^2 (1 + 1/K) + S2_E)`, with
+  the Satterthwaite df of the two mean squares (`K - 1` and `n - 2K` df).
+  `"hybrid"` (under validation, step 13b) uses `"fv-anova"` on a singular fit
+  (or a failed singularity check) and `"reml"` otherwise. Non-default values
+  warn (`reintervals_warning_unvalidated`); the option is recorded as
+  `slope_pi_arm`, and the random-slope prediction rows carry the construction
+  actually used in `method` (`"reml"` or `"fv-anova"`).
+* Random-slope prediction-interval rows now report `df_fallback_reason` in the
+  diagnostics, per row, with the random-intercept semantics: why the default
+  df fell back to containment (e.g. `"singular fit"`), `NA` where it did not.
 * **GPQ reproducibility contract.** Every GPQ interval (`ti_lmm()` random-slope
   route and `ti_gpq_raw()`) records `gpq_seed`, the integer seed actually used,
   and `rng_kind`, the `RNGkind()` triple in effect, in
