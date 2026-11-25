@@ -1,0 +1,12 @@
+# Printed values of Liao CT, Lin TY, Iyer HK (2005). Technometrics 47(3):323-335. doi:10.1198/004017005000000102. Example 2 (section 5.4): bottle means, sse, and the two-sided (beta = 0.99, gamma = 0.95) tolerance interval for the true-value distribution N(mu, sigma_alpha^2), computed by the authors with K = 10000 Monte Carlo runs
+# Transcribed on 2026-11-25 for Perceval Sondag (AI-assisted transcription); dp = printed decimal places
+quantity,value,dp
+ybar_1227,4.670,3
+ybar_0410,4.685,3
+ybar_0241,4.640,3
+ybar_0809,4.695,3
+ybar_0398,4.570,3
+ybar_1500,4.740,3
+sse,0.0419,4
+lower,4.473,3
+upper,4.870,3

@@ -209,9 +209,11 @@ ti_lmm(fs, newdata = data.frame(Days = 5), P = 0.99,
 - **Tolerance and new-group-mean intervals** require a closed-form variance
   decomposition; for crossed-no-interaction and ≥4-factor designs, `ti_lmm()` and
   `new_group_mean_lmm()` error (CI and PI remain available).
-- **Batch-mean tolerance intervals** (`over = "group_mean"`) are currently
-  available only for random-slope models; a random-intercept batch-mean tolerance
-  interval is not currently available.
+- **Batch-mean tolerance intervals** (`over = "group_mean"`) are available on
+  the default route only for random-slope models. For a random-intercept model
+  with a single random factor, `ti_lmm(method = "gpq")` gives them (and the
+  observation target) through the Oliva-Aviles & Hauser (2025) GPQ engine; that
+  route is under validation and signals `reintervals_warning_unvalidated`.
 - **Random-slope** models are supported for a single continuous covariate (time
   in the stability design, but any continuous predictor works).
 

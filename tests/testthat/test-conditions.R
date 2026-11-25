@@ -51,7 +51,10 @@ test_that("reintervals_error_design", {
 })
 
 test_that("reintervals_error_method", {
-  expect_error(ti_lmm(fit_52(), method = "gpq"), class = "reintervals_error_method")
+  ## gpq needs a single random factor (crossed random intercepts here)
+  set.seed(2); dc <- expand.grid(r = 1:2, a = factor(1:3), b = factor(1:4)); dc$y <- rnorm(nrow(dc))
+  expect_error(ti_lmm(lmer_q(y ~ 1 + (1 | a) + (1 | b), dc), method = "gpq"),
+               class = "reintervals_error_method")
   expect_error(ci_lmm(fit_52(), method = "gpq"), class = "reintervals_error_method")
 })
 

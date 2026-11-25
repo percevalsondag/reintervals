@@ -518,7 +518,7 @@ lmm_interval_control <- function(seed = NULL, M = 20000L,
     if (cn %in% names(native)) diag[[cn]] <- native[[cn]]
   }
   for (a in c("beta_hat", "n_E", "U", "Vhat_Y", "C1", "C2", "pi_df_fallback",
-              "gpq_seed", "rng_kind", "mc_sections")) {
+              "gpq_seed", "rng_kind", "mc_sections", "M")) {
     v <- attr(native, a); if (!is.null(v)) diag[[a]] <- v
   }
   if (!is.na(sing_check)) diag$singular_check <- sing_check

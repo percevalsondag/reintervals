@@ -27,6 +27,11 @@
 #   * any other random-intercept model, no fixed slope (one-way with covariates /
 #     nested / crossed) -> EMS engine.
 #
+#   * method = "gpq" on a random-intercept model (never chosen by "auto"; step
+#     13b, unvalidated) -> the GPQ engine on the random-intercept members of the
+#     Oliva-Aviles & Hauser class (one random factor, W = (X0, Z) full rank),
+#     both targets; the only route with over = "group_mean" for these models.
+#
 # Each engine keeps its own singular guard (they do different jobs; not unified):
 #   * EMS path  -> reintervals' Hessian -> stratum containment df guard (the
 #     PI-width guard pinned by test-singular-guard.R).
@@ -203,6 +208,66 @@
   out
 }
 
+## ---- GPQ on a random-intercept model (method = "gpq"; step 13b) -------------
+## The random-intercept sub-class of Oliva-Aviles & Hauser (2025), their
+## sections 4.1 (one-way; = Liao, Lin & Iyer 2005) and 4.3 (random intercept,
+## fixed slope): one grouping factor with a random intercept only; X0 = the
+## fixed-effect columns other than the intercept (condition (a) then holds with
+## X_Z = the intercept column, A = 1); W = (X0, Z) of full column rank
+## (condition (b), checked in .gpq_prepare_ri). Returns NULL when eligible, else
+## the reason (an error message).
+.gpq_ri_ineligible <- function(model) {
+  cnms <- lme4::getME(model, "cnms")
+  if (length(cnms) != 1L || !identical(unname(cnms[[1]]), "(Intercept)")) {
+    return(sprintf(paste0("method = \"gpq\" is not available for this model: the GPQ ",
+                          "class of Oliva-Aviles & Hauser (2025) needs a single random ",
+                          "factor (one random-intercept term, (1 | g)); this model has %d ",
+                          "random-effect terms (nested or crossed factors)."),
+                   length(cnms)))
+  }
+  w <- stats::weights(model)
+  if (!is.null(w) && any(abs(w - 1) > 0)) {
+    return(paste0("method = \"gpq\" is not available for a fit with prior weights: ",
+                  "the GPQ class assumes a common residual variance."))
+  }
+  NULL
+}
+
+## The random-intercept GPQ tolerance interval at the newdata rows, every
+## (P, conf, sides) combination on one draw set. target "observable" ->
+## c_resid = 1 (over = "observation"); "true_value" -> c_resid = 0
+## (over = "group_mean", the lot-mean distribution).
+.ti_ri_gpq_path <- function(model, newdata, content, conf, target, sides, seed, M) {
+  why <- .gpq_ri_ineligible(model)
+  if (!is.null(why)) .abort(why, class = "reintervals_error_method")
+  X  <- lme4::getME(model, "X")
+  X0 <- X[, colnames(X) != "(Intercept)", drop = FALSE]
+  y  <- as.numeric(lme4::getME(model, "y"))
+  off <- model@resp$offset
+  if (length(off) == length(y)) y <- y - off
+  pre <- .gpq_prepare_ri(y, X0, lme4::getME(model, "flist")[[1]])
+  fx <- .fixed(model, newdata)
+  L0 <- fx$L[, colnames(X0), drop = FALSE]
+  pts <- lapply(seq_len(nrow(L0)), function(i) as.numeric(L0[i, ]))
+  c_resid <- if (target == "observable") 1 else 0
+  g <- .gpq_run(pre, pts, content = content, conf = conf, sides = sides,
+                c_resid = c_resid, M = M, seed = seed)
+  rows <- .gpq_rows(g, design = .model_class(model), singular = .is_singular(model))
+  rows$time <- NULL
+  nd <- fx$newdata[rep(seq_len(nrow(L0)), length.out = nrow(rows)), , drop = FALSE]
+  out <- cbind(nd, rows); rownames(out) <- NULL
+  for (a in c("gpq_seed", "rng_kind", "mc_sections")) attr(out, a) <- attr(g, a)
+  attr(out, "M") <- as.integer(M)
+  out$route_reason <- "method"
+  .warn(paste0("method = \"gpq\" on a random-intercept model (Oliva-Aviles & Hauser ",
+               "2025; Liao, Lin & Iyer 2005 for the one-way model) is under ",
+               "validation (step 13b): its coverage on these designs is being ",
+               "evaluated. The default route is method = \"auto\"."),
+        class = "reintervals_warning_unvalidated",
+        data = list(option = "method", value = "gpq"))
+  out
+}
+
 ## method = "reml-mls" (the random-slope REML closed-form MLS tolerance
 ## interval) was removed in 1.0.0. The coverage figures are from the decision
 ## memo (v4), random-slope closed form, observation target.
@@ -253,6 +318,29 @@
 #'   non-singular fit and differ on singular or unbalanced data.
 #' * **Any other random-intercept model, no fixed slope** (one-way with
 #'   covariates, nested, crossed) -> EMS engine.
+#' * **`method = "gpq"` on a random-intercept model** (never chosen by
+#'   `"auto"`; **status: under validation (step 13b)**, every call signals a
+#'   warning of class `reintervals_warning_unvalidated`). The same GPQ
+#'   engine, on the random-intercept members of the Oliva-Aviles & Hauser
+#'   (2025) class (their sections 4.1 and 4.3); on the one-way model its
+#'   pivots are those of Liao, Lin & Iyer (2005). Eligible fits: exactly one
+#'   grouping factor with a random intercept only (`(1 | g)`); any fixed
+#'   effects (time, covariates, factors), provided the columns other than
+#'   the intercept, `X0`, together with the lot indicators `Z` form a matrix
+#'   `W = (X0, Z)` of full column rank (the paper's conditions (a) and (b);
+#'   a covariate constant within every lot fails it); no prior weights; and
+#'   a positive residual df `n - q - K` (`q` = number of columns of `X0`, `K`
+#'   = number of lots). Single-observation lots are allowed. Other designs
+#'   (two or more random factors: nested, crossed) signal
+#'   `reintervals_error_method`; a non-positive residual df signals
+#'   `reintervals_error_residual_df`. Both targets are available:
+#'   `over = "observation"` (content distribution `N(theta, tau2 + s2e)`) and
+#'   `over = "group_mean"` (`N(theta, tau2)`, the distribution of lot means;
+#'   for a random-intercept model this target exists only with
+#'   `method = "gpq"`). The rows carry `method = "gpq"` and the GPQ
+#'   diagnostics (`gpq_seed`, `rng_kind`, `mc_se_lower`, `mc_se_upper`, `M`,
+#'   `n_na_draws`, ...). Unlike the closed forms, the interval accounts for
+#'   the uncertainty of the predicted mean through its GPQ.
 #'
 #' For slope models the between-group variance `V_G(t0)` is quadratic in the
 #' time covariate, so evaluating at a `t0` outside the observed time range is
@@ -301,9 +389,10 @@
 #' closed-form engines compute each combination with their scalar code.
 #' Warnings are signalled once per call.
 #'
-#' The GPQ route requires
+#' On a random-slope model the GPQ route requires
 #' every lot to have at least two distinct time points and otherwise signals
-#' an error of class `reintervals_error_time_points`. The GPQ interval works
+#' an error of class `reintervals_error_time_points` (the random-intercept GPQ
+#' has no such requirement). The GPQ interval works
 #' from the per-lot OLS fits of the raw data and ignores the fitted
 #' random-effects structure: on an independent (`||`) random-slope fit it is the
 #' same as on the correlated (unstructured) fit of the same data.
@@ -326,7 +415,8 @@
 #' @param over What the interval covers: `"observation"` (default; a proportion
 #'   `P` of future observations --- the ordinary tolerance interval) or
 #'   `"group_mean"` (a proportion `P` of new group means --- the batch-mean
-#'   tolerance interval).
+#'   tolerance interval; random-slope models, and random-intercept models
+#'   with `method = "gpq"`).
 #' @param alpha,level The confidence, as a mutually-exclusive pair: give at most
 #'   one. `level` is `1 - alpha`; default `alpha = 0.05`. A vector of unique
 #'   values gives one block of rows per value.
@@ -339,7 +429,9 @@
 #'   `"ems-mls"`, `"anova-mls"`, `"gpq"` forces it and errors if incompatible
 #'   with the model. `"anova-mls"` is available for fixed-slope models and for
 #'   intercept-only one-way models (Hoffman-Kringle); `"gpq"` for random-slope
-#'   models. `"reml-mls"` is defunct (removed in 1.0.0) and errors.
+#'   models and, under validation (step 13b), for random-intercept models with
+#'   a single random factor (see the eligibility rule above). `"reml-mls"` is
+#'   defunct (removed in 1.0.0) and errors.
 #' @param control [lmm_interval_control()] tuning (GPQ seed / M).
 #'
 #' @inherit ci_lmm return
@@ -347,6 +439,9 @@
 #'   [reintervals-models].
 #' @references Oliva-Aviles C, Hauser P (2025). *Technometrics* 67(2):193-202.
 #'   \doi{10.1080/00401706.2024.2407324}
+#'
+#'   Liao CT, Lin TY, Iyer HK (2005). *Technometrics* 47(3):323-335.
+#'   \doi{10.1198/004017005000000102}
 #'
 #'   Hoffman D (2010). One-sided tolerance limits for balanced and
 #'   unbalanced random effects models. *Technometrics* 52(3):303-312.
@@ -415,7 +510,18 @@ ti_lmm <- function(model, newdata = NULL, P = 0.95,
   time_name <- .m1_time_name(model)
   is_m1 <- !is.na(time_name)
 
-  ## batch-mean tolerance is GPQ-only (random slope); DNE for random intercept / fixed-slope
+  ## method = "gpq": the random-intercept member of the Oliva-Aviles & Hauser
+  ## (2025) class (step 13b; unvalidated), both targets, all sides, one draw
+  ## set for every combination. Never chosen by "auto".
+  if (method == "gpq") {
+    .slope_newdata_guard(model, newdata)
+    out <- .ti_ri_gpq_path(model, newdata = newdata, content = P, conf = conf,
+                           target = target, sides = sides, seed = seed, M = M)
+    return(.unify_intervals(out, model, kind = "ti", P_value = out$content))
+  }
+
+  ## batch-mean tolerance on the auto / MLS routes: GPQ-only (random slope, or
+  ## method = "gpq" on an eligible random-intercept model)
   if (over == "group_mean") {
     avail <- if (is_m1) {
       "ti_lmm(over = \"observation\") or new_group_mean_lmm() (the prediction interval)"
@@ -423,14 +529,10 @@ ti_lmm <- function(model, newdata = NULL, P = 0.95,
       "ti_lmm(over = \"observation\")"
     }
     .abort(sprintf(paste0("The batch-mean tolerance interval (over = ",
-                          "\"group_mean\") is not implemented for a %s model; available here: %s."),
-                   .model_class(model), avail), class = "reintervals_error_unsupported")
-  }
-
-  if (method == "gpq") {
-    .abort(sprintf("method = \"%s\" is not available for a %s model; use ",
-                   method, .model_class(model)),
-           "\"auto\", \"ems-mls\", or \"anova-mls\".", class = "reintervals_error_method")
+                          "\"group_mean\") is not implemented for a %s model on the ",
+                          "\"%s\" route; available here: %s, or method = \"gpq\" ",
+                          "(single random factor; under validation)."),
+                   .model_class(model), method, avail), class = "reintervals_error_unsupported")
   }
 
   ## fixed-slope models: newdata time column check + extrapolation warning

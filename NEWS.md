@@ -54,6 +54,21 @@
 
 ## New features
 
+* **`ti_lmm(method = "gpq")` on random-intercept models** (step 13b; under
+  validation: every call signals `reintervals_warning_unvalidated`, and the
+  default `"auto"` route is unchanged). The GPQ engine of Oliva-Aviles &
+  Hauser (2025, Technometrics 67(2):193-202, doi:10.1080/00401706.2024.2407324)
+  now also runs on the random-intercept members of its model class (their
+  sections 4.1 and 4.3): one grouping factor with a random intercept only, any
+  fixed effects with `W = (X0, Z)` of full column rank, single-observation
+  lots allowed, residual df `n - q - K` > 0. Two- and one-sided, for both
+  targets; `over = "group_mean"` (the lot-mean distribution) is new for
+  random-intercept models and exists only on this route. On the one-way model
+  the pivots are those of Liao, Lin & Iyer (2005, Technometrics 47(3):323-335,
+  doi:10.1198/004017005000000102), whose sulfur example is reproduced within
+  Monte-Carlo error. Random-slope GPQ results are unchanged (bit-identical).
+  Two or more random factors (nested, crossed) still signal
+  `reintervals_error_method`. The diagnostics carry `M` on this route.
 * **Vectorised `P`, `level` / `alpha` and `sides`.** `ti_lmm()` accepts vectors
   of `P`, `level` (or `alpha`) and `sides`; `ci_lmm()`, `pi_lmm()`,
   `new_group_mean_lmm()` and `lmm_predict()` accept vectors of `level` (or

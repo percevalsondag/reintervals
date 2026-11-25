@@ -85,8 +85,8 @@ test_that("nist-recipe-ex4 / hoffman2010-s52-nist-ex4: package one-sided TI vs R
   ti <- function(m) suppressWarnings(ti_lmm(fm, nd, P = 0.90, level = 0.95, sides = "lower",
                                            method = m))
   res <- list(auto = ti("auto"), `anova-mls` = ti("anova-mls"), `ems-mls` = ti("ems-mls"))
-  expect_error(ti_lmm(fm, nd, P = 0.90, level = 0.95, sides = "lower", method = "gpq"),
-               class = "reintervals_error_method")
+  ## method = "gpq" (step 13b) is compared with Liao, Lin & Iyer (2005) Example 3
+  ## in test-oracle-lli2005.R
   expect_identical(res$auto$method, rep("anova-mls", 7))
   expect_identical(res$`ems-mls`$method, rep("ems-mls", 7))
   expect_identical(res$auto$lower, res$`anova-mls`$lower)

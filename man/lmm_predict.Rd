@@ -45,7 +45,9 @@ random-slope models use the one-sided GPQ limit. See \link{reintervals-models}.}
 \code{"ems-mls"}, \code{"anova-mls"}, \code{"gpq"} forces it and errors if incompatible
 with the model. \code{"anova-mls"} is available for fixed-slope models and for
 intercept-only one-way models (Hoffman-Kringle); \code{"gpq"} for random-slope
-models. \code{"reml-mls"} is defunct (removed in 1.0.0) and errors.}
+models and, under validation (step 13b), for random-intercept models with
+a single random factor (see the eligibility rule above). \code{"reml-mls"} is
+defunct (removed in 1.0.0) and errors.}
 
 \item{control}{\code{\link[=lmm_interval_control]{lmm_interval_control()}} tuning (GPQ seed / M).}
 }

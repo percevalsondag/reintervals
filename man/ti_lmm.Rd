@@ -29,7 +29,8 @@ values (no \code{NA}) gives one block of rows per value (see Value).}
 \item{over}{What the interval covers: \code{"observation"} (default; a proportion
 \code{P} of future observations --- the ordinary tolerance interval) or
 \code{"group_mean"} (a proportion \code{P} of new group means --- the batch-mean
-tolerance interval).}
+tolerance interval; random-slope models, and random-intercept models
+with \code{method = "gpq"}).}
 
 \item{alpha, level}{The confidence, as a mutually-exclusive pair: give at most
 one. \code{level} is \code{1 - alpha}; default \code{alpha = 0.05}. A vector of unique
@@ -45,7 +46,9 @@ random-slope models use the one-sided GPQ limit. See \link{reintervals-models}.}
 \code{"ems-mls"}, \code{"anova-mls"}, \code{"gpq"} forces it and errors if incompatible
 with the model. \code{"anova-mls"} is available for fixed-slope models and for
 intercept-only one-way models (Hoffman-Kringle); \code{"gpq"} for random-slope
-models. \code{"reml-mls"} is defunct (removed in 1.0.0) and errors.}
+models and, under validation (step 13b), for random-intercept models with
+a single random factor (see the eligibility rule above). \code{"reml-mls"} is
+defunct (removed in 1.0.0) and errors.}
 
 \item{control}{\code{\link[=lmm_interval_control]{lmm_interval_control()}} tuning (GPQ seed / M).}
 }
@@ -129,6 +132,29 @@ al. (2019) interval instead; the two coincide on balanced data with a
 non-singular fit and differ on singular or unbalanced data.
 \item \strong{Any other random-intercept model, no fixed slope} (one-way with
 covariates, nested, crossed) -> EMS engine.
+\item \strong{\code{method = "gpq"} on a random-intercept model} (never chosen by
+\code{"auto"}; \strong{status: under validation (step 13b)}, every call signals a
+warning of class \code{reintervals_warning_unvalidated}). The same GPQ
+engine, on the random-intercept members of the Oliva-Aviles & Hauser
+(2025) class (their sections 4.1 and 4.3); on the one-way model its
+pivots are those of Liao, Lin & Iyer (2005). Eligible fits: exactly one
+grouping factor with a random intercept only (\code{(1 | g)}); any fixed
+effects (time, covariates, factors), provided the columns other than
+the intercept, \code{X0}, together with the lot indicators \code{Z} form a matrix
+\verb{W = (X0, Z)} of full column rank (the paper's conditions (a) and (b);
+a covariate constant within every lot fails it); no prior weights; and
+a positive residual df \code{n - q - K} (\code{q} = number of columns of \code{X0}, \code{K}
+= number of lots). Single-observation lots are allowed. Other designs
+(two or more random factors: nested, crossed) signal
+\code{reintervals_error_method}; a non-positive residual df signals
+\code{reintervals_error_residual_df}. Both targets are available:
+\code{over = "observation"} (content distribution \code{N(theta, tau2 + s2e)}) and
+\code{over = "group_mean"} (\code{N(theta, tau2)}, the distribution of lot means;
+for a random-intercept model this target exists only with
+\code{method = "gpq"}). The rows carry \code{method = "gpq"} and the GPQ
+diagnostics (\code{gpq_seed}, \code{rng_kind}, \code{mc_se_lower}, \code{mc_se_upper}, \code{M},
+\code{n_na_draws}, ...). Unlike the closed forms, the interval accounts for
+the uncertainty of the predicted mean through its GPQ.
 }
 
 For slope models the between-group variance \code{V_G(t0)} is quadratic in the
@@ -177,9 +203,10 @@ draw their own seed, so the equality holds only with an explicit seed. The
 closed-form engines compute each combination with their scalar code.
 Warnings are signalled once per call.
 
-The GPQ route requires
+On a random-slope model the GPQ route requires
 every lot to have at least two distinct time points and otherwise signals
-an error of class \code{reintervals_error_time_points}. The GPQ interval works
+an error of class \code{reintervals_error_time_points} (the random-intercept GPQ
+has no such requirement). The GPQ interval works
 from the per-lot OLS fits of the raw data and ignores the fitted
 random-effects structure: on an independent (\code{||}) random-slope fit it is the
 same as on the correlated (unstructured) fit of the same data.
@@ -213,6 +240,9 @@ ti_lmm(fs, newdata = data.frame(Days = 5), over = "group_mean",
 \references{
 Oliva-Aviles C, Hauser P (2025). \emph{Technometrics} 67(2):193-202.
 \doi{10.1080/00401706.2024.2407324}
+
+Liao CT, Lin TY, Iyer HK (2005). \emph{Technometrics} 47(3):323-335.
+\doi{10.1198/004017005000000102}
 
 Hoffman D (2010). One-sided tolerance limits for balanced and
 unbalanced random effects models. \emph{Technometrics} 52(3):303-312.

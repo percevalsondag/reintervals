@@ -8,6 +8,15 @@
 ##              a_k = (a_{k,1}, a_{k,2})' ~ N(0, V)   [V correlated or diagonal],
 ##              e_kj ~ N(0, s2e),  batches independent.
 ##
+## Since step 13b the same engine also runs on the RANDOM-INTERCEPT members of
+## the class (their sections 4.1 and 4.3; s = 1, Z_k = 1_{n_k}, A = 1, X0 = the
+## non-intercept fixed-effect columns): .gpq_prepare_ri builds the design, and
+## C = S(W'W)^{-1}S' is then a full K x K matrix when q > 0 (diagonal when
+## q = 0, the one-way model of Liao, Lin & Iyer 2005, Technometrics
+## 47(3):323-335, doi:10.1198/004017005000000102). .gpq_theta_draws takes C
+## either as its diagonal (the arithmetic below, unchanged) or in full (via
+## its eigen-decomposition). See .gpq_prepare_ri for the formulas.
+##
 ## The paper's class (their Eq. 2) puts all fixed effects inside the column
 ## space of Z, so for the single-temperature stability model q = 0, s = 2,
 ## X0 is empty, A = I_2, and W = Z = block-diag of Z_k = [1 | t_k] (n x 2K).
@@ -68,12 +77,22 @@
 .gpq_core <- function(y, time, batch, t0, content = 0.99, conf = 0.95,
                       sides = "two.sided",
                       c_resid = 1, M = 20000L, seed = NULL) {
+  sides <- .resolve_sides(sides)               # input errors before data errors, as before
+  pre <- .gpq_prepare(y, time, batch)          # errors here leave the RNG untouched
+  .gpq_run(pre, t0, content = content, conf = conf, sides = sides,
+           c_resid = c_resid, M = M, seed = seed)
+}
+
+## The Monte Carlo on a prepared design `pre` (.gpq_prepare: random slope;
+## .gpq_prepare_ri: random intercept) at the evaluation points `t0` (time
+## values for the slope design; a list of x0 rows for the random-intercept
+## design).
+.gpq_run <- function(pre, t0, content, conf, sides, c_resid, M, seed) {
   ## B3: content, conf and sides may be vectors; every (content, conf, sides)
   ## combination is evaluated on the same pivot draws and the same tau2 solve.
   ## Rows: t0 fastest, then sides, then content, then conf (.combo_grid).
   sides <- .resolve_sides(sides)
   combos <- .combo_grid(sides = sides, P = content, level = conf)
-  pre <- .gpq_prepare(y, time, batch)          # errors here leave the RNG untouched
   piv <- .gpq_pivots(df_resid = pre$df_resid, K = pre$K, M = M, seed = seed)
 
   ## per t0: one draw set / tau2 solve, one row per combination
@@ -168,7 +187,87 @@
           "degenerate and the interval reflects only the between-lot variance.",
           class = "reintervals_warning_limitation")
   }
-  list(K = K, n = n, df_resid = df_resid, ZtZi = ZtZi, bhat = bhat, sse = sse)
+  list(kind = "slope", K = K, n = n, df_resid = df_resid, ZtZi = ZtZi,
+       bhat = bhat, sse = sse)
+}
+
+## ---------------------------------------------------------------------------
+## Random-intercept member of the Oliva-Aviles & Hauser (2025) class (their
+## sections 4.1 and 4.3): Z = direct sum of 1_{n_k} (s = 1), A = 1, X_Z = the
+## intercept column, X0 = the other fixed-effect columns (q of them; time,
+## covariates, factor contrasts), W = (X0, Z). With the lot effects absorbed
+## (X0c = X0 centred within lots):
+##   eta0_hat = (X0c'X0c)^{-1} X0c'y,     SSE = |y_c - X0c eta0_hat|^2 on n - q - K df,
+##   NY_k = ybar_k + (x0 - xbar_k)' eta0_hat   (= S (W'W)^{-1} W'y, S = (1_K x0', I_K)),
+##   C = S (W'W)^{-1} S' = diag(1/n_k) + D (X0c'X0c)^{-1} D',   D_k = (x0 - xbar_k)'.
+## q = 0 (the one-way model, Liao, Lin & Iyer 2005) gives C = diag(1/n_k) and NY
+## = the lot means. Deterministic; runs before any draw.
+## Single-observation lots are allowed (a column of W and an entry of NY; no
+## within-lot df). W = (X0, Z) must have full column rank (condition (b)), i.e.
+## X0c has rank q: a covariate constant within every lot fails it.
+## ---------------------------------------------------------------------------
+.gpq_prepare_ri <- function(y, X0, batch) {
+  batch <- droplevels(factor(batch))
+  X0 <- as.matrix(X0)
+  K <- nlevels(batch); n <- length(y); q <- ncol(X0)
+  if (K < 2L) .abort(sprintf("The GPQ tolerance interval needs >= 2 lots (grouping levels) to estimate the between-lot variance; got %d.", K),
+                     class = "reintervals_error_groups")
+  df_resid <- n - q - K
+  if (df_resid < 1L)
+    .abort(sprintf(paste0("The GPQ tolerance interval needs a positive residual df, ",
+                          "n - q - K = %d - %d - %d = %d (n observations, q fixed effects ",
+                          "besides the intercept, K lots); single-observation lots add ",
+                          "no within-lot df."), n, q, K, df_resid),
+           class = "reintervals_error_residual_df")
+  nk   <- as.numeric(tabulate(batch, K))
+  ybar <- as.numeric(tapply(y, batch, mean))
+  yc   <- y - ybar[batch]
+  if (q > 0L) {
+    xbar <- apply(X0, 2L, function(v) as.numeric(tapply(v, batch, mean)))
+    xbar <- matrix(xbar, K, q, dimnames = list(NULL, colnames(X0)))
+    Xc <- X0 - xbar[as.integer(batch), , drop = FALSE]
+    qx <- qr(Xc)
+    if (qx$rank < q)
+      .abort("method = \"gpq\" on a random-intercept model needs W = (X0, Z) of full ",
+             "column rank (Oliva-Aviles & Hauser 2025, condition (b)): a fixed effect ",
+             "here is constant within every level of the grouping factor (or the fixed ",
+             "effects are collinear within lots), so it lies in the column space of the ",
+             "lot indicators.", class = "reintervals_error_method")
+    eta0 <- as.numeric(qr.coef(qx, yc))
+    sse  <- sum(qr.resid(qx, yc)^2)
+    Ainv <- chol2inv(qr.R(qx))
+    Ainv[qx$pivot, qx$pivot] <- Ainv
+  } else {
+    xbar <- matrix(0, K, 0L); eta0 <- numeric(0); Ainv <- matrix(0, 0L, 0L)
+    sse <- sum(yc^2)
+  }
+  if (sse <= 1e-12 * max(sum((y - mean(y))^2), .Machine$double.xmin)) {
+    .warn("The pooled within-lot residual sum of squares is zero, so the ",
+          "residual-variance pivot is degenerate and the interval reflects only ",
+          "the between-lot variance.", class = "reintervals_warning_limitation")
+  }
+  list(kind = "ri", K = K, n = n, q = q, df_resid = df_resid, sse = sse,
+       nk = nk, ybar = ybar, xbar = xbar, eta0 = eta0, Ainv = Ainv)
+}
+
+## The design quantities at one evaluation point: NY (K-vector) and
+## C = S (W'W)^{-1} S', as its diagonal `a` when C is diagonal (q = 0: the
+## random-slope design and the one-way model) or as the full matrix `C`.
+.gpq_design_at <- function(pre, tt) {
+  if (identical(pre$kind, "ri")) {
+    if (pre$q == 0L) return(list(a = 1 / pre$nk, NY = pre$ybar, C = NULL))
+    D  <- matrix(tt, pre$K, pre$q, byrow = TRUE) - pre$xbar   # rows (x0 - xbar_k)'
+    NY <- pre$ybar + as.numeric(D %*% pre$eta0)
+    C  <- D %*% pre$Ainv %*% t(D)
+    diag(C) <- diag(C) + 1 / pre$nk
+    C <- (C + t(C)) / 2
+    return(list(a = NULL, NY = NY, C = C))
+  }
+  K <- pre$K
+  z0 <- c(1, tt)
+  a  <- vapply(seq_len(K), function(k) as.numeric(t(z0) %*% pre$ZtZi[[k]] %*% z0), 0) # leverages a_k
+  NY <- as.numeric(crossprod(pre$bhat, z0)) # batch fitted values at t0 (K-vector)
+  list(a = a, NY = NY, C = NULL)
 }
 
 ## The M pivot draws, once per call, in the fixed order U, Q, Z.
@@ -205,14 +304,19 @@
 ## section of each kept draw, the NA count and the boundary flags.
 .gpq_theta_draws <- function(pre, piv, tt) {
   K <- pre$K; M <- piv$M
-  z0 <- c(1, tt)
-  a  <- vapply(seq_len(K), function(k) as.numeric(t(z0) %*% pre$ZtZi[[k]] %*% z0), 0) # leverages a_k
-  NY <- as.numeric(crossprod(pre$bhat, z0)) # batch fitted values at t0 (K-vector)
-  phi1 <- min(a)
+  dz <- .gpq_design_at(pre, tt)
+  a  <- dz$a; NY <- dz$NY; C <- dz$C        # C non-NULL: full S(W'W)^{-1}S' (q > 0)
+  if (is.null(C)) {
+    phi1 <- min(a)
+  } else {
+    eC <- eigen(C, symmetric = TRUE)
+    phiC <- pmax(eC$values, 0)              # eigenvalues phi_j of C (positive definite)
+    phi1 <- min(phiC)
+  }
 
-  ## L = orthonormal complement of 1_K  (K x (K-1)); B = L' diag(a) L
+  ## L = orthonormal complement of 1_K  (K x (K-1)); B = L' diag(a) L  (L' C L)
   L  <- .ortho_complement_of_one(K)
-  B  <- crossprod(L, a * L)                 # (K-1)x(K-1)
+  B  <- if (is.null(C)) crossprod(L, a * L) else crossprod(L, C %*% L)  # (K-1)x(K-1)
   eg <- eigen(B, symmetric = TRUE)
   lam <- pmax(eg$values, 0)                 # eigenvalues lambda_i (>=0)
   P  <- eg$vectors
@@ -230,10 +334,12 @@
   na <- is.na(Rtau2)
   n_na <- sum(na)
   if (n_na > 0.01 * M) {
+    where <- if (identical(pre$kind, "ri")) "at the requested newdata row" else
+      sprintf("at t0 = %g", tt)
     .abort(sprintf(paste0("ti_gpq_raw(): %d of %d GPQ draws (%.1f%%) have no valid ",
-                          "between-batch variance solution at t0 = %g; more than ",
+                          "between-batch variance solution %s; more than ",
                           "1%% is treated as a numerical failure."),
-                   n_na, M, 100 * n_na / M, tt),
+                   n_na, M, 100 * n_na / M, where),
            class = "reintervals_error_numerical")
   }
   ## MC section of each draw, by draw index BEFORE the NA drop; the remainder
@@ -247,13 +353,26 @@
   }
   boundary <- Rtau2 <= (-phi1 * Rs2e + 1e-12 * pmax(Rs2e, 1))
 
-  ## R_G = diag(Rtau2 + Rs2e a_k); weighted-mean center and its variance.
-  ## g[m,k] = Rtau2[m] + Rs2e[m]*a[k]; clamp tiny denoms (right-hand limit at boundary).
-  g <- outer(Rtau2, rep(1, K)) + outer(Rs2e, a)          # M x K
-  g <- pmax(g, 1e-10 * pmax(outer(Rs2e, a), 1e-12))
-  inv <- 1 / g
-  den <- rowSums(inv)                                    # 1' RG^{-1} 1
-  num <- as.numeric(inv %*% NY)                          # 1' RG^{-1} NY
+  if (is.null(C)) {
+    ## R_G = diag(Rtau2 + Rs2e a_k); weighted-mean center and its variance.
+    ## g[m,k] = Rtau2[m] + Rs2e[m]*a[k]; clamp tiny denoms (right-hand limit at boundary).
+    g <- outer(Rtau2, rep(1, K)) + outer(Rs2e, a)          # M x K
+    g <- pmax(g, 1e-10 * pmax(outer(Rs2e, a), 1e-12))
+    inv <- 1 / g
+    den <- rowSums(inv)                                    # 1' RG^{-1} 1
+    num <- as.numeric(inv %*% NY)                          # 1' RG^{-1} NY
+  } else {
+    ## R_G = Rtau2 I + Rs2e C = E diag(Rtau2 + Rs2e phi_j) E' (C = E diag(phi) E');
+    ## with u = E'1, v = E'NY: 1'RG^{-1}1 = sum_j u_j^2 / g_j and
+    ## 1'RG^{-1}NY = sum_j u_j v_j / g_j. Same clamp as the diagonal case.
+    u <- as.numeric(crossprod(eC$vectors, rep(1, K)))
+    v <- as.numeric(crossprod(eC$vectors, NY))
+    g <- outer(Rtau2, rep(1, K)) + outer(Rs2e, phiC)       # M x K
+    g <- pmax(g, 1e-10 * pmax(outer(Rs2e, phiC), 1e-12))
+    inv <- 1 / g
+    den <- as.numeric(inv %*% (u * u))
+    num <- as.numeric(inv %*% (u * v))
+  }
   theta_tilde <- num / den
   Rs2_theta   <- 1 / den                                 # Var(theta-tilde) realization
 
@@ -311,7 +430,8 @@
     mc_se <- apply(sec_lim, 1L, stats::sd) / sqrt(S)
     mc_se[!is.finite(lim)] <- NA_real_
 
-    data.frame(method = "gpq", time = tt,
+    data.frame(method = "gpq",
+               time = if (identical(pre$kind, "ri")) NA_real_ else tt,
                estimate = est,
                lower = lim[1], upper = lim[2],
                mc_se_lower = mc_se[1], mc_se_upper = mc_se[2],

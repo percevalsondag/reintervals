@@ -415,3 +415,34 @@ test_that("slope_pi_method = 'fv-anova' is equivariant under y -> c y and invari
     }
   }
 })
+
+test_that("ti_lmm(method = 'gpq') on a random-intercept fit is equivariant under y -> c y and invariant under t -> c t (same seed)", {
+  skip_if_not_installed("lme4")
+  set.seed(3)
+  nk <- c(5, 1, 4, 7, 1, 3, 6, 2); tt <- c(0, 3, 6, 9, 12, 18, 24)
+  d <- data.frame(lot = factor(rep(seq_along(nk), nk)))
+  d$time <- unlist(lapply(nk, function(k) tt[seq_len(k)]))
+  d$y <- 100 - 0.3 * d$time + rnorm(length(nk), 0, 1.2)[d$lot] + rnorm(nrow(d), 0, 0.8)
+  nd <- data.frame(time = c(0, 12, 30))
+  ctl <- lmm_interval_control(seed = 7L, M = 2000L)
+  ## the GPQ uses only (y, X, lot), never the REML fit, so genuine refits are used
+  run <- function(dd, ndd, ov) run_verb(ti_lmm(lmer_q(y ~ time + (1 | lot), dd), ndd,
+                                               P = c(0.9, 0.99), sides = c("two.sided", "lower"),
+                                               over = ov, method = "gpq", control = ctl))
+  for (ov in c("observation", "group_mean")) {
+    b <- run(d, nd, ov)
+    expect_identical(b$value$method, rep("gpq", nrow(b$value)))
+    for (c in y_scales) {
+      s <- run(transform(d, y = y * c), nd, ov)
+      info <- sprintf("gpq-ri %s y x %g", ov, c)
+      expect_identical(s$warnings, b$warnings, info = info)
+      expect_equivariant(b$value, s$value, c, info, kind = "y")
+    }
+    for (c in t_scales) {
+      s <- run(transform(d, time = time * c), transform(nd, time = time * c), ov)
+      info <- sprintf("gpq-ri %s t x %g", ov, c)
+      expect_identical(s$warnings, b$warnings, info = info)
+      expect_equivariant(b$value, s$value, c, info, kind = "time", time_col = "time")
+    }
+  }
+})

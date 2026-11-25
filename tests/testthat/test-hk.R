@@ -182,7 +182,9 @@ test_that("HK route: method choices; one-sided is Hoffman's (2010) limit", {
   expect_identical(lo$upper, Inf)
   up <- ti_anova_raw(hk_assay$conc, time = NULL, lot = hk_assay$run, P = 0.95, level = 0.90, sides = "upper")
   expect_equal(up$upper, lo$estimate + (lo$estimate - lo$lower), tolerance = 1e-12)
-  expect_error(ti_lmm(fm, method = "gpq"), "not available")
+  ## method = "gpq" is available on the one-way model (step 13b, unvalidated)
+  expect_warning(ti_lmm(fm, method = "gpq", control = lmm_interval_control(seed = 1, M = 2000)),
+                 class = "reintervals_warning_unvalidated")
   expect_error(ti_anova_raw(hk_assay$conc, time = NULL, lot = hk_assay$run, t0 = 1),
                "only with a `time` covariate")
   # a one-way model WITH a covariate is not HK: here a clean-balanced fixed-slope
