@@ -359,9 +359,11 @@ test_that(".nd_unstable_psi and .df_stable", {
   expect_true(.df_stable(numeric(0), numeric(0)))
 })
 
-## slope_pi_method = "fv-anova" (and "hybrid", "reml" for contrast): limits,
-## estimates and SEs scale by c and W by c^2 under y -> c y; every number is
-## unchanged under t -> c t; the df (Satterthwaite on S2_L and S2_E) is invariant
+## slope_pi_method = "fv-anova" (and "hybrid"): limits, estimates and SEs scale
+## by c and W by c^2 under y -> c y; every number is unchanged under t -> c t;
+## the df (Satterthwaite on S2_L and S2_E) and the effective df of S2_L
+## (fv_df_lots) are invariant. rs_unbal (three lots on 0..24, three on 0..12)
+## has unequal leverages, so fv_df_lots < K - 1 there.
 test_that("slope_pi_method = 'fv-anova' is equivariant under y -> c y and invariant under t -> c t", {
   skip_if_not_installed("lme4")
   skip_on_cran()
@@ -369,13 +371,26 @@ test_that("slope_pi_method = 'fv-anova' is equivariant under y -> c y and invari
   fxs$rs_un$theta_scale  <- function(c) c(1, 1 / c, 1 / c)
   fxs$rs_ind$theta_scale <- function(c) c(1, 1 / c)
   fxs$retry$theta_scale  <- function(c) c(1, 1 / c, 1 / c)
+  set.seed(3); full <- c(0, 3, 6, 9, 12, 18, 24); short <- c(0, 3, 6, 9, 12)
+  ub <- do.call(rbind, lapply(1:6, function(k) {
+    tt <- if (k <= 3) full else short
+    data.frame(lot = factor(k), time = tt,
+               y = 100 + rnorm(1) + (-0.3 + rnorm(1, 0, 0.05)) * tt + rnorm(length(tt)))
+  }))
+  fxs$rs_unbal <- list(f = y ~ time + (time | lot), d = ub, y = "y",
+                       nd = data.frame(time = c(6, 24)), slope = TRUE,
+                       theta_scale = function(c) c(1, 1 / c, 1 / c))
   pi_calls <- function(fm, nd) lapply(c(fv = "fv-anova", hybrid = "hybrid"), function(m)
     lapply(c("two.sided", "lower", "upper"), function(sd)
       run_verb(pi_lmm(fm, nd, sides = sd, control = lmm_interval_control(slope_pi_method = m)))))
-  for (nm in c("rs_un", "rs_ind", "retry")) {
+  for (nm in c("rs_un", "rs_ind", "retry", "rs_unbal")) {
     fx <- fxs[[nm]]; fx$time <- names(fx$nd)[1]
     b <- pi_calls(sc_fit(fx, 1), fx$nd)
     expect_identical(b$fv[[1]]$value$method, rep("fv-anova", nrow(fx$nd)))
+    dfl <- attr(b$fv[[1]]$value, "diagnostics")$fv_df_lots
+    if (nm == "rs_unbal") expect_true(all(dfl < 6 - 1)) else
+      expect_identical(dfl, rep(nlevels(factor(fx$d[[if (nm == "retry") "lot" else "Subject"]])) - 1,
+                                nrow(fx$nd)))
     for (kind in c("y", "time")) {
       scales <- if (kind == "y") y_scales else t_scales
       for (c in setdiff(scales, 1)) {
@@ -388,6 +403,10 @@ test_that("slope_pi_method = 'fv-anova' is equivariant under y -> c y and invari
         for (m in names(b)) for (j in 1:3) {
           info <- sprintf("%s / pi:%s side %d / %s x %g", nm, m, j, kind, c)
           expect_identical(s[[m]][[j]]$warnings, b[[m]][[j]]$warnings, info = info)
+          if (m == "fv")
+            expect_true(rel_ok(attr(s[[m]][[j]]$value, "diagnostics")$fv_df_lots,
+                               attr(b[[m]][[j]]$value, "diagnostics")$fv_df_lots, 1e-8),
+                        info = paste(info, "fv_df_lots"))
           expect_equivariant(b[[m]][[j]]$value, s[[m]][[j]]$value, c, info, kind = kind,
                              time_col = if (kind == "time") fx$time,
                              tol = if (is.null(fx$tol)) list(lim = 1e-8, df = 1e-6) else fx$tol)

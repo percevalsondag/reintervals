@@ -147,6 +147,15 @@
   warn (`reintervals_warning_unvalidated`); the option is recorded as
   `slope_pi_arm`, and the random-slope prediction rows carry the construction
   actually used in `method` (`"reml"` or `"fv-anova"`).
+  The `"fv-anova"` df uses the effective (Satterthwaite) df of `S_L^2`,
+  `tr(AV)^2 / tr((AV)^2)` with the per-lot variances
+  `v_k = max(VG_hat, 0) + a_k S2_E` (`a_k` the lot's leverage at `t0`),
+  reported as `fv_df_lots`: `K - 1` in balanced designs (identical results),
+  smaller when the lots' leverages differ. The `slope_ngm_method = "fv-anova"`
+  arm keeps `K - 1`. `"hybrid"` never errors where `"reml"` computes: when the
+  fv-anova interval is infeasible on a singular fit it uses `"reml"` with a
+  warning of class `reintervals_warning_hybrid_fallback` (a
+  `reintervals_warning_fallback`), and records why in `slope_pi_route_reason`.
 * Random-slope prediction-interval rows now report `df_fallback_reason` in the
   diagnostics, per row, with the random-intercept semantics: why the default
   df fell back to containment (e.g. `"singular fit"`), `NA` where it did not.

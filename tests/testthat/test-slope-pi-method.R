@@ -29,6 +29,21 @@ sing_nd <- data.frame(time = c(0, 6, 12, 24))
 ss_fit <- function() lmer_q(Reaction ~ Days + (Days | Subject), lme4::sleepstudy)
 ss_nd <- data.frame(Days = c(0, 4.5, 9))
 
+## tr(AV)^2 / tr((AV)^2) written out from the per-lot OLS lines
+df_lots_ref <- function(y, time, lot, t0) {
+  lot <- factor(lot); K <- nlevels(lot); n <- length(y)
+  fit <- a <- numeric(K); sse <- 0
+  for (k in seq_len(K)) {
+    i <- lot == levels(lot)[k]; Z <- cbind(1, time[i]); m <- stats::lm.fit(Z, y[i])
+    fit[k] <- sum(c(1, t0) * m$coefficients); sse <- sse + sum(m$residuals^2)
+    a[k] <- drop(t(c(1, t0)) %*% solve(crossprod(Z)) %*% c(1, t0))
+  }
+  S2E <- sse / (n - 2 * K); S2L <- stats::var(fit)
+  v <- max(S2L - mean(a) * S2E, 0) + a * S2E
+  A <- (diag(K) - matrix(1 / K, K, K)) / (K - 1); AV <- A %*% diag(v)
+  sum(diag(AV))^2 / sum(diag(AV %*% AV))
+}
+
 ## the fv-anova PI recomputed from its formula, off the raw data
 fv_pi_ref <- function(y, time, batch, t0, level = 0.95, sides = "two.sided") {
   batch <- factor(batch); K <- nlevels(batch); n <- length(y)
@@ -39,7 +54,7 @@ fv_pi_ref <- function(y, time, batch, t0, level = 0.95, sides = "two.sided") {
     i <- batch == b; sum(stats::resid(stats::lm(y[i] ~ time[i]))^2)
   }, 0))
   S2E <- sse / (n - 2 * K); WL <- stats::var(fit) * (1 + 1 / K); W <- WL + S2E
-  df <- W^2 / (WL^2 / (K - 1) + S2E^2 / (n - 2 * K))
+  df <- W^2 / (WL^2 / df_lots_ref(y, time, batch, t0) + S2E^2 / (n - 2 * K))
   q <- if (sides == "two.sided") stats::qt(1 - (1 - level) / 2, df) else stats::qt(level, df)
   list(estimate = mean(fit), lower = mean(fit) - q * sqrt(W),
        upper = mean(fit) + q * sqrt(W), W = W, df = df)
@@ -107,6 +122,8 @@ test_that("singular fit: 'hybrid' equals 'fv-anova', tagged 'fv-anova', finite, 
     expect_identical(dg(hy)$slope_pi_arm, rep("hybrid", 4))
     a <- fv; b <- hy
     attr(a, "diagnostics")$slope_pi_arm <- NULL; attr(b, "diagnostics")$slope_pi_arm <- NULL
+    expect_identical(dg(b)$slope_pi_route_reason, rep(NA_character_, 4))
+    attr(b, "diagnostics")$slope_pi_route_reason <- NULL
     expect_identical(a, b, info = sd)
     expect_identical(hy$method, rep("fv-anova", 4))
     expect_identical(dg(hy)$df_rule, rep("fv-anova-satterthwaite", 4))
@@ -128,7 +145,10 @@ test_that("non-singular fit: 'hybrid' equals 'reml' (also without a covariance: 
   skip_if_not_installed("lme4")
   fm <- ss_fit()
   expect_false(lme4::isSingular(fm))
-  strip <- function(x) { attr(x, "diagnostics")$slope_pi_arm <- NULL; x }
+  strip <- function(x) {
+    attr(x, "diagnostics")$slope_pi_arm <- NULL
+    attr(x, "diagnostics")$slope_pi_route_reason <- NULL; x
+  }
   re <- quiet_pi(pi_lmm(fm, ss_nd))
   hy <- quiet_pi(pi_lmm(fm, ss_nd, control = ctl("hybrid")))
   expect_identical(strip(hy), strip(re))
@@ -221,4 +241,136 @@ test_that("'fv-anova' refusals: lots with one time point; no residual df (n = 2K
                "no residual df", class = "reintervals_error_time_points")
   ## the default "reml" still computes on the first fit
   expect_true(all(is.finite(quiet_pi(pi_lmm(fm, ss_nd))$lower)))
+})
+
+## ---- effective df of S2_L (fv_df_lots) and the hybrid fallback ---------------
+
+## the unbalanced K = 6 fixture: three lots on 0..24, three on 0..12
+unbal_rs <- function(seed = 3) {
+  set.seed(seed); full <- c(0, 3, 6, 9, 12, 18, 24); short <- c(0, 3, 6, 9, 12)
+  do.call(rbind, lapply(1:6, function(k) {
+    tt <- if (k <= 3) full else short
+    data.frame(lot = factor(k), time = tt,
+               y = 100 + rnorm(1) + (-0.3 + rnorm(1, 0, 0.05)) * tt + rnorm(length(tt)))
+  }))
+}
+test_that("balanced designs: fv_df_lots is K - 1 and the df is the b8ee4e6 expression, bit for bit", {
+  skip_if_not_installed("lme4")
+  fits <- list(list(ss_fit(), ss_nd, lme4::sleepstudy$Reaction, lme4::sleepstudy$Days,
+                    lme4::sleepstudy$Subject))
+  fs <- sing_rs()
+  if (isTRUE(lme4::isSingular(fs))) {
+    mf <- stats::model.frame(fs)
+    fits[[2]] <- list(fs, sing_nd, mf$y, mf$time, mf$batch)
+  }
+  for (f in fits) {
+    for (m in c("fv-anova", "hybrid")) {
+      p <- quiet_pi(pi_lmm(f[[1]], f[[2]], control = ctl(m)))
+      if (p$method[1] != "fv-anova") next          # hybrid on the interior fit is "reml"
+      K <- nlevels(factor(f[[5]]))
+      expect_identical(dg(p)$fv_df_lots, rep(K - 1, nrow(p)))
+      for (i in seq_len(nrow(p))) {
+        L <- .lotline(f[[3]], f[[4]], f[[5]], f[[2]][[1]][i])
+        WL <- L$S2L * (1 + 1 / L$K); W <- WL + L$S2E
+        expect_identical(dg(p)$df[i], W^2 / (WL^2 / (L$K - 1) + L$S2E^2 / L$df_E))
+      }
+    }
+  }
+})
+
+test_that("unbalanced design: fv_df_lots < K - 1 and equals tr(AV)^2 / tr((AV)^2)", {
+  skip_if_not_installed("lme4")
+  d <- unbal_rs()
+  fm <- lmer_q(y ~ time + (time | lot), d)
+  nd <- data.frame(time = c(24, 12, 6))
+  p <- quiet_pi(pi_lmm(fm, nd, control = ctl("fv-anova")))
+  for (i in seq_len(nrow(nd))) {
+    ref <- df_lots_ref(d$y, d$time, d$lot, nd$time[i])
+    expect_equal(dg(p)$fv_df_lots[i], ref, tolerance = 1e-10)
+    expect_lt(dg(p)$fv_df_lots[i], 6 - 1)
+    ## the PI df uses it; W and the center are those of b8ee4e6
+    L <- .lotline(d$y, d$time, d$lot, nd$time[i])
+    WL <- L$S2L * (1 + 1 / 6); W <- WL + L$S2E
+    expect_identical(dg(p)$W[i], W)
+    expect_identical(p$estimate[i], L$Ybar)
+    expect_equal(dg(p)$df[i], W^2 / (WL^2 / ref + L$S2E^2 / L$df_E), tolerance = 1e-10)
+  }
+  ## the edge cases of .fv_df_lots
+  L <- list(K = 4, a = c(0.2, 0.5, 0.9, 1.4), abar = 0.75, S2L = 0, S2E = 0)
+  expect_identical(.fv_df_lots(L), 3)                    # every v_k = 0 -> K - 1
+  L$S2E <- 1                                             # VG_hat < 0: v_k = a_k S2E
+  v <- L$a; ref <- sum(v - mean(v))^2 / sum(((diag(4) - 1 / 4) %*% diag(v))^2 * 1)
+  M <- (diag(4) - 1 / 4) %*% diag(v)
+  expect_equal(.fv_df_lots(L), sum(diag(M))^2 / sum(diag(M %*% M)), tolerance = 1e-12)
+  L$a <- rep(0.5, 4); L$abar <- 0.5
+  expect_identical(.fv_df_lots(L), 3)                    # equal leverages
+})
+
+test_that("Monte Carlo: two-sided 95% coverage of the fv-anova PI, K - 1 vs effective df (3 x 0..24 + 3 x {0,3,6}, t0 = 24)", {
+  skip_on_cran()
+  full <- c(0, 3, 6, 9, 12, 18, 24); short <- c(0, 3, 6); t0 <- 24; K <- 6
+  lot <- factor(rep(seq_len(K), c(7, 7, 7, 3, 3, 3))); tt <- c(rep(full, 3), rep(short, 3))
+  cover <- function(s2_0, s2_1, s2e, R = 2000) {
+    set.seed(20261125)
+    sdn <- sqrt(s2_0 + t0^2 * s2_1 + s2e); mu0 <- 100 - 0.5 * t0
+    out <- vapply(seq_len(R), function(r) {
+      b0 <- stats::rnorm(K, 0, sqrt(s2_0)); b1 <- stats::rnorm(K, 0, sqrt(s2_1))
+      y <- 100 + b0[lot] + (-0.5 + b1[lot]) * tt + stats::rnorm(length(tt), 0, sqrt(s2e))
+      p <- .pi_fv_anova(y, tt, lot, t0)
+      L <- .lotline(y, tt, lot, t0); WL <- L$S2L * (1 + 1 / K); W <- WL + L$S2E
+      hk <- stats::qt(0.975, W^2 / (WL^2 / (K - 1) + L$S2E^2 / L$df_E)) * sqrt(W)
+      c(stats::pnorm(L$Ybar + hk, mu0, sdn) - stats::pnorm(L$Ybar - hk, mu0, sdn),
+        stats::pnorm(p$upper, mu0, sdn) - stats::pnorm(p$lower, mu0, sdn))
+    }, numeric(2))
+    rowMeans(out)
+  }
+  for (s in list(c(1, 0.01, 1), c(1, 0.05, 0.1))) {
+    cv <- cover(s[1], s[2], s[3])
+    info <- sprintf("s2_0 = %g, s2_1 = %g, s2e = %g: K - 1 %.4f, effective %.4f",
+                    s[1], s[2], s[3], cv[1], cv[2])
+    expect_gte(cv[2], 0.94)
+    expect_gte(cv[2], cv[1])        # df_L <= K - 1: never narrower
+    message(info)
+  }
+})
+
+test_that("hybrid: an infeasible fv-anova PI on a singular fit falls back to 'reml' with a classed warning", {
+  skip_if_not_installed("lme4")
+  lc <- lme4::lmerControl(check.conv.singular = "ignore", calc.derivs = FALSE)
+  dn <- vfun_sim(B = 10, times = c(0, 3, 6, 9, 12, 18, 24), s2_0 = 2.0,
+                 s2_1 = 1e-6, s01 = 0, s2e = 0.7, seed = 1)
+  dn <- dn[!(dn$batch == levels(factor(dn$batch))[1] & dn$time > 0), ]   # one release-only lot
+  fm <- lmer_q(y ~ time + (1 | batch) + (0 + time | batch), dn, control = lc)
+  skip_if_not(isTRUE(lme4::isSingular(fm)), "fixture fit is not singular here")
+  re <- quiet_pi(pi_lmm(fm, sing_nd))
+  w <- NULL
+  hy <- withCallingHandlers(quiet_pi(pi_lmm(fm, sing_nd, control = ctl("hybrid"))),
+    reintervals_warning_hybrid_fallback = function(cnd) { w <<- cnd; invokeRestart("muffleWarning") })
+  expect_s3_class(w, c("reintervals_warning_hybrid_fallback", "reintervals_warning_fallback",
+                       "reintervals_warning"))
+  expect_match(conditionMessage(w), "1 lot(s) with fewer than two distinct time points", fixed = TRUE)
+  reason <- "fv-anova infeasible: 1 lot(s) with fewer than two distinct time points"
+  expect_identical(w$reason, reason)
+  expect_identical(hy$method, rep("reml", 4))
+  expect_true(all(is.finite(c(hy$lower, hy$upper))))
+  expect_identical(dg(hy)$slope_pi_route_reason, rep(reason, 4))
+  expect_identical(hy$lower, re$lower); expect_identical(hy$upper, re$upper)
+  ## the explicit arm keeps its error
+  expect_error(quiet_pi(pi_lmm(fm, sing_nd, control = ctl("fv-anova"))),
+               class = "reintervals_error_time_points")
+  ## n = 2K: no residual df -> the same fallback
+  d2 <- dn[dn$time %in% c(0, 24), ]
+  d2 <- d2[d2$batch %in% names(which(table(d2$batch) == 2)), ]
+  f2 <- lmer_q(y ~ time + (1 | batch) + (0 + time | batch), d2, control = lc)
+  if (isTRUE(lme4::isSingular(f2))) {
+    expect_warning(quiet_pi(pi_lmm(f2, sing_nd, control = ctl("hybrid"))),
+                   "no residual df", class = "reintervals_warning_hybrid_fallback")
+    h2 <- suppressWarnings(pi_lmm(f2, sing_nd, control = ctl("hybrid")))
+    expect_identical(h2$method, rep("reml", 4))
+    expect_identical(dg(h2)$slope_pi_route_reason,
+                     rep("fv-anova infeasible: no residual df (n = 2K)", 4))
+  }
+  ## a feasible singular hybrid call: NA route reason
+  ok <- quiet_pi(pi_lmm(sing_rs(), sing_nd, control = ctl("hybrid")))
+  expect_identical(dg(ok)$slope_pi_route_reason, rep(NA_character_, 4))
 })

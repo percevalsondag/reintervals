@@ -289,14 +289,38 @@
     ## the check failed, read as singular as everywhere else), "reml" otherwise
     slope_pi <- if (kind == "PI" && "slope_pi_method" %in% names(applied))
       applied[["slope_pi_method"]] else "reml"
-    if (slope_pi == "hybrid")
+    ## hybrid rows carry slope_pi_route_reason: NA, or why the fv-anova PI was
+    ## infeasible on this singular fit and "reml" was used instead
+    route_reason <- NULL
+    if (slope_pi == "hybrid") {
+      route_reason <- NA_character_
       slope_pi <- if (isFALSE(.is_singular(model))) "reml" else "fv-anova"
+      if (slope_pi == "fv-anova") {
+        why <- .fv_pi_infeasible(.model_yts(model, time_var))
+        if (is.null(why)) {
+          out <- tryCatch(
+            .pi_rs_fv_anova(model, t0s, time_var, level = level, sides = sides,
+                            opt = "slope_pi_method = \"hybrid\" (fv-anova on this singular fit)"),
+            reintervals_error_numerical = function(e) e)
+          if (!inherits(out, "error")) {
+            out$slope_pi_route_reason <- NA_character_
+            return(out)
+          }
+          why <- "zero prediction variance"
+        }
+        ## never an error where "reml" computes: fall back, with a warning
+        route_reason <- paste0("fv-anova infeasible: ", why)
+        .warn("slope_pi_method = \"hybrid\": the fit is singular but the fv-anova ",
+              "prediction interval is infeasible (", why, "); the \"reml\" ",
+              "interval is used instead.",
+              class = "reintervals_warning_hybrid_fallback",
+              data = list(reason = route_reason))
+        slope_pi <- "reml"
+      }
+    }
     if (slope_pi == "fv-anova") {
-      opt <- if (applied[["slope_pi_method"]] == "hybrid")
-        "slope_pi_method = \"hybrid\" (fv-anova on this singular fit)"
-        else "slope_pi_method = \"fv-anova\""
       return(.pi_rs_fv_anova(model, t0s, time_var, level = level, sides = sides,
-                             opt = opt))
+                             opt = "slope_pi_method = \"fv-anova\""))
     }
     reasons <- character(0)
     rows <- lapply(t0s, function(t0) {
@@ -326,6 +350,7 @@
     })
     out <- do.call(rbind, rows); rownames(out) <- NULL
     if (length(reasons)) attr(out, "df_fallback_reason") <- unique(reasons)
+    if (!is.null(route_reason)) out$slope_pi_route_reason <- route_reason
     return(out)
   }
 
@@ -351,14 +376,30 @@
 ## residual variance on df_E = n - 2K df:
 ##   center  Ybar(t0), the mean of the K fitted values (as the NGM arm)
 ##   W       S2L (1 + 1/K) + S2E   (the NGM arm's W plus the residual variance)
-##   df      W^2 / [ (S2L (1 + 1/K))^2 / (K - 1) + S2E^2 / df_E ]
-##           (Satterthwaite on the two independent mean squares; K - 1, the
-##           NGM arm's df, when S2E = 0)
+##   df      W^2 / [ (S2L (1 + 1/K))^2 / df_L + S2E^2 / df_E ]
+##           (Satterthwaite on the two independent mean squares), with df_L the
+##           effective df of S2L (.fv_df_lots): K - 1 in a balanced design;
+##           smaller when the lots' leverages at t0 differ
 ## In a balanced design E[W] - Var(Y_new - Ybar) = sigma^2 h(t0) >= 0 (h the
 ## common leverage at t0): conservative, like the NGM arm, and W > 0 whenever
 ## S2E > 0. Uses the raw data only, not the fitted random-effects structure.
 ## No df fallback. One-sided: t_{1 - alpha}. df_E = 0 (every lot has exactly
 ## two observations) is an error: there is no residual variance to add.
+## Effective (Satterthwaite) df of S2L = Y'AY, A = (I - J/K) / (K - 1), when
+## the K per-lot fitted values at t0 are independent with variances
+## v_k = max(VG_hat, 0) + a_k S2E (a_k the leverage of lot k at t0, VG_hat =
+## S2L - abar S2E): df_L = tr(AV)^2 / tr((AV)^2), V = diag(v). K - 1 exactly
+## when the leverages are equal (max |a_k - abar| <= 1e-12 abar; the balanced
+## value, analytically) or every v_k is 0.
+.fv_df_lots <- function(L) {
+  K <- L$K; a <- L$a
+  if (max(abs(a - L$abar)) <= 1e-12 * L$abar) return(K - 1)
+  v <- max(L$S2L - L$abar * L$S2E, 0) + a * L$S2E
+  if (all(v == 0)) return(K - 1)
+  AV <- (diag(K) - 1 / K) %*% diag(v, K) / (K - 1)
+  sum(diag(AV))^2 / sum(AV * t(AV))
+}
+
 .pi_fv_anova <- function(y, time, batch, t0s, level = 0.95,
                          sides = c("two.sided", "lower", "upper"),
                          opt = "slope_pi_method = \"fv-anova\"") {
@@ -373,7 +414,8 @@
     }
     W_L <- L$S2L * (1 + 1 / L$K)           # the fv-anova NGM variance
     W <- W_L + L$S2E
-    df <- W^2 / (W_L^2 / (L$K - 1) + L$S2E^2 / L$df_E)
+    df_L <- .fv_df_lots(L)
+    df <- W^2 / (W_L^2 / df_L + L$S2E^2 / L$df_E)
     if (!is.finite(W) || W <= 0 || !is.finite(df) || df <= 0) {
       .abort("The fv-anova prediction variance at t0 = ", t0, " is zero (equal per-lot ",
              "fitted values and no residual variation); the interval is not available.",
@@ -386,10 +428,25 @@
                lower = if (sides == "upper") -Inf else L$Ybar - hw,
                upper = if (sides == "lower")  Inf else L$Ybar + hw,
                df = df, W = W, se = sqrt(W), K = L$K, df_resid = L$df_E,
-               stringsAsFactors = FALSE)
+               fv_df_lots = df_L, stringsAsFactors = FALSE)
   })
   out <- do.call(rbind, rows); rownames(out) <- NULL
   out
+}
+
+## Why the fv-anova prediction interval cannot be formed on these data (the
+## refusals of .lotline / .pi_fv_anova), or NULL when it can. Read by the
+## "hybrid" route, which then falls back to "reml" instead of erroring.
+.fv_pi_infeasible <- function(yts) {
+  ok <- !is.na(yts$y) & !is.na(yts$time) & !is.na(yts$batch)
+  b <- droplevels(factor(yts$batch)[ok]); tt <- yts$time[ok]
+  K <- nlevels(b)
+  if (K < 2L) return("fewer than 2 lots")
+  n_t <- tapply(tt, b, function(v) length(unique(v)))
+  if (any(n_t < 2L))
+    return(sprintf("%d lot(s) with fewer than two distinct time points", sum(n_t < 2L)))
+  if (sum(ok) - 2L * K < 1L) return("no residual df (n = 2K)")
+  NULL
 }
 
 ## The fv-anova prediction interval in the slope-path row schema. `method` is
@@ -404,7 +461,8 @@
              df = f$df, df_rule = "fv-anova-satterthwaite", W = f$W, sides = sides,
              design = .slope_design(model), method = "fv-anova",
              singular = .is_singular(model), boundary = NA, vg_floored = NA,
-             K = f$K, df_resid = f$df_resid, df_fallback_reason = NA_character_,
+             K = f$K, df_resid = f$df_resid, fv_df_lots = f$fv_df_lots,
+             df_fallback_reason = NA_character_,
              stringsAsFactors = FALSE)
 }
 

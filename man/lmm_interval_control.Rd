@@ -144,14 +144,27 @@ containment as described under \code{slope_ci_df}. \code{"fv-anova"} (validation
 arm, package-original) is the \code{slope_ngm_method = "fv-anova"} construction
 with the pooled within-lot residual variance \code{S2_E} added:
 \verb{Ybar_fit +/- t_df sqrt(S_L^2 (1 + 1/K) + S2_E)} on the per-lot OLS fitted
-values at \code{t0}, with the Satterthwaite df of the two mean squares (\code{K - 1}
-and \verb{n - 2K} df), conservative by \verb{sigma^2 h(t0)} in a balanced design; it
-needs two distinct time points per lot and \verb{n > 2K}, and uses the per-lot
-OLS fits, not the fitted random-effects structure. \code{"hybrid"} (under
+values at \code{t0}, with the Satterthwaite df of the two mean squares,
+\verb{W^2 / [(S_L^2 (1 + 1/K))^2 / df_L + S2_E^2 / (n - 2K)]}; \code{df_L}, reported
+as \code{fv_df_lots}, is the effective df of \code{S_L^2} when the lots' fitted values
+have unequal variances \verb{v_k = max(VG_hat, 0) + a_k S2_E} (\code{a_k} the leverage
+of lot \code{k} at \code{t0}, \verb{VG_hat = S_L^2 - mean(a_k) S2_E}):
+\code{tr(AV)^2 / tr((AV)^2)}, \code{A = (I - J/K) / (K - 1)}, \code{V = diag(v_k)}, which
+is \code{K - 1} in a balanced design and smaller otherwise. It is conservative
+by \verb{sigma^2 h(t0)} in a balanced design; it needs two distinct time points
+per lot and \verb{n > 2K} (otherwise an error of class
+\code{reintervals_error_time_points}), and uses the per-lot OLS fits, not the
+fitted random-effects structure. \code{"hybrid"} (under
 validation, step 13b) uses \code{"fv-anova"} when the fit is singular
 (\code{lme4::isSingular()} is \code{TRUE}, or the check failed and the fit is treated
 as singular) and \code{"reml"} otherwise, including on non-singular fits whose
-variance-parameter covariance is unavailable (containment df fallback).}
+variance-parameter covariance is unavailable (containment df fallback).
+It never errors where \code{"reml"} computes: on a singular fit where the
+fv-anova interval is infeasible (a lot with fewer than two distinct time
+points, no residual df, fewer than two lots, or a zero variance) it uses
+\code{"reml"} with a warning of class \code{reintervals_warning_hybrid_fallback}, and
+its rows record why in \code{slope_pi_route_reason} (\code{NA} when there was no
+fallback).}
 }
 \value{
 An \code{lmm_interval_control} list (passed to a verb's \code{control}

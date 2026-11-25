@@ -155,7 +155,8 @@
 
 ## Per-lot OLS lines at t0 (base R; the package port of the simstudy pilot's
 ## lotline(), commit f4ce68e): the fitted values Y_k(t0), their mean Ybar and
-## variance S2L, the mean leverage abar and the pooled residual variance S2E.
+## variance S2L, the per-lot leverages a_k = z0' (Z_k' Z_k)^-1 z0 (`a`) and
+## their mean abar, and the pooled residual variance S2E.
 ## Every lot needs two distinct time points. `df_E` = n - 2K is the residual df
 ## of S2E (0 when every lot has exactly two observations; S2E is then NA).
 ## `what` / `opt` name the caller in the error messages (the defaults are the
@@ -188,7 +189,7 @@
   }
   list(K = K, Ybar = mean(Yk), S2L = stats::var(Yk),
        S2E = if (n > 2L * K) sse / (n - 2L * K) else NA_real_, df_E = n - 2L * K,
-       abar = mean(a))
+       abar = mean(a), a = a)
 }
 
 ## slope_ngm_method = "fv-anova": Ybar_fit +/- t_{K-1} S_L sqrt(1 + 1/K), one

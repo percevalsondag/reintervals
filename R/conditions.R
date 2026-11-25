@@ -26,6 +26,8 @@
 #   +- reintervals_warning_fallback     a rule fell back (df, variance)
 #   |  +- reintervals_warning_truncation  a negative estimate was truncated / floored at 0
 #   |  +- reintervals_warning_df_fallback a DEFAULT df rule fell back to containment
+#   |  +- reintervals_warning_hybrid_fallback  slope_pi_method = "hybrid": the fv-anova
+#   |                                   PI is infeasible on a singular fit; "reml" used
 #   +- reintervals_warning_singular     singular (boundary) fit
 #   +- reintervals_warning_limitation   a documented known limitation applies; the
 #   |                                   interval is still returned unchanged
@@ -60,7 +62,8 @@
   reintervals_warning_mc         = "reintervals_warning",
   reintervals_warning_unvalidated = "reintervals_warning",
   reintervals_warning_extrapolation = "reintervals_warning",
-  reintervals_warning_df_fallback = "reintervals_warning_fallback"
+  reintervals_warning_df_fallback = "reintervals_warning_fallback",
+  reintervals_warning_hybrid_fallback = "reintervals_warning_fallback"
 )
 
 ## Package-level state for once-per-session warnings (flags keyed by name).

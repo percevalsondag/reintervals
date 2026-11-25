@@ -161,14 +161,27 @@
 #'   arm, package-original) is the `slope_ngm_method = "fv-anova"` construction
 #'   with the pooled within-lot residual variance `S2_E` added:
 #'   `Ybar_fit +/- t_df sqrt(S_L^2 (1 + 1/K) + S2_E)` on the per-lot OLS fitted
-#'   values at `t0`, with the Satterthwaite df of the two mean squares (`K - 1`
-#'   and `n - 2K` df), conservative by `sigma^2 h(t0)` in a balanced design; it
-#'   needs two distinct time points per lot and `n > 2K`, and uses the per-lot
-#'   OLS fits, not the fitted random-effects structure. `"hybrid"` (under
+#'   values at `t0`, with the Satterthwaite df of the two mean squares,
+#'   `W^2 / [(S_L^2 (1 + 1/K))^2 / df_L + S2_E^2 / (n - 2K)]`; `df_L`, reported
+#'   as `fv_df_lots`, is the effective df of `S_L^2` when the lots' fitted values
+#'   have unequal variances `v_k = max(VG_hat, 0) + a_k S2_E` (`a_k` the leverage
+#'   of lot `k` at `t0`, `VG_hat = S_L^2 - mean(a_k) S2_E`):
+#'   `tr(AV)^2 / tr((AV)^2)`, `A = (I - J/K) / (K - 1)`, `V = diag(v_k)`, which
+#'   is `K - 1` in a balanced design and smaller otherwise. It is conservative
+#'   by `sigma^2 h(t0)` in a balanced design; it needs two distinct time points
+#'   per lot and `n > 2K` (otherwise an error of class
+#'   `reintervals_error_time_points`), and uses the per-lot OLS fits, not the
+#'   fitted random-effects structure. `"hybrid"` (under
 #'   validation, step 13b) uses `"fv-anova"` when the fit is singular
 #'   (`lme4::isSingular()` is `TRUE`, or the check failed and the fit is treated
 #'   as singular) and `"reml"` otherwise, including on non-singular fits whose
 #'   variance-parameter covariance is unavailable (containment df fallback).
+#'   It never errors where `"reml"` computes: on a singular fit where the
+#'   fv-anova interval is infeasible (a lot with fewer than two distinct time
+#'   points, no residual df, fewer than two lots, or a zero variance) it uses
+#'   `"reml"` with a warning of class `reintervals_warning_hybrid_fallback`, and
+#'   its rows record why in `slope_pi_route_reason` (`NA` when there was no
+#'   fallback).
 #' @return An `lmm_interval_control` list (passed to a verb's `control`
 #'   argument); a list with elements `seed`, `M`, `ci_df`, `slope_ci_df`,
 #'   `pi_df`, `ngm_method`, `slope_ngm_method` and `slope_pi_method`.
@@ -432,7 +445,8 @@ lmm_interval_control <- function(seed = NULL, M = 20000L,
                  "n_na_draws", "mc_se_lower", "mc_se_upper", "ci_df_rule",
                  "slope_ci_df_rule", "pi_df_rule", "ngm_arm", "slope_ngm_arm",
                  "ngm_df_failed", "vc_cov_route", "vc_cov_reason",
-                 "df_fallback_reason", "slope_pi_arm")
+                 "df_fallback_reason", "slope_pi_arm", "slope_pi_route_reason",
+                 "fv_df_lots")
 
 ## The output unifier. Maps any engine's native frame to the single tidy
 ## contract; relabels only, never recomputes. Universal columns, in order:
@@ -499,7 +513,8 @@ lmm_interval_control <- function(seed = NULL, M = 20000L,
                "pi_df_rule", "ngm_arm", "slope_ngm_arm", "slope_pi_arm", "ngm_df_failed", "W", "se", "tau2_med", "s2e_med",
                "frac_boundary", "K", "df_resid", "phi1", "c_resid",
                "route_reason", "mls_bound", "n_na_draws", "mc_se_lower",
-               "mc_se_upper", "vc_cov_route", "vc_cov_reason", "df_fallback_reason")) {
+               "mc_se_upper", "vc_cov_route", "vc_cov_reason", "df_fallback_reason",
+               "slope_pi_route_reason", "fv_df_lots")) {
     if (cn %in% names(native)) diag[[cn]] <- native[[cn]]
   }
   for (a in c("beta_hat", "n_E", "U", "Vhat_Y", "C1", "C2", "pi_df_fallback",
