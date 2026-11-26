@@ -13,7 +13,7 @@ T.1). `test-oracle-registry.R` keeps the registry and the tests in step.
 | `id` | Unique, lower case, `[a-z0-9-]` only. The same id must appear in `test_file`, in a `test_that()` description or a comment (`# oracle: <id>`), so `grep -rn <id> tests/` finds the check. |
 | `verb_engine` | What is checked: `<interval>/<engine or arm>` (e.g. `ti/anova-mls`, `ngm/random intercept, ngm_method = broad-inference`). |
 | `source_citation` | Full reference: authors, year, title, journal, volume(issue):pages, DOI, and the table / section / example. For independent code: the package or script, its version or commit, and the run date. |
-| `source_kind` | `published_table` (numbers printed in a paper), `published_formula` (a closed form stated in a paper, evaluated here), `independent_code` (code that shares nothing with the package: another R package, or a pinned external script). |
+| `source_kind` | `published_table` (numbers printed in a paper), `published_formula` (a closed form stated in a paper, evaluated here), `independent_code` (code that shares nothing with the package: another R package, or a pinned external script), `independent_software` (another R package, computed at test time; it must be in Suggests and the test skips when it is absent), `independent_implementation` (a reference implementation written in the test file from the published formulas, calling no package internal). |
 | `fixture_path` | Where the reference values (or the data they are computed on) live; see below. Empty while `pending`. |
 | `test_file` | The test file under `tests/testthat/` that compares the package to the oracle (for a pending row: the file holding its commented-out template). |
 | `status` | `collected` or `pending`. |

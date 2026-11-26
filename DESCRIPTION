@@ -34,7 +34,7 @@ Language: en-US
 LazyData: true
 Depends: R (>= 4.1)
 Imports: lme4, Matrix, numDeriv, stats, withr (>= 2.5.0)
-Suggests: testthat (>= 3.0.0), knitr, rmarkdown, pbkrtest
+Suggests: testthat (>= 3.0.0), knitr, rmarkdown, pbkrtest, lmerTest
 Config/testthat/edition: 3
 Roxygen: list(markdown = TRUE)
 VignetteBuilder: knitr

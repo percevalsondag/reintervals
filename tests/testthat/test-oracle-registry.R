@@ -18,7 +18,8 @@ test_that("the registry has the documented columns, statuses and source kinds", 
   expect_gt(nrow(reg), 0)
   expect_true(all(reg$status %in% c("collected", "pending")))
   expect_true(all(reg$source_kind %in%
-    c("published_table", "published_formula", "independent_code")))
+    c("published_table", "published_formula", "independent_code",
+      "independent_software", "independent_implementation")))
 })
 
 test_that("ids are unique and use [a-z0-9-] only", {

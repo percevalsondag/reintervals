@@ -1,8 +1,9 @@
 # sim_designs
 
 Simulated data sets (no reference values), used as inputs for regression pins
-on the package's own values and for the cross-checks against pbkrtest and the
-simstudy `lotline()` reference. Copied unchanged from the `reintervals-simstudy`
+on the package's own values and for the cross-checks against lmerTest,
+pbkrtest, the independent new-group-mean implementation and the simstudy
+`lotline()` reference. Copied unchanged from the `reintervals-simstudy`
 repository (the source of record) at commit **d3d8a13**; copied on 2026-11-07
 (`stab_unbal_v2_a.csv`: 2026-11-08) and the hashes re-checked against the
 simstudy copies on 2026-11-09. Do not edit these copies; re-copy them if the
@@ -18,7 +19,11 @@ source changes.
 | `stab_unbal_v2_a.csv` | Stability, 8 lots, months 0-24, staggered, n = 50 |
 
 Used by `test-ci-sim-designs.R` (random-intercept CI: package pins and the
-pbkrtest Kenward-Roger cross-check, oracle `pbkrtest-kr-sim-fits`) and
+pbkrtest Kenward-Roger cross-checks, oracles `pbkrtest-kr-sim-fits` and
+`pbkrtest-kr-unbalanced`), `test-ci-satterthwaite-lmertest.R` (Satterthwaite CI
+vs lmerTest, oracle `lmertest-satterthwaite-ci`), `test-ngm-independent.R`
+(new-group-mean intervals vs an implementation written in the test, oracles
+`indep-ngm-ri-broad`, `indep-ngm-rs-reml-broad`) and
 `test-ngm-arms.R` (new-group-mean pins; `stab_unbal_v2_a.csv` for the
 `simstudy-lotline-f4ce68e` lot-line pins).
 

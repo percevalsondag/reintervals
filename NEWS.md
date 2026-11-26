@@ -381,6 +381,16 @@
   their only reference value now pin the package's own values (regression
   pins), and the Kenward-Roger check against pbkrtest is kept
   (`pbkrtest-kr-sim-fits`). The documentation no longer quotes SAS results.
+* **Tests: independent references restored for the former pins.** The
+  default Satterthwaite CI df and SE are compared with lmerTest
+  (`contest1D()`, Suggests only) on ten non-singular random-intercept fits;
+  the Kenward-Roger check against pbkrtest now also covers unbalanced one-way
+  and fixed-slope fits; the random-intercept broad-inference and random-slope
+  `reml` / `broad-inference` new-group-mean intervals are compared with an
+  implementation written in the test file from McLean, Sanders & Stroup
+  (1991) and Satterthwaite (1946). Registry rows `lmertest-satterthwaite-ci`,
+  `pbkrtest-kr-unbalanced`, `indep-ngm-ri-broad`, `indep-ngm-rs-reml-broad`;
+  the regression pins are kept. No package code changed.
 * The GPQ tolerance interval warns (`reintervals_warning_limitation`) when the
   pooled within-lot residual sum of squares is zero (every lot's data on a
   straight line): the residual-variance pivot is then degenerate and the

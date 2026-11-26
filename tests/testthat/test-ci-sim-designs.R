@@ -4,9 +4,9 @@
 #
 # What is checked, and against what:
 #   * Satterthwaite (ci_df = "satterthwaite"): REGRESSION PINS on the package's
-#     own estimate, SE and df on every evaluation point. These cases have no
-#     external reference value in the repo; the pins guard against unintended
-#     changes only.
+#     own estimate, SE and df on every evaluation point, guarding against
+#     unintended changes. The external reference for the same fits is lmerTest
+#     (test-ci-satterthwaite-lmertest.R, oracle lmertest-satterthwaite-ci).
 #   * Kenward-Roger (ci_df = "kenward-roger"): reintervals' "kenward-roger" is
 #     Kenward & Roger (1997) as implemented in pbkrtest (SE from the adjusted
 #     covariance vcovAdj(), df from Lb_ddf()).
@@ -14,9 +14,18 @@
 #         SE = sqrt(l vcovAdj l') and df = pbkrtest::get_Lb_ddf(model, l),
 #         tolerance 1e-8. This guards the pairing of the KR df with the
 #         KR-adjusted SE (the 0.2.0 bug paired it with the unadjusted SE).
+#       - vs pbkrtest on unbalanced fits (oracle pbkrtest-kr-unbalanced): the
+#         unbalanced one-way fit OW_UNBAL, two further unbalanced one-way fits
+#         (lme4::Dyestuff and hk_assay with rows dropped), the staggered
+#         fixed-slope fit FS_UNBAL and the unbalanced single-observation
+#         fixed-slope fit on mbl_appendix_a (Y ~ Month + (1 | Lot), months 0,
+#         12, 24). Measured on 2026-11-26 (pbkrtest 0.5.5): max relative
+#         difference 0 in df and 9e-15 in SE; tolerance 1e-8 relative, as
+#         above. The package's KR df is pbkrtest's Lb_ddf() on vcovAdj(), so
+#         this checks the pairing of df and SE, not a second KR derivation.
 #       - REGRESSION PINS on the package's own estimate and SE on the balanced
-#         fits, and on its SE and df on the unbalanced one-way fit (no external
-#         reference value in the repo).
+#         fits, and on its SE and df on the unbalanced one-way fit; these now
+#         sit alongside the pbkrtest references above.
 
 sim_dir <- function() test_path("fixtures", "sim_designs")
 
@@ -111,6 +120,38 @@ test_that("Kenward-Roger CI pairs the pbkrtest KR df with the KR-adjusted SE on 
     expect_identical(p$df_method, rep("kenward-roger", nrow(L)), info = tag)
     expect_equal(p$se, se_ref, tolerance = 1e-8, info = tag)
     expect_equal(p$df, df_ref, tolerance = 1e-8, info = tag)
+  }
+})
+
+# oracle: pbkrtest-kr-unbalanced
+test_that("Kenward-Roger CI SE and df match pbkrtest on unbalanced one-way and fixed-slope fits", {
+  skip_if_not_installed("lme4")
+  skip_if_not_installed("pbkrtest")
+  dye <- lme4::Dyestuff
+  hk <- hk_assay
+  mbl <- mbl_appendix_a
+  mbl$Lot <- factor(mbl$Lot)
+  unbal <- list(
+    OW_UNBAL  = list(sim_fit("OW_UNBAL"), NULL, matrix(1, 1, 1)),
+    FS_UNBAL  = list(sim_fit("FS_UNBAL"), data.frame(month = sim_t0("FS_UNBAL")),
+                     l_rows(NULL, sim_t0("FS_UNBAL"))),
+    DYE_UNBAL = list(lme4::lmer(Yield ~ 1 + (1 | Batch), dye[-c(2, 7, 8, 14, 21, 22, 23), ]),
+                     NULL, matrix(1, 1, 1)),
+    HK_UNBAL  = list(lme4::lmer(conc ~ 1 + (1 | run), hk[-c(3, 6, 9, 17), ]),
+                     NULL, matrix(1, 1, 1)),
+    MBL_FS    = list(lme4::lmer(Y ~ Month + (1 | Lot), mbl), data.frame(Month = c(0, 12, 24)),
+                     cbind(1, c(0, 12, 24))))
+  for (tag in names(unbal)) {
+    fm <- unbal[[tag]][[1]]; nd <- unbal[[tag]][[2]]; L <- unbal[[tag]][[3]]
+    expect_false(lme4::isSingular(fm), info = tag)
+    r <- quiet_extrapolation(ci_lmm(fm, newdata = nd,
+                                    control = lmm_interval_control(ci_df = "kenward-roger")))
+    df <- attr(r, "diagnostics")$df
+    se <- (r$upper - r$lower) / 2 / stats::qt(0.975, df)
+    vadj <- as.matrix(pbkrtest::vcovAdj(fm))
+    expect_equal(se, sqrt(diag(L %*% vadj %*% t(L))), tolerance = 1e-8, info = tag)
+    expect_equal(df, vapply(seq_len(nrow(L)), function(i)
+      pbkrtest::get_Lb_ddf(fm, L[i, , drop = FALSE]), numeric(1)), tolerance = 1e-8, info = tag)
   }
 })
 

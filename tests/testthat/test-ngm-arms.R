@@ -436,9 +436,11 @@ test_that("B2 (e): fv-anova reproduces the pilot lotline() pins and recomputes f
 
 ## ---- (f) simulated designs: regression pins -------------------------------
 ## The designs of fixtures/sim_designs/ (README there: data, lmer models,
-## evaluation points). These cases have no external reference value in the
-## repo: the tests below are REGRESSION PINS on the package's own SE and df
-## (tolerance 1e-6 relative), guarding against unintended changes only.
+## evaluation points). The tests below are REGRESSION PINS on the package's own
+## SE and df (tolerance 1e-6 relative), guarding against unintended changes.
+## The external reference for the broad-inference and reml arms is the
+## independent implementation in test-ngm-independent.R (oracles
+## indep-ngm-ri-broad, indep-ngm-rs-reml-broad).
 sim_ngm_specs <- list(
   OW_BAL      = list(y ~ 1 + (1 | grp),                    "oneway_bal.csv"),
   OW_UNBAL    = list(y ~ 1 + (1 | grp),                    "oneway_unbal.csv"),
@@ -495,8 +497,8 @@ test_that("B2 (f): reml random-slope NGM on the simulated designs: regression pi
 ## ---- B2b: slope_ngm_method = "broad-inference" (random slope) ---------------
 ## The broad-inference prediction of a new lot (McLean, Sanders & Stroup 1991):
 ## the default "reml" W = V_F + V_G(t0), with the Satterthwaite df of the whole
-## W. Package values on RS_UN_BAL, RS_VC_BAL pinned (regression pins, no
-## external reference value in the repo).
+## W. Package values on RS_UN_BAL, RS_VC_BAL pinned (regression pins; the
+## external reference is test-ngm-independent.R).
 broad_rs_pins <- list(
   RS_UN_BAL = list(se = c(0.987963915, 0.717594616, 0.950685223, 1.46378065, 2.05706008),
                    df = c(4.6520663, 5.1607579, 3.741319, 3.324586, 3.2424758)),
