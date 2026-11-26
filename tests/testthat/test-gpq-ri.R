@@ -35,9 +35,12 @@ test_that("gpq on an eligible random-intercept fit: all sides, both targets, GPQ
     info <- paste(ov, s)
     rw <- gri_warn(ti_lmm(fm, nd, over = ov, sides = s, method = "gpq", control = gri_ctl))
     r <- rw$value
-    ## the unvalidated warning (plus the extrapolation warning for t0 = 36)
+    ## the unvalidated warning (plus the extrapolation warning for t0 = 36, and
+    ## the one-sided batch-mean limitation warning, test-gpq-limitation.R)
     expect_setequal(rw$warnings, c("reintervals_warning_unvalidated",
-                                   "reintervals_warning_extrapolation"))
+                                   "reintervals_warning_extrapolation",
+                                   if (ov == "group_mean" && s != "two.sided")
+                                     "reintervals_warning_limitation"))
     expect_identical(r$method, rep("gpq", 3), info = info)
     expect_identical(r$design, rep("random_intercept_fixed_slope", 3), info = info)
     expect_identical(r$time, nd$time, info = info)

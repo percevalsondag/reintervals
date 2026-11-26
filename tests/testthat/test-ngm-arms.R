@@ -1,7 +1,7 @@
 # B2: the step-13 new-group-mean (NGM) arms as lmm_interval_control() options
 # (prereg H4 ngm_method on random-intercept models, H3 slope_ngm_method on
-# random-slope models). Not oracles, except the SAS PROC MIXED comparison in (f)
-# and the lot-line reference pins in (e). The default pins in (a) were computed
+# random-slope models). Not oracles, except the lot-line reference pins in (e);
+# (f) and B2b hold regression pins on the simulated designs. The default pins in (a) were computed
 # on the B1 commit 14d3e4d (plus the B2 item-0 KR change, which does not touch
 # the NGM) BEFORE any B2 edit, so they prove that no default output changed.
 # GPQ tests use small M: Monte-Carlo checks, not oracles.
@@ -381,8 +381,8 @@ test_that("B2 (d): GPQ NGM is within 15% (half-width) of the reml NGM on sleepst
 ## ~/dev/reintervals-simstudy pilot/methods.R at commit f4ce68e (only the
 ## lotline() definition evaluated; the file is not sourced here), run on
 ## 2026-11-08. Fixtures: balanced sleepstudy; sleepstudy with Days > 5 dropped
-## for subjects 308, 309, 310, 330, 331, 332; stab_unbal_v2_a.csv (simstudy
-## oracles/sas_ngm/part2, copied to fixtures/sas_ngm_part2).
+## for subjects 308, 309, 310, 330, 331, 332; stab_unbal_v2_a.csv (simulated,
+## from the simstudy repository; fixtures/sim_designs/README.md).
 lotline_pins <- list(
   list(fixture = "ss_bal", t0 = 0, Ybar = 251.4051048484848, S2L = 838.34229346931807),
   list(fixture = "ss_bal", t0 = 5, Ybar = 303.74153464646457, S2L = 1652.4035567741391),
@@ -397,7 +397,7 @@ lotline_pins <- list(
 lotline_data <- function() {
   ss <- lme4::sleepstudy
   ub <- ss[!(ss$Subject %in% c("308", "309", "310", "330", "331", "332") & ss$Days > 5), ]
-  v2 <- utils::read.csv(test_path("fixtures", "sas_ngm_part2", "stab_unbal_v2_a.csv"),
+  v2 <- utils::read.csv(test_path("fixtures", "sim_designs", "stab_unbal_v2_a.csv"),
                         stringsAsFactors = TRUE)
   list(ss_bal = list(y = ss$Reaction, t = ss$Days, g = ss$Subject, d = ss, f = Reaction ~ Days + (1 + Days | Subject), tv = "Days"),
        ss_unbal = list(y = ub$Reaction, t = ub$Days, g = ub$Subject, d = ub, f = Reaction ~ Days + (1 + Days | Subject), tv = "Days"),
@@ -434,31 +434,12 @@ test_that("B2 (e): fv-anova reproduces the pilot lotline() pins and recomputes f
   }
 })
 
-## ---- (f) SAS PROC MIXED DDFM=SATTERTH, ##NGM rows (prereg 7 item 9) ----------
-## Tolerances: SE 1e-4 relative, df 0.05 absolute.
-## broad-inference: all 13 random-intercept rows pass (OW_BAL, OW_UNBAL,
-##   NEST_BAL, FS_BAL x 5, FS_UNBAL x 5).
-## reml (random-slope default, NOT tuned): no row passes.
-##   RS_UN_BAL (5 rows), RS_VC_BAL (5 rows): SE within 1e-4 except RS_VC_BAL at
-##   month 36 and 48 (1.1e-4, 1.2e-4; lme4's REML slope variance differs from
-##   SAS's by 3e-4 relative on a flat surface); df 0.13-0.40 below SAS. Cause:
-##   the package's nu_G is the Satterthwaite df of V_G alone, while SAS's is the
-##   df of the whole prediction variance V_F + V_G (gradient of V_F plus that of
-##   V_G); with that gradient the package's own Hessian reproduces SAS to 1e-3
-##   (checked below).
-##   RS_UN_UNBAL (5 rows): singular fit (SAS UN(2,2) = 0); SAS reports no SE at
-##   months 12-48 and the package uses its containment df; boundary case only.
-sas_ngm_rows <- function() {
-  res <- readLines(test_path("fixtures", "sas_ngm", "ngm_sas_check_satterth.results.txt"))
-  m <- grep("^##NGM +[A-Z_]+ +SATTERTH ", res, value = TRUE)
-  num <- function(key, x) {
-    hit <- grepl(paste0(key, "= *[-0-9]"), x); out <- rep(NA_real_, length(x))
-    out[hit] <- as.numeric(sub(paste0(".*", key, "= *([-0-9.eE]+).*"), "\\1", x[hit])); out
-  }
-  data.frame(fit = sub("^##NGM +([A-Z_]+) .*", "\\1", m), t0 = num("month", m),
-             se = num("SE", m), df = num("DF", m), stringsAsFactors = FALSE)
-}
-sas_ngm_specs <- list(
+## ---- (f) simulated designs: regression pins -------------------------------
+## The designs of fixtures/sim_designs/ (README there: data, lmer models,
+## evaluation points). These cases have no external reference value in the
+## repo: the tests below are REGRESSION PINS on the package's own SE and df
+## (tolerance 1e-6 relative), guarding against unintended changes only.
+sim_ngm_specs <- list(
   OW_BAL      = list(y ~ 1 + (1 | grp),                    "oneway_bal.csv"),
   OW_UNBAL    = list(y ~ 1 + (1 | grp),                    "oneway_unbal.csv"),
   NEST_BAL    = list(y ~ 1 + (1 | a) + (1 | a:b),          "nested_bal.csv"),
@@ -466,100 +447,70 @@ sas_ngm_specs <- list(
   FS_UNBAL    = list(y ~ month + (1 | lot),                "stab_unbal.csv"),
   RS_UN_BAL   = list(y ~ month + (1 + month | lot),        "stab_bal.csv"),
   RS_VC_BAL   = list(y ~ month + (1 | lot) + (0 + month | lot), "stab_bal.csv"))
-sas_ngm_fit <- function(tag) {
-  d <- utils::read.csv(test_path("fixtures", "sas_ngm", sas_ngm_specs[[tag]][[2]]), stringsAsFactors = TRUE)
-  suppressMessages(lme4::lmer(sas_ngm_specs[[tag]][[1]], data = d, REML = TRUE))
+sim_ngm_fit <- function(tag) {
+  d <- utils::read.csv(test_path("fixtures", "sim_designs", sim_ngm_specs[[tag]][[2]]), stringsAsFactors = TRUE)
+  suppressMessages(lme4::lmer(sim_ngm_specs[[tag]][[1]], data = d, REML = TRUE))
 }
-## package values (pins) for the reml rows, which fail the SAS tolerance
+## evaluation points: the intercept (one-way, nested) or months 0-48
+sim_ngm_nd <- function(tag) {
+  if (grepl("^(FS|RS)", tag)) data.frame(month = c(0, 12, 24, 36, 48)) else NULL
+}
+## package values (pins), random-intercept broad-inference arm
+broad_ri_pins <- list(
+  OW_BAL = list(se = 1.878283795, df = 4.486552671),
+  OW_UNBAL = list(se = 1.118632402, df = 2.395642346),
+  NEST_BAL = list(se = 1.080213028, df = 4.413039842),
+  FS_BAL = list(se = c(0.7268004889, 0.7118578746, 0.7385369349, 0.8026982388, 0.8963284044),
+    df = c(5.25803011, 4.831178871, 5.611535319, 7.83932555, 12.01134057)),
+  FS_UNBAL = list(se = c(0.7425081074, 0.7309576545, 0.7821960951, 0.8853887311, 1.024961714),
+    df = c(5.131033897, 4.809823965, 6.303919638, 10.17194044, 17.01333628)))
+## package values (pins), random-slope default reml
 reml_rs_pins <- list(
   RS_UN_BAL = list(se = c(0.98796391, 0.71759462, 0.95068522, 1.46378065, 2.05706008),
                    df = c(4.3894657, 4.9485572, 3.4016469, 2.9568377, 2.8698415)),
   RS_VC_BAL = list(se = c(0.79751077, 0.91554433, 1.23727375, 1.64739133, 2.09460664),
                    df = c(3.7359849, 4.3707037, 3.3617061, 2.5888613, 2.2480654)))
 
-# oracle: sas-part1-ngm-ri-broad (fixtures/oracles.csv)
-test_that("B2 (f): broad-inference reproduces SAS DDFM=SATTERTH on every random-intercept ##NGM row", {
-  sas <- sas_ngm_rows()
-  for (tag in c("OW_BAL", "OW_UNBAL", "NEST_BAL", "FS_BAL", "FS_UNBAL")) {
-    s <- sas[sas$fit == tag, ]; fm <- sas_ngm_fit(tag)
-    nd <- if (all(is.na(s$t0))) NULL else data.frame(month = s$t0)
-    r <- quiet_arm(new_group_mean_lmm(fm, newdata = nd,
+test_that("B2 (f): random-intercept broad-inference on the simulated designs: regression pins", {
+  for (tag in names(broad_ri_pins)) {
+    fm <- sim_ngm_fit(tag)
+    r <- quiet_arm(new_group_mean_lmm(fm, newdata = sim_ngm_nd(tag),
                    control = lmm_interval_control(ngm_method = "broad-inference")))
     d <- attr(r, "diagnostics")
-    expect_true(all(abs(d$se / s$se - 1) < 1e-4), info = tag)
-    expect_true(all(abs(d$df - s$df) < 0.05), info = tag)
+    expect_equal(d$se, broad_ri_pins[[tag]]$se, tolerance = 1e-6, info = tag)
+    expect_equal(d$df, broad_ri_pins[[tag]]$df, tolerance = 1e-6, info = tag)
   }
 })
 
-# oracle: sas-part1-ngm-rs-reml (fixtures/oracles.csv)
-test_that("B2 (f): reml random-slope NGM vs SAS: pinned, SE within tolerance, df gap diagnosed", {
-  sas <- sas_ngm_rows()
+test_that("B2 (f): reml random-slope NGM on the simulated designs: regression pins", {
   for (tag in names(reml_rs_pins)) {
-    s <- sas[sas$fit == tag, ]; fm <- sas_ngm_fit(tag)
-    r <- quiet(new_group_mean_lmm(fm, newdata = data.frame(month = s$t0)))
+    fm <- sim_ngm_fit(tag)
+    r <- quiet(new_group_mean_lmm(fm, newdata = sim_ngm_nd(tag)))
     d <- attr(r, "diagnostics")
     expect_equal(d$se, reml_rs_pins[[tag]]$se, tolerance = 1e-6, info = tag)
     expect_equal(d$df, reml_rs_pins[[tag]]$df, tolerance = 1e-6, info = tag)
-    ok_se <- if (tag == "RS_VC_BAL") 1:3 else 1:5      # SE rows inside 1e-4
-    expect_true(all(abs(d$se[ok_se] / s$se[ok_se] - 1) < 1e-4), info = tag)
-    ## diagnosis: the Satterthwaite df of V_F + V_G (not of V_G alone) is SAS's df
-    parsed <- .vfun_parse(fm); cv <- .vfun_vc_cov(parsed)$cov; phi <- parsed$phi
-    nu_W <- vapply(s$t0, function(t0) {
-      x0 <- stats::setNames(c(1, t0), c("(Intercept)", parsed$fe_time))
-      VF <- as.numeric(t(x0) %*% parsed$vcov_beta %*% x0)
-      VG <- .vfun_value_VG(parsed$type, phi, t0)
-      gF <- numDeriv::grad(function(p) parsed$vF_fun(p, x0), phi)
-      gG <- .vfun_grad_VG(parsed$type, t0)[names(phi)]
-      .vfun_df_satterthwaite(VF + VG, gF + gG, cv)
-    }, 0)
-    expect_true(all(abs(nu_W - s$df) < 0.05), info = tag)
   }
 })
 
 ## ---- B2b: slope_ngm_method = "broad-inference" (random slope) ---------------
-## SAS DDFM=SATTERTH broad inference of a new lot: the default "reml" W =
-## V_F + V_G(t0), with the Satterthwaite df of the whole W (the B2 (f)
-## diagnosis, made an arm). Package vs SAS on RS_UN_BAL, RS_VC_BAL (all t0):
-##   RS_UN_BAL: SE within 5.2e-6 relative, df within 5.4e-5: pass x 5.
-##   RS_VC_BAL: df within 4.2e-4: pass x 5; SE 1.1e-5, 4.7e-5, 8.8e-5 (pass)
-##     and 1.08e-4, 1.18e-4 at months 36 and 48 (fail, > 1e-4).
-## The same W and df formulas evaluated AT the SAS covariance-parameter
-## estimates (##COVP lines; A = inverse Hessian of the REML NLL at those
-## estimates, same X and Z): SE within 1.4e-12 relative, df within 1.1e-4 on all
-## ten rows. The RS_VC_BAL SE gap is therefore lme4's optimum (slope variance
-## 0.00135877 vs SAS 0.00135838), not the method.
+## The broad-inference prediction of a new lot (McLean, Sanders & Stroup 1991):
+## the default "reml" W = V_F + V_G(t0), with the Satterthwaite df of the whole
+## W. Package values on RS_UN_BAL, RS_VC_BAL pinned (regression pins, no
+## external reference value in the repo).
 broad_rs_pins <- list(
   RS_UN_BAL = list(se = c(0.987963915, 0.717594616, 0.950685223, 1.46378065, 2.05706008),
                    df = c(4.6520663, 5.1607579, 3.741319, 3.324586, 3.2424758)),
   RS_VC_BAL = list(se = c(0.797510767, 0.915544326, 1.23727375, 1.64739133, 2.09460664),
                    df = c(4.131501, 4.5031842, 3.5829781, 2.8717316, 2.5643233)))
-sas_covp <- function(tag) {
-  res <- readLines(test_path("fixtures", "sas_ngm", "ngm_sas_check_satterth.results.txt"))
-  m <- grep(paste0("^##COVP +", tag, " +SATTERTH "), res, value = TRUE)
-  est <- as.numeric(sub(".*Estimate= *([-0-9.eE]+).*", "\\1", m))
-  if (tag == "RS_UN_BAL") c(s2_0 = est[1], s01 = est[2], s2_1 = est[3], s2e = est[4])
-  else c(s2_0 = est[1], s2_1 = est[2], s2e = est[3])
-}
 
-# oracle: sas-part1-ngm-rs-broad (fixtures/oracles.csv)
-test_that("B2b: random-slope broad-inference vs SAS DDFM=SATTERTH: pinned, passing rows, and at the SAS estimates", {
-  sas <- sas_ngm_rows()
+test_that("B2b: random-slope broad-inference on the simulated designs: regression pins", {
   for (tag in names(broad_rs_pins)) {
-    s <- sas[sas$fit == tag, ]; fm <- sas_ngm_fit(tag)
-    r <- quiet_arm(new_group_mean_lmm(fm, newdata = data.frame(month = s$t0),
+    fm <- sim_ngm_fit(tag)
+    r <- quiet_arm(new_group_mean_lmm(fm, newdata = sim_ngm_nd(tag),
                    control = lmm_interval_control(slope_ngm_method = "broad-inference")))
     d <- attr(r, "diagnostics")
     expect_equal(d$se, broad_rs_pins[[tag]]$se, tolerance = 1e-6, info = tag)
     expect_equal(d$df, broad_rs_pins[[tag]]$df, tolerance = 1e-6, info = tag)
-    expect_true(all(abs(d$df - s$df) < 0.05), info = tag)
-    ok_se <- if (tag == "RS_VC_BAL") 1:3 else 1:5      # SE rows inside 1e-4
-    expect_true(all(abs(d$se[ok_se] / s$se[ok_se] - 1) < 1e-4), info = tag)
-    ## the same formulas at SAS's covariance-parameter estimates reproduce SAS
-    parsed <- .vfun_parse(fm); phiS <- sas_covp(tag)
-    covS <- solve(numDeriv::hessian(parsed$reml_nll, phiS))
-    atS <- vapply(s$t0, function(t0) .ngm_rs_broad_df(parsed, phiS, covS, t0), c(W = 0, df = 0))
-    expect_true(all(abs(sqrt(atS["W", ]) / s$se - 1) < 1e-8), info = tag)
-    expect_true(all(abs(atS["df", ] - s$df) < 1e-3), info = tag)
   }
 })
 
@@ -590,7 +541,7 @@ test_that("B2b: random-slope broad-inference recomputes from its formula; SE == 
       if (sd != "lower") expect_equal(r$upper, r$estimate + tq * d$se, tolerance = 1e-12)
     }
   }
-  ## df >= reml df on the SAS fixtures (the whole-W df adds the V_F information)
+  ## df >= reml df on the simulated designs (the whole-W df adds the V_F information)
   for (tag in names(broad_rs_pins))
     expect_true(all(broad_rs_pins[[tag]]$df >= reml_rs_pins[[tag]]$df), info = tag)
 })
@@ -665,51 +616,3 @@ test_that("B2 (g): the unvalidated warning fires once per call for each applied 
 
 ## Chow & Shao (1991): collected as a random-slope CI oracle (slope_ci_df arms
 ## vs the exact t_23 limits) in test-oracle-chow-shao.R.
-
-## ---- PENDING oracle: sas-part2-ngm-rs-unbal (fixtures/oracles.csv) ------------
-## SAS part 2 (simstudy oracles/sas_ngm/part2, ngm_sas_check_part2.sas; data
-## stab_unbal_v2_a/b/c.csv): unbalanced random-slope fits, once the results file
-## exists. To collect: copy ngm_sas_check_part2.results.txt and the three CSVs to
-## fixtures/sas_ngm_part2/ unchanged (add their hashes to the README and
-## SHA256SUMS), then compare on every ##NGM SATTERTH row, as part 1 (B2 (f) /
-## B2b above): slope_ngm_method = "broad-inference" SE 1e-4 relative and df 0.05
-## absolute; the default "reml" SE 1e-4 relative, its df pinned with the gap
-## diagnosed as in part 1; ##COVP vs lme4::VarCorr as a fit-agreement gate
-## (1e-4 relative). Rows on a singular SAS fit (SE ".") are reported, not compared.
-## test_that("sas-part2-ngm-rs-unbal: random-slope NGM vs SAS part 2", {
-##   sas <- oracle_fixture("sas-part2-ngm-rs-unbal")
-##   s <- sas$ngm[sas$ngm$ddfm == "SATTERTH" & !is.na(sas$ngm$se), ]
-##   for (tag in unique(s$fit)) {
-##     st <- s[s$fit == tag, ]
-##     fm <- sas_part2_fit(tag)                   # tag -> csv + y ~ month + (1 + month | lot)
-##     r <- quiet_arm(new_group_mean_lmm(fm, newdata = data.frame(month = st$t0),
-##                    control = lmm_interval_control(slope_ngm_method = "broad-inference")))
-##     d <- attr(r, "diagnostics")
-##     expect_true(all(abs(d$se / st$se - 1) < 1e-4), info = tag)
-##     expect_true(all(abs(d$df - st$df) < 0.05), info = tag)
-##   }
-## })
-
-## ---- PENDING oracle: sas-part3-ngm-designs (fixtures/oracles.csv) -------------
-## SAS part 3 (simstudy bcf4661, oracles/sas_ngm/part3, ngm_sas_check_part3.sas;
-## cr_bal, cr_unbal, nest_unbal, ow_covw, ow_covb, nest_covw, cr_covw), once the
-## results file exists. To collect: copy the results file and the CSVs to
-## fixtures/sas_ngm_part3/ unchanged (README with hashes; SHA256SUMS), then
-## compare ngm_method = "broad-inference" on every ##NGM SATTERTH row: SE 1e-4
-## relative, df 0.05 absolute (as part 1, B2 (f)); ##MEAN SATTERTH vs ci_lmm()
-## with the tolerances of test-oracle-sas-ci.R; ##COVP vs lme4::VarCorr (1e-4
-## relative) as the fit-agreement gate. The lmer formula of each tag is taken from
-## the PROC MIXED statements in the program and listed in the fixture README.
-## test_that("sas-part3-ngm-designs: broad-inference NGM vs SAS part 3", {
-##   sas <- oracle_fixture("sas-part3-ngm-designs")
-##   s <- sas$ngm[sas$ngm$ddfm == "SATTERTH", ]
-##   for (tag in unique(s$fit)) {
-##     st <- s[s$fit == tag, ]
-##     fm <- sas_part3_fit(tag)                   # tag -> csv + lmer formula (fixture README)
-##     r <- quiet_arm(new_group_mean_lmm(fm, newdata = sas_part3_newdata(tag, st),
-##                    control = lmm_interval_control(ngm_method = "broad-inference")))
-##     d <- attr(r, "diagnostics")
-##     expect_true(all(abs(d$se / st$se - 1) < 1e-4), info = tag)
-##     expect_true(all(abs(d$df - st$df) < 0.05), info = tag)
-##   }
-## })

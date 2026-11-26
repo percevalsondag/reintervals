@@ -141,10 +141,10 @@
   `reintervals_warning_unvalidated`; recorded as `ngm_arm` / `slope_ngm_arm`
   in the diagnostics; an arm not defined for the model or design is a no-op).
   - `ngm_method` (random intercept): `"package"` (default, the 0.2.0
-    constructions); `"broad-inference"` (SAS PROC MIXED broad-inference
-    prediction of a new group: `W = V_F` plus every between-group variance
-    component, Satterthwaite df on the variance scale; it reproduces SAS
-    DDFM=SATTERTH on the package's SAS fixtures; NA limits and
+    constructions); `"broad-inference"` (the broad-inference prediction of a
+    new group, McLean, Sanders & Stroup 1991: `W = V_F` plus every
+    between-group variance component, Satterthwaite df on the variance scale;
+    NA limits and
     `ngm_df_failed = TRUE`, no fallback, only when the df cannot be computed
     or is non-finite or not positive; a positive df below 1 is used as is);
     `"hts"` (Higgins,
@@ -152,10 +152,9 @@
     intercept-only one-way, `I >= 3`); `"classical"` (Hahn & Meeker 1991 on the
     group means; intercept-only one-way, balanced, where it equals the default).
   - `slope_ngm_method` (random slope): `"reml"` (default);
-    `"broad-inference"` (SAS PROC MIXED broad-inference prediction of a new
-    lot: the default's center and variance `V_F + V_G`, with the Satterthwaite
-    df of the whole `V_F + V_G` instead of `V_G` alone; it reproduces SAS
-    DDFM=SATTERTH on the package's SAS fixtures; NA limits and
+    `"broad-inference"` (the broad-inference prediction of a new lot: the
+    default's center and variance `V_F + V_G`, with the Satterthwaite df of
+    the whole `V_F + V_G` instead of `V_G` alone; NA limits and
     `ngm_df_failed = TRUE`, no fallback, only when the df cannot be computed
     or is non-finite or not positive; a positive df below 1 is used as is);
     `"gpq"` (a
@@ -216,6 +215,14 @@
   through `ti_lmm()`.
 
 ## Bug fixes
+
+* The advisory `boundary` flag (random-slope confidence, prediction and
+  new-group-mean rows) depended on the time units: it compared the slope
+  variance (y^2 per squared time unit) with the other variances. It is now
+  judged on the response scale, the slope variance entering as its
+  contribution `s2_1 * var(t)` (`var(t)` the population variance of the
+  observed times), so it is unchanged by rescaling the response or time. Its
+  value can change on fits near the `1e-4` threshold; nothing routes on it.
 
 * **Dfs and intervals could depend on the measurement units** when variance
   components were below about 1.8e-5 (numerical derivatives used an absolute
@@ -306,9 +313,7 @@
   confidence interval now uses the KR-adjusted covariance
   (`pbkrtest::vcovAdj()`) for the standard error together with the KR df
   (`pbkrtest::Lb_ddf()`), computed once per call. The default Satterthwaite CI
-  is unchanged. SAS PROC MIXED `DDFM=KR` can differ on unbalanced data: in the
-  package's checks against SAS it reported the Satterthwaite df with an adjusted
-  standard error.
+  is unchanged.
 * A random-slope confidence, prediction or new-group-mean interval built from a
   component container with a non-finite df used a normal quantile (the df was
   replaced by 1e6). It now uses the random-slope engine's own containment df,
@@ -338,6 +343,44 @@
 
 ## Other changes
 
+* **One-sided GPQ tolerance limits: documented limitation.** One-sided GPQ
+  tolerance-interval rows (`ti_lmm()` random-slope route and
+  `method = "gpq"` random-intercept route, `ti_gpq_raw()`) signal a
+  `reintervals_warning_limitation`, once per call, (a) at a confidence level
+  below 0.95, both targets (in validation, step 13, random-slope designs,
+  one-sided GPQ limits at 90% confidence covered 0.879 to 0.90, median 0.894
+  to 0.903), and (b) at 0.95 or above with `over = "group_mean"` (one-sided
+  batch-mean limits at 95% covered 0.936 to 0.95, median 0.948). Two-sided GPQ
+  intervals are not affected at these levels. Each GPQ tolerance row records
+  `attr(., "diagnostics")$limitation_flag` (`"gpq_one_sided_lowconf"`,
+  `"gpq_one_sided_group_mean"` or `NA`). The intervals are unchanged; the
+  random-intercept GPQ route keeps its `reintervals_warning_unvalidated`.
+* **`df_fallback_reason` on every random-slope coverage row.** The random-slope
+  confidence-interval rows (every `slope_ci_df` arm) and new-group-mean rows
+  (every `slope_ngm_method` arm) now carry `df_fallback_reason` in the
+  diagnostics, as the random-slope prediction rows already did: why the
+  default df fell back to containment (`"singular fit"`, `"singularity check
+  failed; treated as singular"`, `"df below 1"`, `"non-finite df"`, or the
+  `vc_cov_reason`), `NA` where it did not, and `NA` on the arms with no
+  fallback. Every other output is unchanged.
+* **`M` on every GPQ row.** The number of Monte-Carlo draws `M` is now in the
+  diagnostics of the random-slope GPQ tolerance interval, the GPQ
+  new-group-mean arm (`slope_ngm_method = "gpq"`) and `ti_gpq_raw()`, as on
+  the random-intercept GPQ route. Every other output is unchanged.
+* **Classed errors for invalid `lmm_interval_control()` choices.** An invalid
+  value of `ci_df`, `slope_ci_df`, `pi_df`, `ngm_method`, `slope_ngm_method`,
+  `slope_pi_method` or `gpq_two_sided` now signals a
+  `reintervals_error_input` whose message names the argument and lists its
+  allowed values (it was an unclassed `match.arg()` error). Valid values,
+  partial matching and the defaults are unchanged.
+* **Tests: no results from external commercial software.** The comparisons
+  against SAS PROC MIXED runs (registry rows `sas-part1-*`, the pending
+  `sas-part2-*` / `sas-part3-*`, the results file and its parser, and the SAS
+  program generator in `data-raw/`) are removed. The simulated data sets they
+  used are kept in `tests/testthat/fixtures/sim_designs/`; the tests that lost
+  their only reference value now pin the package's own values (regression
+  pins), and the Kenward-Roger check against pbkrtest is kept
+  (`pbkrtest-kr-sim-fits`). The documentation no longer quotes SAS results.
 * The GPQ tolerance interval warns (`reintervals_warning_limitation`) when the
   pooled within-lot residual sum of squares is zero (every lot's data on a
   straight line): the residual-variance pivot is then degenerate and the

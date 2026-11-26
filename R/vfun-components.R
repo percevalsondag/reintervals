@@ -42,14 +42,15 @@
 #'   \item{`singular`}{`lme4::isSingular()` flag --- the fit is *exactly*
 #'     degenerate (a variance component on the boundary at zero).}
 #'   \item{`boundary`}{Near-boundary flag on the point estimate --- some
-#'     random-effect variance (`s2_0`, `s2_1`) is below `boundary_tol`
-#'     (default `1e-4`) times the total variance (sum of all `s2_*`, residual
-#'     included). Distinct from `singular`. It is advisory only: it does not
-#'     drive the Satterthwaite -> containment df fallback, which triggers on a
-#'     missing `cov` or a non-finite or below-1 Satterthwaite df. Because
-#'     `s2_1` is a slope variance (in units of y^2 per squared time unit), the
-#'     flag depends on the time scale: rescaling time (e.g. months to years)
-#'     can switch it.}
+#'     random-effect variance is below `boundary_tol` (default `1e-4`) times
+#'     the total variance, every term on the response scale: the intercept
+#'     variance `s2_0`, the slope variance as its contribution
+#'     `s2_1 * var(t)` (`var(t)` the population variance of the observed
+#'     times), and the residual `s2e`; the total is their sum. The flag is
+#'     unit-free: unchanged by rescaling the response or time. Distinct from
+#'     `singular`. It is advisory only: it does not drive the Satterthwaite ->
+#'     containment df fallback, which triggers on a missing `cov` or a
+#'     non-finite or below-1 Satterthwaite df.}
 #' }
 #'
 #' @param type Character model code (see [reintervals-models]).
@@ -67,7 +68,8 @@
 #'   unavailable). Default `NULL`.
 #' @param singular Logical scalar; the fit is exactly degenerate. Default `FALSE`.
 #' @param boundary Logical scalar; a random-effect variance is below
-#'   `boundary_tol` x total variance (near-boundary; see above). Distinct from
+#'   `boundary_tol` x total variance on the response scale (near-boundary;
+#'   see above). Distinct from
 #'   `singular`. Default `FALSE`.
 #'
 #' @return An object of class `vfun_components`.

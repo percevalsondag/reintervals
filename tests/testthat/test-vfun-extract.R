@@ -78,18 +78,28 @@ test_that("MBL (unbalanced + single-obs lots): V_T / V_F matches Montes n_E; var
 })
 
 test_that("boundary PREDICATE keys on variances only, never on the signed s01 (deterministic)", {
-  # Pure function of (phi, tol) -- no fit, no lme4 optimizer, platform-robust.
+  # Pure function of (phi, tol, time_var) -- no fit, no lme4 optimizer,
+  # platform-robust. time_var = 50: the variance of the observed times.
   healthy <- c(s2_0 = 2.0, s01 = -0.05, s2_1 = 0.01, s2e = 0.7)
-  expect_false(.vfun_is_boundary(healthy, 1e-4))       # all variances comfortably > 0
+  expect_false(.vfun_is_boundary(healthy, 1e-4, 50))   # all variances comfortably > 0
   # a strongly NEGATIVE s01 must NOT trip it (the inherited-safeguard bug)
   big_neg_cov <- c(s2_0 = 2.0, s01 = -0.13, s2_1 = 0.01, s2e = 0.7)
-  expect_false(.vfun_is_boundary(big_neg_cov, 1e-4))
-  # a small-but-positive slope variance DOES trip it
+  expect_false(.vfun_is_boundary(big_neg_cov, 1e-4, 50))
+  # a small-but-positive slope variance DOES trip it (contribution 5e-5)
   near_bd <- c(s2_0 = 2.0, s01 = 0, s2_1 = 1e-6, s2e = 0.7)
-  expect_true(.vfun_is_boundary(near_bd, 1e-3))
-  # M1: tiny between-batch variance
-  expect_true(.vfun_is_boundary(c(s2_0 = 1e-6, s2e = 5.0), 1e-3))
-  expect_false(.vfun_is_boundary(c(s2_0 = 2.0, s2e = 0.7), 1e-3))
+  expect_true(.vfun_is_boundary(near_bd, 1e-3, 50))
+  # the slope variance enters as s2_1 * time_var (response scale): the same
+  # slope variance is not near the boundary when the times are spread wider
+  expect_false(.vfun_is_boundary(near_bd, 1e-3, 1e4))
+  # unit-free: t -> c t (s2_1 / c^2, time_var c^2) and y -> a y leave it unchanged
+  for (c in c(1e-2, 1 / 12, 12, 1e2)) {
+    sc_t <- near_bd; sc_t[["s2_1"]] <- sc_t[["s2_1"]] / c^2
+    expect_identical(.vfun_is_boundary(sc_t, 1e-3, 50 * c^2), TRUE)
+    expect_identical(.vfun_is_boundary(near_bd * c^2, 1e-3, 50), TRUE)
+  }
+  # M1: tiny between-batch variance (time_var unused: no s2_1)
+  expect_true(.vfun_is_boundary(c(s2_0 = 1e-6, s2e = 5.0), 1e-3, 50))
+  expect_false(.vfun_is_boundary(c(s2_0 = 2.0, s2e = 0.7), 1e-3, 50))
 })
 
 test_that("boundary flag: healthy fit with negative s01 is NOT flagged near-boundary", {
@@ -104,7 +114,7 @@ test_that("boundary flag: healthy fit with negative s01 is NOT flagged near-boun
   expect_false(vh$boundary)
   expect_lt(vh$phi[["s01"]], 0)            # negative covariance present, but not flagged
   # the flag the fit produces is exactly what the pure predicate says
-  expect_identical(vh$boundary, .vfun_is_boundary(vh$phi, 1e-4))
+  expect_identical(vh$boundary, .vfun_is_boundary(vh$phi, 1e-4, .vfun_parse(fh)$time_var))
 })
 
 test_that("singular fit: cov is NULL and df falls back to containment (finite)", {

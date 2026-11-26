@@ -66,8 +66,9 @@ test_that("slope_pi_method: match.arg values, default 'reml', error class as the
   e1 <- tryCatch(lmm_interval_control(slope_pi_method = "nope"), error = identity)
   e2 <- tryCatch(lmm_interval_control(slope_ngm_method = "nope"), error = identity)
   expect_identical(class(e1), class(e2))
-  expect_match(conditionMessage(e1), "should be one of", fixed = TRUE)
-  expect_match(conditionMessage(e1), "“reml”|\"reml\"")
+  expect_s3_class(e1, "reintervals_error_input")
+  expect_match(conditionMessage(e1), "`slope_pi_method` must be one of", fixed = TRUE)
+  expect_match(conditionMessage(e1), "\"reml\", \"fv-anova\", \"hybrid\"", fixed = TRUE)
 })
 
 test_that("default and explicit slope_pi_method = 'reml' are identical() (singular and non-singular fits)", {
@@ -102,8 +103,8 @@ test_that("random-slope PI rows carry df_fallback_reason (singular: 'singular fi
   ## vectorised: row-aligned
   v <- quiet_pi(pi_lmm(fs, sing_nd, level = c(0.9, 0.95), sides = c("two.sided", "lower")))
   expect_identical(dg(v)$df_fallback_reason, rep("singular fit", 16))
-  ## not added to the random-slope CI or new-group-mean rows
-  expect_null(dg(quiet_pi(ci_lmm(fs, sing_nd)))$df_fallback_reason)
+  ## the random-slope CI rows carry it too (since 1.0.0; test-rs-diagnostics.R)
+  expect_identical(dg(quiet_pi(ci_lmm(fs, sing_nd)))$df_fallback_reason, rep("singular fit", 4))
   ## a non-singular fit without a covariance: the covariance reason
   local_mocked_bindings(.is_pd_cov = function(M, tol = 1e-8) FALSE)
   r <- quiet_pi(pi_lmm(ss_fit(), ss_nd))

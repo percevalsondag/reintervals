@@ -45,7 +45,10 @@ An \code{lmm_interval} data frame, one row per \code{t0}: \code{time}, \code{typ
 diagnostics attribute carries the same fields as the \code{\link[=ti_lmm]{ti_lmm()}} GPQ route
 (\code{df}, \code{tau2_med}, \code{s2e_med}, \code{frac_boundary}, \code{K}, \code{df_resid}, \code{phi1},
 \code{c_resid}, \code{route_reason = "method"}, \code{n_na_draws}, \code{mc_se_lower},
-\code{mc_se_upper}, \code{gpq_seed}, \code{rng_kind}, \code{mc_sections}).
+\code{mc_se_upper}, \code{gpq_seed}, \code{rng_kind}, \code{mc_sections}, \code{M},
+\code{limitation_flag}). One-sided rows signal the documented limitation
+warning of \code{\link[=ti_lmm]{ti_lmm()}} (section "Known limitation (one-sided GPQ
+limits)"; \code{c_resid = 0} is the batch-mean target).
 }
 \description{
 The Oliva-Aviles & Hauser (2025) generalized-pivotal-

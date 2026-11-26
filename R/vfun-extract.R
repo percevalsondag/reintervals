@@ -53,12 +53,20 @@
 }
 
 ## Near-boundary predicate: a random-effect VARIANCE (s2_0, s2_1) is
-## small-but-positive relative to total variance. Pure function of (phi,
-## boundary_tol) so it is testable without a fit. 
-.vfun_is_boundary <- function(phi, boundary_tol) {
-  total <- sum(phi[grep("^s2", names(phi))])
-  re_var_names <- setdiff(grep("^s2", names(phi), value = TRUE), "s2e")
-  any(phi[re_var_names] < boundary_tol * total)
+## small-but-positive relative to the total variance, every term on the scale
+## of the response. The slope variance s2_1 (y^2 per squared time unit) enters
+## as its contribution s2_1 * time_var to the response variance over the
+## design, time_var = the (population) variance of the observed time values
+## (time^2): the comparison is then unit-free, unchanged by y -> a y (every
+## term scales by a^2) and by t -> c t (s2_1 by 1 / c^2, time_var by c^2).
+## Before 1.0.0 s2_1 was compared raw, so the flag depended on the time units.
+## Variances only, never the signed s01. Pure function of (phi, boundary_tol,
+## time_var) so it is testable without a fit; time_var is unused on M1 (no s2_1).
+.vfun_is_boundary <- function(phi, boundary_tol, time_var) {
+  v <- phi[grep("^s2", names(phi))]
+  if ("s2_1" %in% names(v)) v[["s2_1"]] <- v[["s2_1"]] * time_var
+  total <- sum(v)
+  any(v[setdiff(names(v), "s2e")] < boundary_tol * total)
 }
 
 ## ---- model parse: classify + Sigma/V/REML-NLL closures  --
@@ -198,6 +206,9 @@
     group_name = group_name, time_name = time_name, fe_time = fe_time,
     y = y, X = X, Z = Z, n = n, p = p, B = B, k_re = k_re, has_slope = has_slope,
     fixef = fe, vcov_beta = as.matrix(stats::vcov(model)),
+    ## variance of the observed times (time^2), the scale of the slope
+    ## variance in the near-boundary flag (.vfun_is_boundary)
+    time_var = mean((tt - mean(tt))^2),
     phi = phi, s2e = s2e,
     make_Sigma = make_Sigma, make_V = make_V, reml_nll = reml_nll, vF_fun = vF_fun
   )
@@ -244,7 +255,7 @@
 ## depends only on whether its steps happen to stay inside the valid region.
 .vfun_vc_cov <- function(parsed, boundary_tol = 1e-4, guard_t0 = NULL) {
   phi <- parsed$phi
-  boundary <- .vfun_is_boundary(phi, boundary_tol)  # variances-only (see helper)
+  boundary <- .vfun_is_boundary(phi, boundary_tol, parsed$time_var)  # unit-free (see helper)
   singular <- .is_singular(parsed$model)            # NA when the check failed
   if (!isFALSE(singular)) {
     return(list(cov = NULL, phi = phi, boundary = boundary, ok = FALSE,
@@ -344,7 +355,8 @@
 #'   containment fallback when that df is non-finite or below 1) or
 #'   `"containment"` (integer df).
 #' @param boundary_tol A component is flagged near-boundary if below this
-#'   fraction of total variance. Default `1e-4`.
+#'   fraction of the total variance, each term on the response scale (the slope
+#'   variance times the variance of the observed times). Default `1e-4`.
 #' @param guard_t0 The time points of the calling verb, at which the half-step
 #'   stability guard of `Cov(phi)` compares the F, T and G dfs (default `t0`).
 #'

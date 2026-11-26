@@ -162,7 +162,7 @@
 ## ---- total variance, its variance, df_PI (observed Fisher information) -------
 ## Cov(theta_hat) from the observed information: a numerical Hessian of the
 ## REML log-likelihood on the variance scale (theta = the variance components),
-## with beta at its GLS value for each theta (== PROC MIXED ASYCOV).
+## with beta at its GLS value for each theta.
 ## `L` (optional): the fixed-effect rows of the call (.fixed()$L), at which the
 ## half-step stability guard also compares the Satterthwaite CI df (the PI df is
 ## always compared).
@@ -326,8 +326,7 @@
 ## var_mean is the contrast variance to pair with that df: NULL (= keep the
 ## unadjusted l C11 l' from .fixed()) except for Kenward-Roger, where it is
 ## l Phi_A l' from the KR-adjusted covariance -- the KR df and the KR-adjusted
-## variance belong together (Kenward & Roger 1997; SAS DDFM=KR reports the
-## adjusted SE). Pass `kr` (from .kr_parts()) to reuse one vcovAdj() across rows.
+## variance belong together (Kenward & Roger 1997). Pass `kr` (from .kr_parts()) to reuse one vcovAdj() across rows.
 .ci_ddf <- function(model, Lrow, theta = NULL, ci_df = NULL,
                     df_method = c("satterthwaite", "kenward-roger", "containment"),
                     kr = NULL) {

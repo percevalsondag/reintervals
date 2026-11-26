@@ -67,7 +67,7 @@ vec_strip <- function(x) {
 }
 
 ## per-call diagnostics (one value per call, never row-aligned)
-vec_per_call <- c("gpq_seed", "rng_kind", "mc_sections", "beta_hat", "Vhat_Y",
+vec_per_call <- c("gpq_seed", "rng_kind", "mc_sections", "M", "beta_hat", "Vhat_Y",
                   "pi_df_fallback", "singular_check", "grouping_reason")
 
 ## Assert the identity contract for one verb call. `f(P, level, sides)` runs

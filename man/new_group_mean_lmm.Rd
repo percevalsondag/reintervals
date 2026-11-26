@@ -62,6 +62,15 @@ the value for \code{ti}, \code{NA} for the coverage intervals); \code{sides};
 \code{\link[=lmm_interval_control]{lmm_interval_control()}}); \code{design} (the route-independent model class, see
 \link{reintervals-models});
 \item the per-row flags \code{singular}, \code{boundary}, \code{vg_floored}.
+\code{boundary} is advisory (nothing routes on it): on the random-slope
+confidence, prediction and new-group-mean rows computed from the
+fitted variance components (every arm but \code{"gpq"} and \code{"fv-anova"})
+it is \code{TRUE} when some random-effect variance is below
+\code{1e-4} times the total variance, every term on the response scale
+(the intercept variance, the slope variance times the population
+variance of the observed times, and the residual variance), so it does
+not depend on the units of the response or of time; it is \code{FALSE} or
+\code{NA} on the other routes.
 }
 \code{attr(., "diagnostics")} is a list of engine-specific extras (degrees of
 freedom \code{df}; for the random-intercept confidence interval its source
@@ -84,13 +93,17 @@ every df are unchanged by the units of the response or of time; next to it
 \code{vc_cov_reason}, why that covariance is unavailable --- \code{NA} when it was
 obtained, else \code{"singular fit"}, \code{"singularity check failed; treated as singular"}, \code{"sentinel"} (the default and the retried Hessian both left the
 valid region of the variance parameters), \code{"unstable numerical Hessian"},
-or \code{"Hessian not PD or not invertible"}; for the random-intercept
-confidence, prediction and new-group-mean intervals and the random-slope
-prediction interval \code{df_fallback_reason},
+or \code{"Hessian not PD or not invertible"}; for the confidence, prediction
+and new-group-mean intervals (random intercept and random slope)
+\code{df_fallback_reason},
 per row, why the default Satterthwaite df fell back to containment (e.g.
-\code{"singular fit"}, \code{"df below 1"}, \code{"non-finite df"}; for the
+\code{"singular fit"}, \code{"singularity check failed; treated as singular"},
+\code{"df below 1"}, \code{"non-finite df"}, or the \code{vc_cov_reason}; for the
 \code{ngm_method = "broad-inference"} arm, why its df could not be formed, the
-rows with \code{NA} limits), \code{NA} where it did not; standard
+rows with \code{NA} limits), \code{NA} where it did not, and \code{NA} on the arms with
+no fallback (\code{slope_ci_df = "kenward-roger"} / \code{"k-minus-1"}, and the
+random-slope \code{slope_ngm_method} and \code{slope_pi_method} arms); on GPQ rows
+the number of draws \code{M}; standard
 error \code{se}; and any GPQ / ANOVA intermediates);
 \code{attr(., "grouping")} is the random-intercept topology (\code{"oneway"},
 \code{"nested"}, \code{"crossed"}, or \code{NA} for slope models).
@@ -134,9 +147,8 @@ which \code{V_F} is attached to the two main-effect terms
 \eqn{\mu(t_0) \pm t_{\nu_G}\sqrt{V_F + V_G}} (\code{"reml"}), with
 \eqn{\nu_G} the Satterthwaite df of \eqn{V_G} alone, falling back to
 the containment df \code{K - 2} (\code{"containment"}) when it is unavailable or
-below 1 (SAS DDFM=SATTERTH
-uses the df of \eqn{V_F + V_G}, which is larger; that df is the
-validation arm \code{slope_ngm_method = "broad-inference"}).
+below 1 (the Satterthwaite df of \eqn{V_F + V_G}, which is larger,
+is the validation arm \code{slope_ngm_method = "broad-inference"}).
 }
 A design without a closed-form variance decomposition (two crossed factors
 without their interaction term, or four or more grouping factors) is an

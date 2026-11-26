@@ -2,7 +2,7 @@
 
 `oracles.csv` lists every **external oracle** the test suite checks the package
 against: a number the package did not produce itself (a published table or
-formula value, a SAS run, or independent code). Self-consistency, cross-method
+formula value, or independent code). Self-consistency, cross-method
 and regression-pin tests are not oracles and are not listed (see plan section
 T.1). `test-oracle-registry.R` keeps the registry and the tests in step.
 
@@ -12,8 +12,8 @@ T.1). `test-oracle-registry.R` keeps the registry and the tests in step.
 |---|---|
 | `id` | Unique, lower case, `[a-z0-9-]` only. The same id must appear in `test_file`, in a `test_that()` description or a comment (`# oracle: <id>`), so `grep -rn <id> tests/` finds the check. |
 | `verb_engine` | What is checked: `<interval>/<engine or arm>` (e.g. `ti/anova-mls`, `ngm/random intercept, ngm_method = broad-inference`). |
-| `source_citation` | Full reference: authors, year, title, journal, volume(issue):pages, DOI, and the table / section / example. For a SAS run: software and version, run date, program and the source repository commit. |
-| `source_kind` | `published_table` (numbers printed in a paper), `sas_run` (output of a SAS program run outside this repo), `published_formula` (a closed form stated in a paper, evaluated here), `independent_code` (code that shares nothing with the package: another R package, or a pinned external script). |
+| `source_citation` | Full reference: authors, year, title, journal, volume(issue):pages, DOI, and the table / section / example. For independent code: the package or script, its version or commit, and the run date. |
+| `source_kind` | `published_table` (numbers printed in a paper), `published_formula` (a closed form stated in a paper, evaluated here), `independent_code` (code that shares nothing with the package: another R package, or a pinned external script). |
 | `fixture_path` | Where the reference values (or the data they are computed on) live; see below. Empty while `pending`. |
 | `test_file` | The test file under `tests/testthat/` that compares the package to the oracle (for a pending row: the file holding its commented-out template). |
 | `status` | `collected` or `pending`. |
@@ -47,18 +47,16 @@ pending rows have no fixture path; ids are unique; citations non-empty).
 ## Provenance and integrity
 
 - Each fixture directory has a `README.md` with the source, how the files were
-  produced (copied from which repository and commit, SAS version and run date, or
-  generator), and the SHA-256 at the time of copying.
-- **CSV convention.** A CSV copied from a source of record (the simstudy SAS
-  fixtures) carries **no** in-file header: a header would change its bytes and
+  produced (copied from which repository and commit, or generator), and the
+  SHA-256 at the time of copying.
+- **CSV convention.** A CSV copied from a source of record (the simstudy
+  data sets in `sim_designs/`) carries **no** in-file header: a header would change its bytes and
   break the hash match with the source; its provenance is the directory README.
   A CSV transcribed in this repo (a paper table) starts with `#` comment lines
-  giving the reference, the table, who transcribed it and when, and who checked
-  it; read it with `utils::read.csv(path, comment.char = "#")` (as
+  describing the content and one provenance line of the form `Transcribed from
+  <reference: authors, year, journal, DOI, table/section> on <date>; verified
+  against <the printed summaries checked>.`; read it with `utils::read.csv(path, comment.char = "#")` (as
   `oracle_fixture()` does). Do not put `#` in data fields.
-- A SAS results file (`*.results.txt`) starts with `#` header lines (program,
-  software, run date) and is parsed by `parse_sas_results()` (helper-oracles.R).
-  It holds only the `##` result lines, never the raw SAS log (host details).
 - An `.rds` cannot carry a header: its README documents it (`slope_oracle.md`).
 - `SHA256SUMS` lists the SHA-256 of every fixture data file;
   `test-fixture-sha256.R` checks it (R >= 4.5, `tools::sha256sum()`). Copies of

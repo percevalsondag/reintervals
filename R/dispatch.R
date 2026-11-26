@@ -145,15 +145,18 @@
 }
 
 ## Normalize .gpq_core output to the slope-path row schema (the cross-engine
-## output contract is handled at the unify step). `boundary` is NA: the GPQ
+## output contract is handled at the unify step), with the per-row
+## limitation_flag and its warning (.warn_gpq_limitation, once per call per
+## flag). `boundary` is NA: the GPQ
 ## method has no fitted-boundary notion (frac_boundary is an internal MC
 ## diagnostic, reported in the diagnostics).
 .gpq_rows <- function(g, design, sides = NULL, singular) {
+  sides_v <- if ("sides" %in% names(g)) g$sides else rep_len(sides, nrow(g))
   out <- data.frame(
     time = g$time, type = "TI", estimate = g$estimate,
     lower = g$lower, upper = g$upper,
     content = g$content, conf = g$conf, df = g$df_resid,
-    sides = if ("sides" %in% names(g)) g$sides else sides,
+    sides = sides_v,
     design = design, method = "gpq",
     singular = singular, boundary = NA,
     ## GPQ audit fields carried through (-> attr(.,"diagnostics") at unify)
@@ -162,11 +165,52 @@
     mc_se_lower = g$mc_se_lower, mc_se_upper = g$mc_se_upper,
     K = g$K, df_resid = g$df_resid, phi1 = g$phi1, c_resid = g$c_resid,
     gpq_two_sided = g$gpq_two_sided,
+    limitation_flag = .gpq_limitation_flag(g$conf, sides_v, g$c_resid),
     stringsAsFactors = FALSE
   )
   ## per-call (not per-row) Monte-Carlo provenance
   for (a in c("gpq_seed", "rng_kind", "mc_sections")) attr(out, a) <- attr(g, a)
+  .warn_gpq_limitation(out$limitation_flag)
   out
+}
+
+## Documented limitation of the one-sided GPQ tolerance limits (validation step
+## 13, random-slope designs), per row: "gpq_one_sided_lowconf" (one-sided,
+## confidence below 0.95, either target), "gpq_one_sided_group_mean" (one-sided,
+## confidence >= 0.95, batch-mean target: c_resid = 0, i.e. over =
+## "group_mean"), NA otherwise (every two-sided row). The confidence is
+## compared with a 1e-9 margin so that a level of 0.95 reached as 1 - 0.05
+## counts as 0.95.
+.gpq_limitation_flag <- function(conf, sides, c_resid) {
+  one <- sides != "two.sided"
+  low <- conf < 0.95 - 1e-9
+  ifelse(!one, NA_character_,
+         ifelse(low, "gpq_one_sided_lowconf",
+                ifelse(c_resid == 0, "gpq_one_sided_group_mean", NA_character_)))
+}
+
+## One reintervals_warning_limitation per call for each flag present among the
+## rows of a GPQ tolerance-interval call (see .gpq_limitation_flag).
+.warn_gpq_limitation <- function(flag) {
+  tail <- paste0(" Two-sided GPQ intervals are not affected at these levels. ",
+                 "The figures come from random-slope designs; the interval ",
+                 "is returned unchanged.")
+  if (any(flag == "gpq_one_sided_lowconf", na.rm = TRUE)) {
+    .warn("One-sided GPQ tolerance limits at a confidence level below 0.95 can ",
+          "under-cover. In validation (step 13, random-slope designs), one-sided ",
+          "GPQ limits at 90% confidence covered 0.879 to 0.90 (median 0.894 to ",
+          "0.903).", tail,
+          class = "reintervals_warning_limitation",
+          data = list(limitation = "gpq_one_sided_lowconf"))
+  }
+  if (any(flag == "gpq_one_sided_group_mean", na.rm = TRUE)) {
+    .warn("One-sided batch-mean (over = \"group_mean\") GPQ tolerance limits can ",
+          "under-cover slightly. In validation (step 13), one-sided batch-mean GPQ ",
+          "limits at 95% confidence covered 0.936 to 0.95 (median 0.948).", tail,
+          class = "reintervals_warning_limitation",
+          data = list(limitation = "gpq_one_sided_group_mean"))
+  }
+  invisible(NULL)
 }
 
 ## Random-slope tolerance interval: GPQ at every requested time point, for
@@ -206,6 +250,7 @@
   out <- .gpq_rows(g, design = .slope_design(model), sides = sides,
                    singular = singular)
   rownames(out) <- NULL
+  attr(out, "M") <- as.integer(M)
   out$route_reason <- if (forced) "method" else "auto"
   out
 }
@@ -391,7 +436,9 @@
 #' one seed (one draw set) for all its rows, whereas separate scalar calls each
 #' draw their own seed, so the equality holds only with an explicit seed. The
 #' closed-form engines compute each combination with their scalar code.
-#' Warnings are signalled once per call.
+#' Warnings are signalled once per call. Every GPQ row (both routes, the
+#' GPQ new-group-mean arm and [ti_gpq_raw()]) reports the number of draws `M`
+#' in the diagnostics.
 #'
 #' On a random-slope model the GPQ route requires
 #' every lot to have at least two distinct time points and otherwise signals
@@ -400,6 +447,25 @@
 #' from the per-lot OLS fits of the raw data and ignores the fitted
 #' random-effects structure: on an independent (`||`) random-slope fit it is the
 #' same as on the correlated (unstructured) fit of the same data.
+#'
+#' @section Known limitation (one-sided GPQ limits):
+#' On one-sided GPQ tolerance-interval rows (both routes, and [ti_gpq_raw()])
+#' a warning of class `reintervals_warning_limitation` is signalled, once per
+#' call, in two cases (the interval itself is unchanged):
+#' * **confidence below 0.95**, either target: in validation (step 13,
+#'   random-slope designs), one-sided GPQ limits at 90% confidence covered
+#'   0.879 to 0.90 (median 0.894 to 0.903);
+#' * **confidence 0.95 or above with `over = "group_mean"`** (`c_resid = 0` in
+#'   [ti_gpq_raw()]): in validation (step 13), one-sided batch-mean GPQ limits
+#'   at 95% confidence covered 0.936 to 0.95 (median 0.948).
+#'
+#' Two-sided GPQ intervals are not affected at these levels. The figures come
+#' from random-slope designs; on the random-intercept GPQ route
+#' (`method = "gpq"`, unvalidated, with its own
+#' `reintervals_warning_unvalidated`) the limitation warning applies as well.
+#' Each GPQ row records `attr(., "diagnostics")$limitation_flag`:
+#' `"gpq_one_sided_lowconf"`, `"gpq_one_sided_group_mean"`, or `NA` (every
+#' two-sided row, and one-sided rows outside both cases).
 #'
 #' @section Availability:
 #' Tolerance intervals require a closed-form variance decomposition. They are

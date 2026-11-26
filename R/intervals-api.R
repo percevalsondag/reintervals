@@ -75,9 +75,7 @@
 #'   in \pkg{pbkrtest}: the standard error uses the KR-adjusted covariance
 #'   `pbkrtest::vcovAdj()` and the df is the KR df, `pbkrtest::Lb_ddf()`;
 #'   requires \pkg{pbkrtest} and errors if it is not installed --- never a
-#'   silent fallback). SAS PROC MIXED `DDFM=KR` can differ on unbalanced data:
-#'   in the package's checks it reported the Satterthwaite df with an adjusted
-#'   standard error. The df source is reported in
+#'   silent fallback). The df source is reported in
 #'   `attr(., "diagnostics")$df_method`. A validation arm (see below):
 #'   `"containment"`, the containment df alone (the rank rule above: the
 #'   smallest random-stratum df, each fixed-effect column that is constant
@@ -108,11 +106,11 @@
 #' @param ngm_method New-group-mean construction ([new_group_mean_lmm()]) on
 #'   random-intercept models: `"package"` (default; the 0.2.0 constructions,
 #'   see [new_group_mean_lmm()]) or a validation arm:
-#'   `"broad-inference"` (the SAS PROC MIXED broad-inference prediction of a new
+#'   `"broad-inference"` (the broad-inference prediction of a new
 #'   group, McLean, Sanders & Stroup 1991: `W = V_F` plus the REML estimates of
 #'   every between-group variance component, with the Satterthwaite df
 #'   `2 W^2 / (g' A g)`, `g` the gradient of `W` in the variance components and
-#'   `A` their observed-information covariance, as DDFM=SATTERTH; when that df
+#'   `A` their observed-information covariance; when that df
 #'   cannot be computed (no covariance of the variance components, e.g. a
 #'   singular fit) or is not finite or not positive, the limits are `NA` and
 #'   `ngm_df_failed = TRUE`, with no fallback; any positive df, including one
@@ -127,12 +125,12 @@
 #'   default).
 #' @param slope_ngm_method New-group-mean construction on random-slope models:
 #'   `"reml"` (default; `mu(t0) +/- t(nu_G) sqrt(V_F + V_G)`) or a validation
-#'   arm: `"broad-inference"` (the SAS PROC MIXED broad-inference prediction of
+#'   arm: `"broad-inference"` (the broad-inference prediction of
 #'   a new lot, McLean, Sanders & Stroup 1991: the same center and variance
 #'   `W = V_F + V_G` as `"reml"`, with the Satterthwaite df of the whole `W`,
 #'   `2 W^2 / (g' A g)`, `g` the gradient of `V_F + V_G` in the
 #'   variance-covariance parameters and `A` their observed-information
-#'   covariance, as DDFM=SATTERTH; `"reml"` uses the df of `V_G` alone; when the
+#'   covariance; `"reml"` uses the df of `V_G` alone; when the
 #'   df cannot be computed (no covariance of the variance parameters, e.g. a
 #'   singular fit) or is not finite or not positive, the limits are `NA` and
 #'   `ngm_df_failed = TRUE`, with no fallback; any positive df, including one
@@ -229,13 +227,20 @@ lmm_interval_control <- function(seed = NULL, M = 20000L,
                                                       "fv-anova"),
                                  slope_pi_method = c("reml", "fv-anova", "hybrid"),
                                  gpq_two_sided = c("approx", "content")) {
-  ci_df       <- match.arg(ci_df)
-  slope_ci_df <- match.arg(slope_ci_df)
-  pi_df       <- match.arg(pi_df)
-  ngm_method  <- match.arg(ngm_method)
-  slope_ngm_method <- match.arg(slope_ngm_method)
-  slope_pi_method <- match.arg(slope_pi_method)
-  gpq_two_sided <- match.arg(gpq_two_sided)
+  ## each choice argument as match.arg (default = first choice, partial
+  ## matching), with an invalid value an error of class reintervals_error_input
+  ## naming the argument and its allowed values
+  ch <- formals(sys.function())
+  ci_df       <- .match_control_arg(ci_df, eval(ch$ci_df), "ci_df")
+  slope_ci_df <- .match_control_arg(slope_ci_df, eval(ch$slope_ci_df), "slope_ci_df")
+  pi_df       <- .match_control_arg(pi_df, eval(ch$pi_df), "pi_df")
+  ngm_method  <- .match_control_arg(ngm_method, eval(ch$ngm_method), "ngm_method")
+  slope_ngm_method <- .match_control_arg(slope_ngm_method, eval(ch$slope_ngm_method),
+                                         "slope_ngm_method")
+  slope_pi_method <- .match_control_arg(slope_pi_method, eval(ch$slope_pi_method),
+                                        "slope_pi_method")
+  gpq_two_sided <- .match_control_arg(gpq_two_sided, eval(ch$gpq_two_sided),
+                                      "gpq_two_sided")
   if (!is.null(seed) && (!is.numeric(seed) || length(seed) != 1L || is.na(seed) ||
                            abs(seed) > .Machine$integer.max)) {
     .abort("`seed` must be NULL or a single number in the integer range.",
@@ -255,6 +260,19 @@ lmm_interval_control <- function(seed = NULL, M = 20000L,
                  slope_pi_method = slope_pi_method,
                  gpq_two_sided = gpq_two_sided),
             class = "lmm_interval_control")
+}
+
+## match.arg(arg, choices) for an lmm_interval_control() argument: the same
+## value (first choice when `arg` is the full choice vector, partial matching),
+## but an invalid value is an error of class reintervals_error_input whose
+## message names the argument and lists its allowed values.
+.match_control_arg <- function(arg, choices, name) {
+  tryCatch(match.arg(arg, choices), error = function(e) {
+    .abort(sprintf("`%s` must be one of %s.", name,
+                   paste0("\"", choices, "\"", collapse = ", ")),
+           class = "reintervals_error_input",
+           data = list(argument = name, choices = choices))
+  })
 }
 
 ## ---- validation arms (step-13 options) ------------------------------------
@@ -495,7 +513,7 @@ lmm_interval_control <- function(seed = NULL, M = 20000L,
                  "slope_ci_df_rule", "pi_df_rule", "ngm_arm", "slope_ngm_arm",
                  "ngm_df_failed", "vc_cov_route", "vc_cov_reason",
                  "df_fallback_reason", "slope_pi_arm", "slope_pi_route_reason",
-                 "fv_df_lots", "gpq_two_sided")
+                 "fv_df_lots", "gpq_two_sided", "limitation_flag")
 
 ## The output unifier. Maps any engine's native frame to the single tidy
 ## contract; relabels only, never recomputes. Universal columns, in order:
@@ -563,7 +581,8 @@ lmm_interval_control <- function(seed = NULL, M = 20000L,
                "frac_boundary", "K", "df_resid", "phi1", "c_resid",
                "route_reason", "mls_bound", "n_na_draws", "mc_se_lower",
                "mc_se_upper", "vc_cov_route", "vc_cov_reason", "df_fallback_reason",
-               "slope_pi_route_reason", "fv_df_lots", "gpq_two_sided")) {
+               "slope_pi_route_reason", "fv_df_lots", "gpq_two_sided",
+               "limitation_flag")) {
     if (cn %in% names(native)) diag[[cn]] <- native[[cn]]
   }
   for (a in c("beta_hat", "n_E", "U", "Vhat_Y", "C1", "C2", "pi_df_fallback",
@@ -649,6 +668,15 @@ print.lmm_interval <- function(x, ...) {
 #'       [lmm_interval_control()]); `design` (the route-independent model class, see
 #'       [reintervals-models]);
 #'     \item the per-row flags `singular`, `boundary`, `vg_floored`.
+#'       `boundary` is advisory (nothing routes on it): on the random-slope
+#'       confidence, prediction and new-group-mean rows computed from the
+#'       fitted variance components (every arm but `"gpq"` and `"fv-anova"`)
+#'       it is `TRUE` when some random-effect variance is below
+#'       `1e-4` times the total variance, every term on the response scale
+#'       (the intercept variance, the slope variance times the population
+#'       variance of the observed times, and the residual variance), so it does
+#'       not depend on the units of the response or of time; it is `FALSE` or
+#'       `NA` on the other routes.
 #'   }
 #'   `attr(., "diagnostics")` is a list of engine-specific extras (degrees of
 #'   freedom `df`; for the random-intercept confidence interval its source
@@ -672,13 +700,17 @@ print.lmm_interval <- function(x, ...) {
 #'   obtained, else `"singular fit"`, `"singularity check failed; treated as
 #'   singular"`, `"sentinel"` (the default and the retried Hessian both left the
 #'   valid region of the variance parameters), `"unstable numerical Hessian"`,
-#'   or `"Hessian not PD or not invertible"`; for the random-intercept
-#'   confidence, prediction and new-group-mean intervals and the random-slope
-#'   prediction interval `df_fallback_reason`,
+#'   or `"Hessian not PD or not invertible"`; for the confidence, prediction
+#'   and new-group-mean intervals (random intercept and random slope)
+#'   `df_fallback_reason`,
 #'   per row, why the default Satterthwaite df fell back to containment (e.g.
-#'   `"singular fit"`, `"df below 1"`, `"non-finite df"`; for the
+#'   `"singular fit"`, `"singularity check failed; treated as singular"`,
+#'   `"df below 1"`, `"non-finite df"`, or the `vc_cov_reason`; for the
 #'   `ngm_method = "broad-inference"` arm, why its df could not be formed, the
-#'   rows with `NA` limits), `NA` where it did not; standard
+#'   rows with `NA` limits), `NA` where it did not, and `NA` on the arms with
+#'   no fallback (`slope_ci_df = "kenward-roger"` / `"k-minus-1"`, and the
+#'   random-slope `slope_ngm_method` and `slope_pi_method` arms); on GPQ rows
+#'   the number of draws `M`; standard
 #'   error `se`; and any GPQ / ANOVA intermediates);
 #'   `attr(., "grouping")` is the random-intercept topology (`"oneway"`,
 #'   `"nested"`, `"crossed"`, or `NA` for slope models).
@@ -790,9 +822,8 @@ pi_lmm <- function(model, newdata = NULL, alpha = NULL, level = NULL,
 #'     \eqn{\mu(t_0) \pm t_{\nu_G}\sqrt{V_F + V_G}} (`"reml"`), with
 #'     \eqn{\nu_G} the Satterthwaite df of \eqn{V_G} alone, falling back to
 #'     the containment df `K - 2` (`"containment"`) when it is unavailable or
-#'     below 1 (SAS DDFM=SATTERTH
-#'     uses the df of \eqn{V_F + V_G}, which is larger; that df is the
-#'     validation arm `slope_ngm_method = "broad-inference"`).
+#'     below 1 (the Satterthwaite df of \eqn{V_F + V_G}, which is larger,
+#'     is the validation arm `slope_ngm_method = "broad-inference"`).
 #' }
 #' A design without a closed-form variance decomposition (two crossed factors
 #' without their interaction term, or four or more grouping factors) is an

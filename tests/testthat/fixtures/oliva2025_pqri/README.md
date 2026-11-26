@@ -31,5 +31,6 @@ Oracle `oliva2025-pqri` (`../oracles.csv`), checked by `test-oracle-oliva-pqri.R
   versions. At 10000 runs a shelf life has a Monte-Carlo SD of about
   0.2 month, so the test compares shelf lives with the 100000-run mean.
 - **SHA-256:**
-  - `data.csv`: `34f786df766dd98d574876d541af4758769d05decfe1f6c75c9a500b39a52cdf`
+  - `data.csv`: `1d8e2097b12549533c0d680ba95740ddac409f134903d3aa04817c5fb5c4971a` (the provenance header line was reworded on
+    2026-11-25; the data rows are unchanged)
   - `reference.csv`: `cfecbf2aad7adecf2d38d61c47188b6e6a25f66fc8220cd111c7d928668255e6`

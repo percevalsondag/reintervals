@@ -64,8 +64,9 @@ test_that("Kenward-Roger is used only on request and reported as such", {
   skip_if_not_installed("lme4")
   skip_if_not_installed("pbkrtest")
   ## df AND SE: the KR df must be paired with the KR-adjusted covariance
-  ## (vcovAdj), not the unadjusted vcov(). The SAS-fixture designs are covered in
-  ## test-oracle-sas-ci.R; this adds the crossed design and the hk_assay one-way.
+  ## (vcovAdj), not the unadjusted vcov(). The simulated designs of
+  ## fixtures/sim_designs/ are covered in test-ci-sim-designs.R; this adds the
+  ## crossed design and the hk_assay one-way.
   for (nm in c("oneway_ok", "nested_ok", "crossed_ok")) {
     cs <- ci_cases()[[nm]]
     fm <- fit(cs[[1]], cs[[2]])

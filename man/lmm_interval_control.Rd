@@ -54,9 +54,7 @@ a singular fit, or below 1) or \code{"kenward-roger"} (Kenward & Roger 1997 as i
 in \pkg{pbkrtest}: the standard error uses the KR-adjusted covariance
 \code{pbkrtest::vcovAdj()} and the df is the KR df, \code{pbkrtest::Lb_ddf()};
 requires \pkg{pbkrtest} and errors if it is not installed --- never a
-silent fallback). SAS PROC MIXED \code{DDFM=KR} can differ on unbalanced data:
-in the package's checks it reported the Satterthwaite df with an adjusted
-standard error. The df source is reported in
+silent fallback). The df source is reported in
 \code{attr(., "diagnostics")$df_method}. A validation arm (see below):
 \code{"containment"}, the containment df alone (the rank rule above: the
 smallest random-stratum df, each fixed-effect column that is constant
@@ -90,11 +88,11 @@ applied to random-slope models (see \code{slope_pi_method}).}
 \item{ngm_method}{New-group-mean construction (\code{\link[=new_group_mean_lmm]{new_group_mean_lmm()}}) on
 random-intercept models: \code{"package"} (default; the 0.2.0 constructions,
 see \code{\link[=new_group_mean_lmm]{new_group_mean_lmm()}}) or a validation arm:
-\code{"broad-inference"} (the SAS PROC MIXED broad-inference prediction of a new
+\code{"broad-inference"} (the broad-inference prediction of a new
 group, McLean, Sanders & Stroup 1991: \code{W = V_F} plus the REML estimates of
 every between-group variance component, with the Satterthwaite df
 \verb{2 W^2 / (g' A g)}, \code{g} the gradient of \code{W} in the variance components and
-\code{A} their observed-information covariance, as DDFM=SATTERTH; when that df
+\code{A} their observed-information covariance; when that df
 cannot be computed (no covariance of the variance components, e.g. a
 singular fit) or is not finite or not positive, the limits are \code{NA} and
 \code{ngm_df_failed = TRUE}, with no fallback; any positive df, including one
@@ -110,12 +108,12 @@ default).}
 
 \item{slope_ngm_method}{New-group-mean construction on random-slope models:
 \code{"reml"} (default; \verb{mu(t0) +/- t(nu_G) sqrt(V_F + V_G)}) or a validation
-arm: \code{"broad-inference"} (the SAS PROC MIXED broad-inference prediction of
+arm: \code{"broad-inference"} (the broad-inference prediction of
 a new lot, McLean, Sanders & Stroup 1991: the same center and variance
 \code{W = V_F + V_G} as \code{"reml"}, with the Satterthwaite df of the whole \code{W},
 \verb{2 W^2 / (g' A g)}, \code{g} the gradient of \code{V_F + V_G} in the
 variance-covariance parameters and \code{A} their observed-information
-covariance, as DDFM=SATTERTH; \code{"reml"} uses the df of \code{V_G} alone; when the
+covariance; \code{"reml"} uses the df of \code{V_G} alone; when the
 df cannot be computed (no covariance of the variance parameters, e.g. a
 singular fit) or is not finite or not positive, the limits are \code{NA} and
 \code{ngm_df_failed = TRUE}, with no fallback; any positive df, including one

@@ -380,12 +380,7 @@ The bug, with evidence:
 - `ci_mean` combines them: ci-mean.R:52-53, `qt(.., df) * sqrt(comp$var_mean)`.
 
 So the KR CI uses a KR df with the naive SE. KR proper pairs the KR df with the
-**adjusted** covariance `Phi_A`. The SAS oracle in hand shows the gap (DDFM=KR
-reports the adjusted SE):
-`OW_UNBAL` intercept SE 0.51495 (SATTERTH) vs **0.52108** (KR), with identical df
-5.1503; `FS_UNBAL` month = 12 mean SE 0.27586 vs **0.27619**
-(`~/dev/reintervals-simstudy/oracles/sas_ngm/part1/ngm_sas_check_satterth.results.txt`,
-`##FIXD`/`##MEAN` lines).
+**adjusted** covariance `Phi_A`.
 
 Plan:
 1. In `intervals_lmm` (intervals-lmm.R:53-75), when `ci_method == "kenward-roger"`:
@@ -408,8 +403,7 @@ Plan:
 
 Tests: test-ci-df.R:62-73 checks the df only (`expect_equal(diag_of(k)$df,
 pbkrtest::get_Lb_ddf(fm, 1))`), so it passes both before and after the fix, which
-is why the bug went unnoticed. (Original plan: assert the KR SE and limits against
-the SAS `##MEAN ... KR` lines on all five fits. Superseded by decision (a) below.)
+is why the bug went unnoticed.
 
 **Implemented on `dev`, with a finding and a decision (Percy: option a).**
 Fix: `.kr_parts()` computes `vcovAdj()` once per call; `.ci_ddf()` returns the KR
@@ -417,20 +411,11 @@ df from `pbkrtest::Lb_ddf(l, vcov, vcovAdj)` (= `get_Lb_ddf`, which cannot take 
 precomputed Vadj) together with `var_mean = l Vadj l'`; `intervals_lmm` uses that
 `var_mean` for the KR CI rows.
 
-Finding: against the SAS `##MEAN` lines (fixtures `tests/testthat/fixtures/sas_ngm/`),
-Satterthwaite matches on all 13 rows (worst SE 1.9e-6 relative, df 3.9e-5 absolute).
-SAS DDFM=KR, however, reports the **Satterthwaite df unchanged** in every row, with
-only the SE adjusted. On OW_UNBAL its adjusted SE also differs from pbkrtest's:
-SE 0.5217893 (reintervals = pbkrtest) vs 0.5210774 (SAS), 1.4e-3 relative; df 4.783
-vs 5.150. The cause of the SE difference has not been established.
-
 Decision (a): `"kenward-roger"` in reintervals means Kenward & Roger (1997) as
-implemented in pbkrtest (`vcovAdj()` SE, `Lb_ddf()` df). SAS DDFM=KR is not the KR
-oracle. Tests (`test-oracle-sas-ci.R`): Satterthwaite vs SAS on every row; KR SE vs
-SAS on the balanced fits only (OW_BAL, NEST_BAL, FS_BAL); KR SE and df vs pbkrtest
-on all five fits at 1e-8 (the pairing guard); the OW_UNBAL difference is pinned as a
-documented SAS difference. Documented in roxygen, the vignettes, and NEWS (Bug
-fixes).
+implemented in pbkrtest (`vcovAdj()` SE, `Lb_ddf()` df). Tests
+(`test-ci-sim-designs.R`): KR SE and df vs pbkrtest on the five simulated fits of
+`fixtures/sim_designs/` at 1e-8 (the pairing guard), and regression pins on the
+package's own values. Documented in roxygen, the vignettes, and NEWS (Bug fixes).
 
 Dependency: pbkrtest stays in Suggests (DESCRIPTION:37). `vcovAdj`/`Lb_ddf`
 are exported by pbkrtest; check the minimum version that exports `Lb_ddf` and
@@ -606,7 +591,7 @@ helpers).
 - Tests: test-a5-warnings.R. Existing tests muffled (quiet_extrapolation /
   quiet_df_fallback in helper-conditions.R; quiet_limitation and the local quiet /
   quiet_arm helpers in test-df-arms.R and test-ngm-arms.R muffle both): ci-df,
-  conditions, df-arms, dispatch, gpq, mls, ngm-arms, oracle-sas-ci,
+  conditions, df-arms, dispatch, gpq, mls, ngm-arms, ci-sim-designs,
   singular-guard, stratum-sides.
 - Review follow-ups (2026-11-09), closing A5:
   - #13 done: `.singular_status()` (vc-extract.R); a failing
@@ -774,7 +759,7 @@ committed at the time of writing.
 - `"broad-inference"`: `W = V_F + sum(between-group variance components)`,
   `nu = 2 W^2 / (g' A g)`, `g` = gradient of `V_F` (`.contrast_var_grad()`,
   factored out of `.ci_ddf_satterthwaite` with no change to the maths;
-  test-oracle-sas-ci.R passes unchanged) plus the 0/1 vector of the
+  test-ci-sim-designs.R passes unchanged) plus the 0/1 vector of the
   between-group components, `A = .theta_cov()$cov_theta` (variance scale,
   observed information). No fallback: NA limits, `ngm_df_failed = TRUE`.
 - `"gpq"`: `.gpq_theta_draws()` (the A2 pivot block of `.gpq_eval_t0`, moved
@@ -796,37 +781,14 @@ committed at the time of writing.
   `abar * S2E * (1 + 1/K)` as a share of W: balanced sleepstudy 0.270 / 0.041 /
   0.097 (t0 = 0 / 5 / 15); unbalanced subset 0.148 / 0.041 / 0.082;
   stab_unbal_v2_a 0.179 / 0.137 / 0.450 (t0 = 0 / 12 / 48).
-- SAS comparison (prereg 7 item 9; DDFM=SATTERTH `##NGM` rows; SE 1e-4
-  relative, df 0.05 absolute):
-
-  | Fixture | Arm | t0 | package SE / df | SAS SE / df | Result |
-  |---|---|---|---|---|---|
-  | OW_BAL | broad-inference | - | 1.878284 / 4.4866 | 1.878284 / 4.4866 | pass |
-  | OW_UNBAL | broad-inference | - | 1.118632 / 2.3956 | 1.118629 / 2.3957 | pass |
-  | NEST_BAL | broad-inference | - | 1.080213 / 4.4130 | 1.080213 / 4.4130 | pass |
-  | FS_BAL | broad-inference | 0, 12, 24, 36, 48 | 0.726800 / 5.2580 ... 0.896328 / 12.0113 | equal to 1e-8 / 1e-6 | pass (5) |
-  | FS_UNBAL | broad-inference | 0, 12, 24, 36, 48 | 0.742508 / 5.1310 ... 1.024962 / 17.0133 | SE 2e-7, df 1e-5 | pass (5) |
-  | RS_UN_BAL | reml | 0 / 12 / 24 / 36 / 48 | df 4.389 / 4.949 / 3.402 / 2.957 / 2.870 | df 4.652 / 5.161 / 3.741 / 3.325 / 3.242 | fail (df; SE within 5e-6) |
-  | RS_VC_BAL | reml | 0 / 12 / 24 / 36 / 48 | df 3.736 / 4.371 / 3.362 / 2.589 / 2.248 | df 4.131 / 4.503 / 3.583 / 2.872 / 2.565 | fail (df; SE 1.1e-5 ... 1.2e-4) |
-  | RS_UN_UNBAL | reml | 0-48 | SE 0.975 ... / df 6 (containment) | SE 0.368 at 0, "." after | boundary (singular), not compared |
-
-  Diagnosis of the reml failures: `nu_G` is the Satterthwaite df of V_G alone;
-  SAS's df is that of the whole prediction variance V_F + V_G. With the
-  gradient of V_F + V_G the package's own Hessian reproduces SAS to 1e-3 on all
-  ten rows (asserted in the test). The RS_VC_BAL SE gap at months 36 and 48
-  (1.1e-4, 1.2e-4) is the fit: lme4's slope variance differs from SAS's by 3e-4
-  relative on a flat REML surface. Not tuned (the default is unchanged); a
-  `V_F + V_G` df is a candidate for step 13.
-
-  Designs for broad-inference: one-way balanced and unbalanced, nested
-  (balanced), fixed slope balanced and unbalanced: **SAS-checked**. Crossed,
-  unbalanced nested, one-way / nested / crossed with covariates, Chow & Shao:
-  **no SAS fixture** (no reference values invented).
-- Rank each arm earns: `broad-inference` **published** (passes item 5 on every
-  SAS row); `"reml"` (default, RS) **composition** (fails item 5 on df);
-  random-slope `broad-inference` (B2b) **published** (passes item 5 on df at
-  every RS_UN_BAL / RS_VC_BAL row and on SE except RS_VC_BAL months 36 / 48,
-  which is the fit: at the SAS estimates it reproduces SAS on every row);
+- Regression pins on the simulated designs of `fixtures/sim_designs/`
+  (package SE and df; test-ngm-arms.R (f)). The default random-slope `nu_G` is
+  the Satterthwaite df of V_G alone; the broad-inference prediction of a new lot
+  uses the df of the whole prediction variance V_F + V_G (made an arm in B2b).
+  Not tuned (the default is unchanged).
+- Rank each arm earns: `broad-inference` **published** (McLean, Sanders &
+  Stroup 1991); `"reml"` (default, RS) **composition**; random-slope
+  `broad-inference` (B2b) **published**;
   `"classical"` **published** (Hahn & Meeker formula, equal to 2b on balanced
   data); `"hts"` **composition** (HTS 2009 with the REML tau^2 in place of
   DerSimonian-Laird); `"gpq"` **composition** (Oliva-Aviles & Hauser pivots +
@@ -835,12 +797,12 @@ committed at the time of writing.
   **package-original**.
 - Tests: test-ngm-arms.R (defaults pinned before the B2 edits on 8 fits x 3
   sides; formula recomputes; no-ops; GPQ draws / CRN / seed / MC SE / guard /
-  15% sanity at M = 20000; lot-line pins; SAS; warnings).
+  15% sanity at M = 20000; lot-line pins; regression pins; warnings).
 
 **B2b status: DONE on `dev`** (follow-up on the committed B2). Not committed at
 the time of writing.
 - `slope_ngm_method = "broad-inference"` (random slope; rank **published**;
-  `df_rule = "satterthwaite-broad"`): the SAS PROC MIXED broad-inference
+  `df_rule = "satterthwaite-broad"`): the broad-inference
   prediction of a new lot (McLean, Sanders & Stroup 1991). Same center and
   variance as the default `"reml"`, `W = V_F + V_G(t0)` (so the SE is
   identical); df = the Satterthwaite df of the whole W, `2 W^2 / (g' A g)`, `g`
@@ -850,20 +812,7 @@ the time of writing.
   on the default per-t0 `vfun_extract` path, so single-time-point lots are
   accepted wherever the default accepts them. Code: `.ngm_rs_broad()`,
   `.ngm_rs_broad_df()` (R/ngm-arms.R). The default `"reml"` is unchanged.
-- SAS comparison (DDFM=SATTERTH `##NGM`; SE 1e-4 relative, df 0.05):
-
-  | Fixture | t0 | package SE rel. / df diff | at SAS estimates: SE rel. / df diff | Result |
-  |---|---|---|---|---|
-  | RS_UN_BAL | 0, 12, 24, 36, 48 | max 5.1e-6 / max 5.3e-5 | max 3.2e-13 / max 4.7e-6 | pass (5) |
-  | RS_VC_BAL | 0, 12, 24 | 1.1e-5, 4.7e-5, 8.8e-5 / max 4.1e-4 | max 9.8e-13 / max 1.1e-4 | pass (3) |
-  | RS_VC_BAL | 36, 48 | 1.08e-4, 1.18e-4 / 3.3e-4, 2.6e-4 | 1.2e-12, 1.4e-12 / 8.9e-5, 7.9e-5 | df pass, SE fail (fit) |
-
-  "At SAS estimates": the package's W and df formulas evaluated at the SAS
-  `##COVP` covariance-parameter estimates (UN(1,1), UN(2,1), UN(2,2),
-  Residual; VC: Intercept, month, Residual) with the same X and Z, `A` = the
-  inverse Hessian of the REML NLL at those estimates. The method reproduces
-  SAS; the remaining SE gap on RS_VC_BAL is lme4's optimum (slope variance
-  0.00135877 vs SAS 0.00135838). Pinned and asserted in test-ngm-arms.R.
+- Regression pins on RS_UN_BAL and RS_VC_BAL (test-ngm-arms.R, B2b).
 - **Release blocker (1.0.0):** before 1.0.0, any validation arm kept after
   step 13 must report its own method tag in the `method` column (currently
   arms keep the default route's tag; the arm is read from `ngm_arm` /
@@ -928,8 +877,8 @@ with a scope prefix. All defaults reproduce 0.2.0 exactly until step 13 decides.
 | `ci_df` (RI CI) **[B1 done]** | `"satterthwaite"`, `"kenward-roger"`, `"containment"` | `"satterthwaite"` (with its containment fallback) | `.ci_ddf` vc-extract.R:185-207: add a `containment` branch returning `.ddf_containment` (vc-extract.R:272) directly; `match.arg` sites intervals-api.R:35-36, slope-intervals.R:195/201, intervals-lmm.R:47/52. KR depends on A3. |
 | `slope_ci_df` (RS CI) **[B1 done]** | `"hessian-satterthwaite"`, `"kenward-roger"`, `"k-minus-1"` | `"hessian-satterthwaite"` (`rF`, vfun-extract.R:319, with containment fallback) | `vfun_extract` gains a CI-df argument (vfun-extract.R:266-269, 313-319). `k-minus-1` = `parsed$B - 1` (note: today's containment uses `B - k_re`, vfun-extract.R:49; it is a different rule). KR needs `pbkrtest::vcovAdj` and the adjusted `V_F` (vfun-extract.R:290 uses `parsed$vcov_beta`, vfun-extract.R:197), so A3's helper is reused. Remove the KR rejection slope-intervals.R:204-208. |
 | `pi_df` (RI PI) **[B1 done]** | `"francq-satterthwaite"`, `"containment"` | `"francq-satterthwaite"` (with the containment fallback, vc-extract.R:104-111) | `intervals_lmm(pi_method = )` replaces `df_pi` with `.ddf_containment()`. No Kenward-Roger value, not even reserved: H6 arm (iii) dropped (see B1 status). |
-| `ngm_method` (RI NGM; diagnostics field `ngm_arm`) **[B2 done]** | `"package"` (2a-2e as in `.ngm_ri`), `"broad-inference"` (SAS DDFM=SATTERTH broad-inference new-group prediction), `"hts"` (Higgins-Thompson-Spiegelhalter), `"classical"` | `"package"` | `.ngm_ri` slope-intervals.R:105-186: route before the 2a/2b branch (slope-intervals.R:126) and before the EMS branch (slope-intervals.R:150). `value_rows` (slope-intervals.R:112-124) is shared by all arms. `broad-inference` reuses `.theta_cov` (Hessian, vc-extract.R:73) plus a gradient of the new-group variance (pattern: `.ci_ddf_satterthwaite` vc-extract.R:219-235). Oracle: SAS part1 `##NGM ... SATTERTH`. HTS and classical formulas: see the B2 status. |
-| `slope_ngm_method` (RS NGM; field `slope_ngm_arm`) **[B2 done]** | `"reml"` (`mu ± t(nu_G) sqrt(V_F + V_G)`), `"broad-inference"` (B2b: same W, Satterthwaite df of V_F + V_G), `"gpq"` (generalized prediction interval), `"fv-anova"` (lot-line PI on per-lot fitted values) | `"reml"` | slope-intervals.R:218-221 (kind `new_group_mean`). `gpq` reuses A2's `.gpq_pivots` (the theta/tau² GPQs, gpq.R:116-133), drawing a new-lot value `Rtheta + Z' sqrt(Rtau2)`; it **depends on A2**. `fv-anova` reuses the per-batch OLS fitted values `NY` (gpq.R:99-100), so factor `.batch_ols()` out of gpq.R:73-91 first. Oracle: SAS part1 `RS_*` NGM lines (RS_UN_BAL, RS_VC_BAL; RS_UN_UNBAL is singular, boundary case only, per the oracle README) and part2 once it has been run (`ngm_sas_check_part2.results.txt` does not exist yet). |
+| `ngm_method` (RI NGM; diagnostics field `ngm_arm`) **[B2 done]** | `"package"` (2a-2e as in `.ngm_ri`), `"broad-inference"` (broad-inference new-group prediction, McLean, Sanders & Stroup 1991), `"hts"` (Higgins-Thompson-Spiegelhalter), `"classical"` | `"package"` | `.ngm_ri` slope-intervals.R:105-186: route before the 2a/2b branch (slope-intervals.R:126) and before the EMS branch (slope-intervals.R:150). `value_rows` (slope-intervals.R:112-124) is shared by all arms. `broad-inference` reuses `.theta_cov` (Hessian, vc-extract.R:73) plus a gradient of the new-group variance (pattern: `.ci_ddf_satterthwaite` vc-extract.R:219-235). HTS and classical formulas: see the B2 status. |
+| `slope_ngm_method` (RS NGM; field `slope_ngm_arm`) **[B2 done]** | `"reml"` (`mu ± t(nu_G) sqrt(V_F + V_G)`), `"broad-inference"` (B2b: same W, Satterthwaite df of V_F + V_G), `"gpq"` (generalized prediction interval), `"fv-anova"` (lot-line PI on per-lot fitted values) | `"reml"` | slope-intervals.R:218-221 (kind `new_group_mean`). `gpq` reuses A2's `.gpq_pivots` (the theta/tau² GPQs, gpq.R:116-133), drawing a new-lot value `Rtheta + Z' sqrt(Rtau2)`; it **depends on A2**. `fv-anova` reuses the per-batch OLS fitted values `NY` (gpq.R:99-100), so factor `.batch_ols()` out of gpq.R:73-91 first. |
 
 `lmm_interval_control` validation gets one `match.arg` per option. Applying an
 option to a model or verb it does not concern (e.g. `slope_ngm_method` on a
@@ -980,18 +929,14 @@ skipped / warnings). Deviations from T.2, by the brief:
   convention, `fixture_path` forms); `fixtures/SHA256SUMS` (every fixture data
   file; checked by `test-fixture-sha256.R`, which needs R >= 4.5 and skips
   otherwise); `fixtures/slope_oracle.md`; `helper-oracles.R`
-  (`oracle_registry()`, `oracle_fixture(id)`, `parse_sas_results(path)` for
-  ##NGM / ##MEAN / ##COVP / ##FIXD / ##CONV); `test-oracle-registry.R` (no skips).
-  `test-oracle-sas-ci.R` uses the new parser (its ##MEAN frame is `identical()`
-  to the old one); `test-ngm-arms.R` still has its own `sas_ngm_rows()` /
-  `sas_covp()` (the new parser reproduces both `identical()`; switching is
-  optional).
+  (`oracle_registry()`, `oracle_fixture(id)`); `test-oracle-registry.R` (no
+  skips).
 - `slope_oracle.rds`: no generator exists, so it was **stripped** (n_E,
   dfs["e"], attr target, the 4 TI rows); kept fields `identical()`, the 18
   expectations give `identical()` outputs before and after. It is a regression
   snapshot and is not in the registry. Provenance and both SHA-256 in
   `fixtures/slope_oracle.md`.
-- Collected (29):
+- Collected (24; the external-software rows were removed in the 1.0.0 cleanup):
   - `francq2019-s52-ci` (ci/constructor (ci_mean); published_table) -> `test-ci-mean.R`
   - `francq2019-s52-pi` (pi/constructor (pi_newobs); published_table) -> `test-pi-newobs.R`
   - `francq2019-s52-ti` (ti/francq (ti_francq); published_table) -> `test-ti-francq.R`
@@ -1013,21 +958,14 @@ skipped / warnings). Deviations from T.2, by the brief:
   - `montes2019-tables12-onesided` (ti/anova-mls one-sided (Hoffman 2010 H limit); published_table) -> `test-ti-montes.R`
   - `montes2019-appa-montes-ref` (ti/anova-mls (independent montes_ref() re-implementation); published_table) -> `test-vfun-extract.R`
   - `oliva2025-tau2` (ti/gpq (closed-form content variance V_G); published_table) -> `test-gpq.R`
-  - `sas-part1-ci-satterth` (ci/random intercept, ci_df = satterthwaite; sas_run) -> `test-oracle-sas-ci.R`
-  - `sas-part1-ci-kr-balanced` (ci/random intercept, ci_df = kenward-roger (SE only); sas_run) -> `test-oracle-sas-ci.R`
-  - `pbkrtest-kr-sas-fits` (ci/random intercept, ci_df = kenward-roger (SE + df); independent_code) -> `test-oracle-sas-ci.R`
+  - `pbkrtest-kr-sim-fits` (ci/random intercept, ci_df = kenward-roger (SE + df); independent_code) -> `test-ci-sim-designs.R`
   - `pbkrtest-kr-ci-cases` (ci/random intercept, ci_df = kenward-roger (SE + df); independent_code) -> `test-ci-df.R`
-  - `sas-part1-ngm-ri-broad` (ngm/random intercept, ngm_method = broad-inference; sas_run) -> `test-ngm-arms.R`
-  - `sas-part1-ngm-rs-reml` (ngm/random slope, slope_ngm_method = reml (default); sas_run) -> `test-ngm-arms.R`
-  - `sas-part1-ngm-rs-broad` (ngm/random slope, slope_ngm_method = broad-inference; sas_run) -> `test-ngm-arms.R`
   - `simstudy-lotline-f4ce68e` (ngm/random slope, slope_ngm_method = fv-anova (.lotline); independent_code) -> `test-ngm-arms.R`
-- Pending (6; templates in place):
+- Pending (4; templates in place):
   - `nist-recipe-ex4` (ti/one-sided tolerance limit, regression with random batches (anova-mls fixed slope; engine to confirm at transcription); published_table) -> `test-ti-montes.R`
   - `francq2019-table2-corrected` (ci+pi+ti/Francq Table 2 (verbs to confirm at transcription); published_table) -> `test-ti-francq.R`
   - `chow-shao1991-t23` (ngm/random slope, slope_ngm_method = fv-anova (shelf-life lower bound); published_table) -> `test-ngm-arms.R`
   - `oliva2025-worked-example` (ti/gpq (random slope); published_table) -> `test-gpq.R`
-  - `sas-part2-ngm-rs-unbal` (ngm/random slope (reml, broad-inference), unbalanced; sas_run) -> `test-ngm-arms.R`
-  - `sas-part3-ngm-designs` (ngm/random intercept, ngm_method = broad-inference (crossed, unbalanced nested, covariate designs); sas_run) -> `test-ngm-arms.R`
 
 ### T.1 Current self-referential tests (code checked against its own formula or output)
 
@@ -1064,23 +1002,15 @@ inst/extdata/oracles/
   README.md                       provenance table: source, table/eq, transcription date, who checked
   montes2019/                     mbl_appendix_a (already data/), tables_I_II.csv (TI, n_E, U, C1, C2, one-sided H)
   hoffman_kringle2007/            hk_assay (already data/), cases.csv (O1-O4 limits + intermediates)
-  sas_ngm/part1/                  COPY of ~/dev/reintervals-simstudy/oracles/sas_ngm/part1/*.csv
-                                  + results parsed to ngm_part1.csv (case, ddfm, row, pred, se, df, lower, upper)
-                                  + the .results.txt kept verbatim, plus the .sas program for provenance
-  sas_ngm/part2/                  placeholder until the part2 results exist
   nist_recipe_ex4/                placeholder (README only)
   francq2019_table2_corrected/    placeholder
   chow_shao1991/                  placeholder
   oliva_aviles_hauser2025/        dgp (already data/oliva_hauser_dgp) + any printed interval, if one is recoverable
 tests/testthat/
-  helper-oracles.R                read_oracle(name) via system.file("extdata/oracles", ...); parser for SAS ## lines
+  helper-oracles.R                read_oracle(name) via system.file("extdata/oracles", ...)
   test-oracle-montes2019.R        MBL Appendix A two-sided + Tables I-II one-sided (moved from test-ti-montes.R)
   test-oracle-hk2007.R            O1-O6 (moved from test-hk.R)
   test-oracle-francq2019.R        5.2 / 5.3 / 4.4 (moved), + corrected Table 2 placeholder (skip())
-  test-oracle-sas-ngm.R           part1: ##MEAN SATTERTH vs ci_lmm (df, SE, limits);
-                                  ##MEAN KR vs ci_lmm(ci_df = "kenward-roger") (A3 acceptance: SE!);
-                                  ##NGM SATTERTH vs ngm_method = "broad-inference"; ##NGM RS_* vs slope_ngm_method arms;
-                                  ##COVP vs lme4 VarCorr (fit agreement gate, tolerance ~1e-4)
   test-oracle-nist-recipe.R       skip("oracle not yet transcribed")
   test-oracle-chow-shao1991.R     skip(...)
   test-oracle-oliva-hauser2025.R  tau² exact (moved from test-gpq.R:13) + skip() for any interval values
@@ -1092,11 +1022,10 @@ provenance.
 
 Rules: each oracle file reads only `inst/extdata/oracles`, calls only exported
 verbs (plus the method-pure constructors, where the paper prints the components),
-and states its tolerance next to the printed precision. Copy the SAS fixtures (the
-simstudy tree is read-only and must not be referenced by path from tests). Cross-
+and states its tolerance next to the printed precision. Copy fixtures from the
+simstudy repository (its tree is read-only and must not be referenced by path from tests). Cross-
 method and self-consistency tests stay where they are, renamed `test-consistency-*`
-so the distinction is visible. Size: all CSV/txt, well under 100 KB. Check the
-`.results.txt` header carries no host details (per the oracle README it does not).
+so the distinction is visible. Size: all CSV/txt, well under 100 KB.
 
 ---
 
@@ -1139,14 +1068,14 @@ A5 (conditions helpers) ──┬──> A2 (GPQ: classed time-point error) ─�
                           ├──> A1 (deprecated/defunct class; NOT blocked by A2: phase 0 outcome A)
                           ├──> A3 (KR vcovAdj; dependency error class) ──> B ci_df / slope_ci_df KR
                           ├──> A4 (mls_rule; numerical error class) ──> B ngm Gv guard
-T (oracle scaffolding) ───┴── needed as the acceptance gate for A3, A4, B (SAS fixtures)
+T (oracle scaffolding) ───┴── needed as the acceptance gate for A3, A4, B
 B plumbing (control object passed down) ──> all B arms ──> C (sides for new arms)
 ```
 
 Proposed implementation order (each step is one reviewable commit series, with
 defaults unchanged unless stated):
 1. **T scaffolding + `.Rbuildignore` `^notes$`**: move the published-number tests,
-   add the SAS part1 fixtures and parser. No R/ changes. (Low risk.) **Scaffolding
+   add the fixtures and helpers. No R/ changes. (Low risk.) **Scaffolding
    done on `dev`** (registry, helpers, hashes, templates; see the T status). Moving
    the inline published-number tests into oracle files is still open.
 2. **A5 helpers + inventory fixes**. **Done on `dev`** (see A5 status; #15, #19
@@ -1154,7 +1083,7 @@ defaults unchanged unless stated):
    guard and the synthesis check in the review follow-ups; #10 and the
    every-verb singular warning declined. **A5 closed.**)
 3. **A3** KR vcovAdj. **Done on `dev`** (decision a). Gates: KR vs pbkrtest
-   (SE + df, 1e-8) on all five SAS fits; KR SE vs SAS on the balanced fits only.
+   (SE + df, 1e-8) on the five simulated fits.
 4. **A4** `.mls_upper` + TBG. **Done on `dev`** (no negative k_j reachable from the
    synthesis; guard with a round-off tolerance).
 5. **A2** GPQ hardening. **Done on `dev`** (CRN, pivots/eval split, recorded

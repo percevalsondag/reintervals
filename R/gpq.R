@@ -696,7 +696,10 @@
 #'   diagnostics attribute carries the same fields as the [ti_lmm()] GPQ route
 #'   (`df`, `tau2_med`, `s2e_med`, `frac_boundary`, `K`, `df_resid`, `phi1`,
 #'   `c_resid`, `route_reason = "method"`, `n_na_draws`, `mc_se_lower`,
-#'   `mc_se_upper`, `gpq_seed`, `rng_kind`, `mc_sections`).
+#'   `mc_se_upper`, `gpq_seed`, `rng_kind`, `mc_sections`, `M`,
+#'   `limitation_flag`). One-sided rows signal the documented limitation
+#'   warning of [ti_lmm()] (section "Known limitation (one-sided GPQ
+#'   limits)"; `c_resid = 0` is the batch-mean target).
 #' @references Oliva-Aviles C, Hauser P (2025). *Technometrics* 67(2):193-202. \doi{10.1080/00401706.2024.2407324}
 #' @seealso [ti_lmm()] (the dispatcher), [ti_anova_raw()] (the ANOVA raw engine),
 #'   [reintervals-models].
@@ -722,6 +725,7 @@ ti_gpq_raw <- function(y, time, batch, t0, P = 0.95, alpha = NULL, level = NULL,
   ## route_reason = "method": the GPQ engine was called explicitly
   out <- .gpq_rows(g, design = "random_slope_correlated", sides = sides,
                    singular = FALSE)
+  attr(out, "M") <- as.integer(control$M)
   out$route_reason <- "method"
   .unify_intervals(out, model = NULL, kind = "ti", P_value = P, verb = "ti_gpq_raw()")
 }

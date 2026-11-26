@@ -343,9 +343,10 @@
           else if (!is.null(why) && !is.na(why)) why else "non-finite df"
         reasons <<- c(reasons, row_reason)
       }
-      ## the PI rows carry the reason per row (NA where the df did not fall
-      ## back), as the random-intercept rows do
-      if (kind == "PI") row$df_fallback_reason <- row_reason
+      ## every row (CI, PI, new-group mean) carries the reason per row (NA
+      ## where the df did not fall back, and on a slope_ci_df arm other than
+      ## the default, which has no fallback), as the random-intercept rows do
+      row$df_fallback_reason <- row_reason
       row
     })
     out <- do.call(rbind, rows); rownames(out) <- NULL

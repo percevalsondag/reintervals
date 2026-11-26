@@ -13,9 +13,12 @@ Oracle `liao2005-sulfur` (`../oracles.csv`), checked by `test-oracle-lli2005.R`.
   distribution N(mu, sigma_alpha^2), [4.473, 4.870]. The authors computed it by
   Monte Carlo with K = 10000 runs, so the printed limits carry their own
   Monte-Carlo error (about 0.005 per limit).
-- **Transcription.** Typed from the printed Table 2 and section 5.4 on
-  2026-11-25, for Perceval Sondag (AI-assisted transcription). The test
-  checks the data against the printed bottle means (3 dp) and sse (4 dp).
+- **Transcription.** Transcribed from the printed Table 2 and section 5.4 on
+  2026-11-25; verified against the printed bottle means (3 dp) and sse (4 dp),
+  which the test recomputes from the data.
 - **SHA-256:**
-  - `data.csv`: `8c38f0d72fca53545c2bf5d8cd0d3e9227f8f7f9ef760a1140d699653843f482`
-  - `printed.csv`: `929283e9513cdcc28c234bda801f358d2f89bc2507098918a7af52eecfab5947`
+  - `data.csv`: `43a4a40b59cb344709f9c463fc6c0e6342eade64c280b2d0355d24f2071720ef`
+  - `printed.csv`: `8f33ad690831c3c45ca6560a382198f68b03d3471d77472eaeed9bcf931fbb8e`
+
+  (The provenance header lines were reworded on 2026-11-25; the data rows are
+  unchanged.)

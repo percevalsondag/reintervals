@@ -129,9 +129,7 @@ crossed designs. Kenward-Roger df are used only on request,
 **pbkrtest** package and errors if it is not installed, so results never depend
 on which packages happen to be installed. It is Kenward & Roger (1997) as
 implemented in pbkrtest: the KR df with the standard error from the KR-adjusted
-covariance (`pbkrtest::vcovAdj()`). SAS PROC MIXED `DDFM=KR` can differ on
-unbalanced data; in the package's checks it reported the Satterthwaite df with
-an adjusted standard error. The df source is reported in
+covariance (`pbkrtest::vcovAdj()`). The df source is reported in
 `attr(., "diagnostics")$df_method`. Random-slope models use their own
 generalized Satterthwaite df.
 

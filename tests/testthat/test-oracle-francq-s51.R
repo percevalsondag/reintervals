@@ -6,8 +6,8 @@
 # Statistics in Medicine 2020;39(14):2015. The uncorrected 2019 Table 2 has sign
 # and digit misprints and is not used.
 #
-# Model (the authors' SAS PROC MIXED per procedure: MODEL ESM = slice / NOINT,
-# RANDOM surgeon, DDFM=KR): esm ~ 0 + factor(slice) + (1 | surgeon), REML, fitted
+# Model (the authors', per procedure: fixed slice means without an intercept,
+# random surgeon, Kenward-Roger df): esm ~ 0 + factor(slice) + (1 | surgeon), REML, fitted
 # separately for each procedure. The REML likelihood factorises over procedures
 # because no parameter is shared. Each fit is balanced (23 surgeons x 4 slices):
 # H_surgeon on 22 df, H_residual on 92 - 4 - 22 = 66 df, k = 1/n0 = 1/4.
@@ -19,7 +19,7 @@
 # print corresponds to Var(total) = 2 x 4.058114^2 / 84.93 = 0.38781 (0.023%
 # smaller), which rounds to the printed 0.388 too. The printed digits cannot
 # separate the two, so the package value is asserted at its own 2 dp. A typo or
-# a slightly different SAS optimum are both possible.
+# a slightly different optimum in the authors' software are both possible.
 
 esm_data <- function() {
   d <- utils::read.csv(test_path("fixtures", "francq2019_esm", "data.csv"), comment.char = "#")

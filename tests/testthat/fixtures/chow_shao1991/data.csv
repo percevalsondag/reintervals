@@ -1,7 +1,6 @@
 # Chow S-C, Shao J (1991). Estimating drug shelf-life with random batches. Biometrics 47(3):1071-1079. doi:10.2307/2532659
 # Table 2, p. 1078: potency (% of label claim), 24 batches at 0, 12, 24, 36 months
-# Transcribed by Perceval Sondag 2026-11-22
-# Transcription verified by recomputing the paper's printed WLS estimates (section 5): test-oracle-chow-shao.R
+# Transcribed from Chow S-C, Shao J (1991), Biometrics 47(3):1071-1079, doi:10.2307/2532659, Table 2 (p. 1078) on 2026-11-22; verified against the printed section 5 WLS estimates a_w = 103.968 (SE .289), b_w = -.199 (SE .009) and the batch-21 OLS line 102.500 (SE 1.775), -.333 (SE .079) (test-oracle-chow-shao.R).
 batch,month,potency
 1,0,105
 1,12,104

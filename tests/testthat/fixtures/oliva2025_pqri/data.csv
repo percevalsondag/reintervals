@@ -1,5 +1,6 @@
 # PQRI stability data (assay, % label claim), 9 lots x 7 times, as used in Oliva-Aviles C, Hauser P (2025). Technometrics 67(2):193-202. doi:10.1080/00401706.2024.2407324, Section 6; originally Schwenke et al. (2020) (full citation in README.md)
-# lot 1-9 = PQRI batches b1, b2, b5, b6, b8, b9, b10, b12, b20; unbalanced = row kept in the paper's unbalanced dataset (drops t >= 18 for lots 1, 4, 7 and t = 24 for lots 2, 5, 8). Values from the data chunk of the authors' supplementary code (data only; none of their code is in the repo)
+# lot 1-9 = PQRI batches b1, b2, b5, b6, b8, b9, b10, b12, b20; unbalanced = row kept in the paper's unbalanced dataset (drops t >= 18 for lots 1, 4, 7 and t = 24 for lots 2, 5, 8).
+# Transcribed from the data chunk of the supplementary code (SupplementaryCode.Rmd) of Oliva-Aviles C, Hauser P (2025), Technometrics 67(2):193-202, doi:10.1080/00401706.2024.2407324, Section 6 on 2026-11-22; verified against the Section 6 design (9 lots x 7 times, 54 rows in the unbalanced dataset) and the printed shelf lives 27.9 / 23.3 / 30.1 months (test-oracle-oliva-pqri.R). Data only; none of the authors' code is in the repo.
 lot,time,assay,unbalanced
 1,0,103.7,TRUE
 1,3,99.4,TRUE

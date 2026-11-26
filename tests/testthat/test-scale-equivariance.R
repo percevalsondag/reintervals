@@ -7,7 +7,8 @@
 # derivative is now taken on psi = phi / s, s = the residual variance, with
 # relative steps for every non-zero psi_j (.nd_deriv). Time units: for
 # t -> c * t (newdata t0 rescaled the same way) every interval, SE, variance
-# and df is unchanged.
+# and df is unchanged, and so is every flag, the advisory `boundary` included
+# (judged on the response scale since 1.0.0; see the last test).
 #
 # Tolerances (element-wise relative): 1e-8 for limits / estimates / SEs /
 # variances on closed-form and Satterthwaite rows, 1e-10 on GPQ rows (same
@@ -59,10 +60,6 @@ expect_equivariant <- function(x1, xc, c, info, kind = c("y", "time"), time_col 
     expect_identical(sort(names(b)), sort(names(a)), info = paste(info, where))
     for (nm in names(a)) {
       va <- a[[nm]]; vb <- b[[nm]]; lab <- paste(info, where, nm)
-      ## the advisory near-boundary flag compares s2_1 (y^2 per time^2) with the
-      ## variance total; it is documented as time-scale dependent
-      ## (?vfun_components) and drives no route or df: not compared under t -> c t
-      if (kind == "time" && nm == "boundary") next
       if (!is.numeric(va)) { expect_identical(vb, va, info = lab); next }
       tl <- if (nm %in% c("lower", "upper")) tol$lim else 1e-8
       tol_lim <- if (length(va) == length(gpq)) ifelse(gpq, 1e-10, tl) else
@@ -482,4 +479,37 @@ test_that("gpq_two_sided = 'content' is equivariant under y -> c y and invariant
       expect_equivariant(b$value, s$value, c, info, kind = "time", time_col = "time")
     }
   }
+})
+
+## The advisory near-boundary flag on a fit with a tiny, non-singular slope
+## variance: sleepstudy (Days || Subject) at a fixed theta (no optimization),
+## slope theta 1e-3 (lme4 calls a fit singular below 1e-4), so the slope
+## contribution s2_1 * var(Days) is about 4e-6 of the total variance. The flag
+## must be TRUE at every y and time scale; the pre-1.0.0 rule (s2_1 compared raw,
+## time_var = 1) flipped to FALSE once time was divided by 100.
+test_that("the boundary flag is invariant under y -> c y and t -> c t (flagged fit)", {
+  skip_if_not_installed("lme4")
+  ss <- lme4::sleepstudy
+  th <- c(1, 1e-3)
+  fit_at <- function(cy, ct) {
+    d <- ss; d$Reaction <- d$Reaction * cy; d$Days <- d$Days * ct
+    lmer_q(Reaction ~ Days + (Days || Subject), d, start = list(theta = th * c(1, 1 / ct)),
+           control = lme4::lmerControl(optimizer = NULL))
+  }
+  f1 <- fit_at(1, 1)
+  expect_false(isTRUE(lme4::isSingular(f1)))
+  flag <- function(fm, ct) {
+    nd <- data.frame(Days = c(0, 4.5, 9) * ct)
+    out <- lapply(list(ci = ci_lmm, pi = pi_lmm, ngm = new_group_mean_lmm),
+                  function(v) quiet_df_fallback(v(fm, nd))$boundary)
+    unlist(out, use.names = FALSE)
+  }
+  expect_true(all(flag(f1, 1)))
+  for (c in y_scales) expect_identical(flag(fit_at(c, 1), 1), flag(f1, 1), info = paste("y x", c))
+  for (c in t_scales) expect_identical(flag(fit_at(1, c), c), flag(f1, 1), info = paste("t x", c))
+  ## the definition: slope variance times the variance of the observed times
+  p <- .vfun_parse(fit_at(1, 1e-2))
+  expect_equal(p$time_var, mean((ss$Days - mean(ss$Days))^2) * 1e-4, tolerance = 1e-12)
+  expect_true(.vfun_is_boundary(p$phi, 1e-4, p$time_var))
+  expect_false(.vfun_is_boundary(p$phi, 1e-4, 1))     # the old, unit-dependent rule
 })

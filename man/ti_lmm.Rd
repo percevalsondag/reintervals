@@ -73,6 +73,15 @@ the value for \code{ti}, \code{NA} for the coverage intervals); \code{sides};
 \code{\link[=lmm_interval_control]{lmm_interval_control()}}); \code{design} (the route-independent model class, see
 \link{reintervals-models});
 \item the per-row flags \code{singular}, \code{boundary}, \code{vg_floored}.
+\code{boundary} is advisory (nothing routes on it): on the random-slope
+confidence, prediction and new-group-mean rows computed from the
+fitted variance components (every arm but \code{"gpq"} and \code{"fv-anova"})
+it is \code{TRUE} when some random-effect variance is below
+\code{1e-4} times the total variance, every term on the response scale
+(the intercept variance, the slope variance times the population
+variance of the observed times, and the residual variance), so it does
+not depend on the units of the response or of time; it is \code{FALSE} or
+\code{NA} on the other routes.
 }
 \code{attr(., "diagnostics")} is a list of engine-specific extras (degrees of
 freedom \code{df}; for the random-intercept confidence interval its source
@@ -95,13 +104,17 @@ every df are unchanged by the units of the response or of time; next to it
 \code{vc_cov_reason}, why that covariance is unavailable --- \code{NA} when it was
 obtained, else \code{"singular fit"}, \code{"singularity check failed; treated as singular"}, \code{"sentinel"} (the default and the retried Hessian both left the
 valid region of the variance parameters), \code{"unstable numerical Hessian"},
-or \code{"Hessian not PD or not invertible"}; for the random-intercept
-confidence, prediction and new-group-mean intervals and the random-slope
-prediction interval \code{df_fallback_reason},
+or \code{"Hessian not PD or not invertible"}; for the confidence, prediction
+and new-group-mean intervals (random intercept and random slope)
+\code{df_fallback_reason},
 per row, why the default Satterthwaite df fell back to containment (e.g.
-\code{"singular fit"}, \code{"df below 1"}, \code{"non-finite df"}; for the
+\code{"singular fit"}, \code{"singularity check failed; treated as singular"},
+\code{"df below 1"}, \code{"non-finite df"}, or the \code{vc_cov_reason}; for the
 \code{ngm_method = "broad-inference"} arm, why its df could not be formed, the
-rows with \code{NA} limits), \code{NA} where it did not; standard
+rows with \code{NA} limits), \code{NA} where it did not, and \code{NA} on the arms with
+no fallback (\code{slope_ci_df = "kenward-roger"} / \code{"k-minus-1"}, and the
+random-slope \code{slope_ngm_method} and \code{slope_pi_method} arms); on GPQ rows
+the number of draws \code{M}; standard
 error \code{se}; and any GPQ / ANOVA intermediates);
 \code{attr(., "grouping")} is the random-intercept topology (\code{"oneway"},
 \code{"nested"}, \code{"crossed"}, or \code{NA} for slope models).
@@ -201,7 +214,9 @@ that \code{P}, \code{level} and \code{sides}. With \code{seed = NULL} a vectoris
 one seed (one draw set) for all its rows, whereas separate scalar calls each
 draw their own seed, so the equality holds only with an explicit seed. The
 closed-form engines compute each combination with their scalar code.
-Warnings are signalled once per call.
+Warnings are signalled once per call. Every GPQ row (both routes, the
+GPQ new-group-mean arm and \code{\link[=ti_gpq_raw]{ti_gpq_raw()}}) reports the number of draws \code{M}
+in the diagnostics.
 
 On a random-slope model the GPQ route requires
 every lot to have at least two distinct time points and otherwise signals
@@ -211,6 +226,29 @@ from the per-lot OLS fits of the raw data and ignores the fitted
 random-effects structure: on an independent (\code{||}) random-slope fit it is the
 same as on the correlated (unstructured) fit of the same data.
 }
+\section{Known limitation (one-sided GPQ limits)}{
+
+On one-sided GPQ tolerance-interval rows (both routes, and \code{\link[=ti_gpq_raw]{ti_gpq_raw()}})
+a warning of class \code{reintervals_warning_limitation} is signalled, once per
+call, in two cases (the interval itself is unchanged):
+\itemize{
+\item \strong{confidence below 0.95}, either target: in validation (step 13,
+random-slope designs), one-sided GPQ limits at 90\% confidence covered
+0.879 to 0.90 (median 0.894 to 0.903);
+\item \strong{confidence 0.95 or above with \code{over = "group_mean"}} (\code{c_resid = 0} in
+\code{\link[=ti_gpq_raw]{ti_gpq_raw()}}): in validation (step 13), one-sided batch-mean GPQ limits
+at 95\% confidence covered 0.936 to 0.95 (median 0.948).
+}
+
+Two-sided GPQ intervals are not affected at these levels. The figures come
+from random-slope designs; on the random-intercept GPQ route
+(\code{method = "gpq"}, unvalidated, with its own
+\code{reintervals_warning_unvalidated}) the limitation warning applies as well.
+Each GPQ row records \code{attr(., "diagnostics")$limitation_flag}:
+\code{"gpq_one_sided_lowconf"}, \code{"gpq_one_sided_group_mean"}, or \code{NA} (every
+two-sided row, and one-sided rows outside both cases).
+}
+
 \section{Availability}{
 
 Tolerance intervals require a closed-form variance decomposition. They are

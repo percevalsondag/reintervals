@@ -7,9 +7,9 @@
 # Random intercept (ngm_method):
 #   "broad-inference"  W = V_F + sum of the between-group variance components
 #                      (REML, as lme4 returns them), Satterthwaite df
-#                      2 W^2 / (g' A g) on the variance scale (SAS PROC MIXED
-#                      broad-inference prediction of a new group, DDFM=SATTERTH;
-#                      McLean, Sanders & Stroup 1991). No df fallback: a df
+#                      2 W^2 / (g' A g) on the variance scale (the
+#                      broad-inference prediction of a new group; McLean,
+#                      Sanders & Stroup 1991). No df fallback: a df
 #                      that cannot be formed (no covariance of the variance
 #                      parameters, e.g. a singular fit), is non-finite or is
 #                      <= 0 gives NA limits, ngm_df_failed; any positive df,
@@ -26,7 +26,7 @@
 #                      Satterthwaite df of the whole W, 2 W^2 / (g' A g), g the
 #                      gradient of V_F + V_G in the variance-covariance
 #                      parameters, A their observed-information covariance
-#                      (SAS DDFM=SATTERTH broad inference of a new lot). Same
+#                      (broad inference of a new lot). Same
 #                      no-fallback rule as the random-intercept arm.
 #   "gpq"              generalized prediction interval on the GPQ pivots
 #                      (.gpq_ngm_core, gpq.R).
@@ -222,7 +222,7 @@
 ## at t0, for parameters `phi` with covariance `cov` (the observed-information
 ## inverse at phi). V_F(phi) is parsed$vF_fun; its gradient is numerical, that
 ## of V_G analytic. Returns c(W, df); df is NA when it cannot be formed.
-## Shared by slope_ngm_method = "broad-inference" and its SAS-estimate check.
+## Used by slope_ngm_method = "broad-inference".
 .ngm_rs_broad_df <- function(parsed, phi, cov, t0, W = NULL) {
   x0 <- stats::setNames(c(1, t0), c("(Intercept)", parsed$fe_time))
   if (is.null(W)) W <- parsed$vF_fun(phi, x0) + .vfun_value_VG(parsed$type, phi, t0)
@@ -246,6 +246,7 @@
                            W = comp$var_mean + comp$V_G)[["df"]]
     failed <- !is.finite(df) || df <= 0
     row$df <- df; row$df_rule <- "satterthwaite-broad"; row$ngm_df_failed <- failed
+    row$df_fallback_reason <- NA_character_   # no fallback on this arm
     if (failed) {
       row$lower <- NA_real_; row$upper <- NA_real_
     } else {
@@ -278,8 +279,10 @@
                       frac_boundary = g$frac_boundary, n_na_draws = g$n_na_draws,
                       mc_se_lower = g$mc_se_lower, mc_se_upper = g$mc_se_upper,
                       K = g$K, df_resid = g$df_resid, phi1 = g$phi1,
+                      df_fallback_reason = NA_character_,   # no df, no fallback
                       stringsAsFactors = FALSE)
     for (a in c("gpq_seed", "rng_kind", "mc_sections")) attr(out, a) <- attr(g, a)
+    attr(out, "M") <- as.integer(control$M)
     return(out)
   }
   if (arm == "fv-anova") {
@@ -289,7 +292,9 @@
                       df = f$df, df_rule = "k-minus-1", W = f$W, sides = sides,
                       design = .slope_design(model), method = "reml",
                       singular = singular, boundary = NA, vg_floored = NA,
-                      K = f$K, stringsAsFactors = FALSE))
+                      K = f$K,
+                      df_fallback_reason = NA_character_,   # fixed df K - 1
+                      stringsAsFactors = FALSE))
   }
   .abort("Internal: unknown slope_ngm_method arm '", arm, "'.",
          class = "reintervals_error_internal")

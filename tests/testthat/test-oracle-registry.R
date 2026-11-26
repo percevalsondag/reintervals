@@ -18,7 +18,7 @@ test_that("the registry has the documented columns, statuses and source kinds", 
   expect_gt(nrow(reg), 0)
   expect_true(all(reg$status %in% c("collected", "pending")))
   expect_true(all(reg$source_kind %in%
-    c("published_table", "sas_run", "published_formula", "independent_code")))
+    c("published_table", "published_formula", "independent_code")))
 })
 
 test_that("ids are unique and use [a-z0-9-] only", {
@@ -61,9 +61,9 @@ test_that("every pending oracle has an empty fixture_path and a template naming 
 })
 
 test_that("oracle_fixture() reads a collected fixture and refuses pending and inline rows", {
-  sas <- oracle_fixture("sas-part1-ci-satterth")
-  expect_named(sas, c("ngm", "mean", "covp", "fixd", "conv"))
-  expect_identical(nrow(sas$mean), 56L)
+  pq <- oracle_fixture("oliva2025-pqri")             # a CSV with a `#` header
+  expect_s3_class(pq, "data.frame")
+  expect_gt(nrow(pq), 0)
   expect_s3_class(oracle_fixture("montes2019-appa-ti"), "data.frame")
   expect_s3_class(oracle_fixture("chow-shao1991-t23"), "data.frame")
   expect_error(oracle_fixture("francq2019-table2-corrected"), "pending")

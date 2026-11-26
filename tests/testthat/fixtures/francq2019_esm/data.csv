@@ -1,5 +1,6 @@
 # Francq BG, Lin D, Hoyer W (2019). Statistics in Medicine 38(30):5603-5622. doi:10.1002/sim.8386. Supporting Information, Table 1 (orthopedic surgery, error on safe margin)
-# surgeon 1-23; seniority 1 = senior, 2 = junior; procedure 1 = free hand, 2 = navigated; slice 1-4. Extracted from the supplement PDF text 2026-11-22 by Perceval Sondag; check: per-procedure REML fits give surgeon / residual variance 7.349 / 18.074 and 0.447 / 3.611 (paper section 5.1)
+# surgeon 1-23; seniority 1 = senior, 2 = junior; procedure 1 = free hand, 2 = navigated; slice 1-4.
+# Transcribed from Francq BG, Lin D, Hoyer W (2019), Statistics in Medicine 38(30):5603-5622, doi:10.1002/sim.8386, Supporting Information Table 1 on 2026-11-22; verified against the printed section 5.1 per-procedure surgeon / residual variances 7.349 / 18.074 (free hand) and 0.447 / 3.611 (navigated) (test-oracle-francq-s51.R).
 surgeon,seniority,procedure,slice,esm
 1,1,1,1,-0.199433025
 1,1,1,2,-3.257110126
