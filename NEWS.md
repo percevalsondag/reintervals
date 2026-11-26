@@ -91,7 +91,9 @@
   only when `df_F / df_C >= pi_df_ratio` (new control, default 1.5, must be
   > 1). `ci_df = "capped-kr"` uses the Kenward-Roger standard error with
   `df = min(df_KR, df_C)`. The diagnostics of every random-intercept PI row
-  gain `df_F`, `df_C` and `pi_guard_fired`, and of every random-intercept CI
+  gain `df_F`, `df_C`, `pi_guard_fired` (the arm's predicate: `TRUE` on every
+  `"capped"` row, `df_F / df_C >= pi_df_ratio` on `"ratio-guard"` rows) and
+  `pi_cap_binds` (`df_C < df_F` on both arms), and of every random-intercept CI
   row `df_KR`, `df_C` and `ci_cap_binds` (`NA` on random-slope rows). The
   constructions come from a post hoc training analysis of the step-13 data
   and are being tested on fresh seeds in step 13b.

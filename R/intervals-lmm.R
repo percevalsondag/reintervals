@@ -138,6 +138,8 @@ intervals_lmm <- function(model, newdata = NULL, level = 0.95, conf = 0.95,
                     `ratio-guard` = df_F / df_C >= pi_df_ratio, NA)
     if (pi_method == "containment") theta$df_pi <- .ddf_containment(model)
     if (isTRUE(guard)) theta$df_pi <- min(df_F, df_C)
+    ## the PI counterpart of ci_cap_binds: df_C < df_F, on the two guarded arms
+    cap_binds <- if (pi_method %in% c("capped", "ratio-guard")) df_C < df_F else NA
     pis <- lapply(seq_len(nr), function(i) pi_newobs(make_comp(i, Inf), level = level))
     blocks$PI <- cbind(base, data.frame(
       type = "PI",
@@ -150,7 +152,7 @@ intervals_lmm <- function(model, newdata = NULL, level = 0.95, conf = 0.95,
                                  isTRUE(theta$pi_df_fallback))
         theta$fallback_reason else NA_character_,
       level = level, df_F = df_F, df_C = df_C, pi_guard_fired = guard,
-      stringsAsFactors = FALSE
+      pi_cap_binds = cap_binds, stringsAsFactors = FALSE
     ), row.names = NULL)
   }
 

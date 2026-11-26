@@ -117,10 +117,18 @@
 #'   `df = min(df_F, df_C)` when `df_F / df_C >= pi_df_ratio` and `df_F`
 #'   otherwise; `df_F` is the Francq df after its own containment fallback
 #'   (so `df_F = df_C` on a fallback and the guard never fires there) and
-#'   `df_C` the containment df. Every random-intercept PI row reports `df_F`,
-#'   `df_C` and `pi_guard_fired` (`TRUE` on `"capped"` rows; `TRUE`/`FALSE` on
-#'   `"ratio-guard"` rows; `NA` on the other arms) in `attr(., "diagnostics")`;
-#'   random-slope PI rows report them as `NA`. There is no
+#'   `df_C` the containment df. Every random-intercept PI row reports, in
+#'   `attr(., "diagnostics")`, `df_F`, `df_C` and two flags:
+#'   `pi_guard_fired`, whether the arm's predicate holds, so whether the df
+#'   used is `min(df_F, df_C)` (`TRUE` on every `"capped"` row;
+#'   `df_F / df_C >= pi_df_ratio` on `"ratio-guard"` rows; `NA` on the other
+#'   arms), and `pi_cap_binds`, `df_C < df_F`, whether the containment df is
+#'   the smaller of the two (on `"capped"` and `"ratio-guard"` rows; `NA` on
+#'   the other arms), the counterpart of `ci_cap_binds`. The df used differs
+#'   from `df_F` exactly when both are `TRUE`; on a `"ratio-guard"` row
+#'   `pi_cap_binds` can be `TRUE` while the guard does not fire, and a fired
+#'   ratio guard always has `pi_cap_binds = TRUE` (`pi_df_ratio > 1`). Random-slope
+#'   PI rows report all four fields as `NA`. There is no
 #'   Kenward-Roger prediction interval: KR adjusts fixed-effect contrasts only,
 #'   and the prediction variance includes estimated variance components. Not
 #'   applied to random-slope models (see `slope_pi_method`).
@@ -600,9 +608,10 @@ lmm_interval_control <- function(seed = NULL, M = 20000L,
 }
 
 ## Per-row diagnostics of the step-13b arms (under validation): CI rows
-## df_KR, df_C, ci_cap_binds; PI rows df_F, df_C, pi_guard_fired; TI rows
+## df_KR, df_C, ci_cap_binds; PI rows df_F, df_C, pi_guard_fired, pi_cap_binds; TI rows
 ## ti_R, ti_df_T, ti_warn_fired, rerouted, reroute_reason.
 .step13b_cols <- c("df_KR", "df_C", "ci_cap_binds", "df_F", "pi_guard_fired",
+                   "pi_cap_binds",
                    "ti_R", "ti_df_T", "ti_warn_fired", "rerouted", "reroute_reason")
 
 ## Value columns an engine may emit; everything else in the native frame is an
@@ -1072,9 +1081,9 @@ new_group_mean_lmm <- function(model, newdata = NULL, alpha = NULL, level = NULL
   ## the step-13b CI / PI diagnostics, NA where the engine does not set them
   ## (random-slope rows: ci_df / pi_df do not apply)
   new_cols <- switch(kind, CI = c("df_KR", "df_C", "ci_cap_binds"),
-                     PI = c("df_F", "df_C", "pi_guard_fired"), character(0))
+                     PI = c("df_F", "df_C", "pi_guard_fired", "pi_cap_binds"), character(0))
   for (cn in setdiff(new_cols, names(out)))
-    out[[cn]] <- if (cn %in% c("ci_cap_binds", "pi_guard_fired")) NA else NA_real_
+    out[[cn]] <- if (cn %in% c("ci_cap_binds", "pi_guard_fired", "pi_cap_binds")) NA else NA_real_
   ## the df arm of every option: the value applied here, or "not_applicable"
   for (r in names(rules <- .arm_rules(applied))) out[[r]] <- rules[[r]]
   tag <- if (.has_random_slope(model)) NULL else "ems-mls"   # slope row already tagged

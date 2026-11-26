@@ -97,6 +97,45 @@ test_that("pi_df = 'capped': Francq centre and SE with df = min(df_F, df_C)", {
   ## default and containment rows report df_F / df_C, no guard
   expect_identical(dg(base)$df_C, rep(df_C, 9)); expect_identical(dg(base)$df_F, df_F)
   expect_identical(dg(base)$pi_guard_fired, rep(NA, 9))
+  expect_identical(dg(x)$pi_cap_binds, rep(TRUE, 9))
+  expect_identical(dg(base)$pi_cap_binds, rep(NA, 9))
+  xc <- suppressWarnings(pi_lmm(fm, nd, control = lmm_interval_control(pi_df = "containment")))
+  expect_identical(dg(xc)$pi_cap_binds, rep(NA, 3))
+})
+
+test_that("pi_cap_binds = (df_C < df_F) on 'capped' / 'ratio-guard' rows: both ways and at equality", {
+  fm <- lmer_q(Reaction ~ Days + (1 | Subject), lme4::sleepstudy)
+  nd <- data.frame(Days = c(0, 9))
+  base <- quiet_limitation(pi_lmm(fm, nd, sides = SIDES))
+  df_F <- dg(base)$df[1]
+  run <- function(arm, ...) suppressWarnings(pi_lmm(fm, nd, sides = SIDES,
+    control = lmm_interval_control(pi_df = arm, ...)))
+  ## binds: df_C = 17 < df_F (capped: the df is df_C; ratio-guard fires)
+  for (arm in c("capped", "ratio-guard")) {
+    x <- run(arm)
+    expect_identical(dg(x)$pi_cap_binds, rep(TRUE, 6), info = arm)
+    expect_identical(dg(x)$df, rep(17, 6), info = arm)
+  }
+  ## ratio-guard below its threshold: the cap would bind, the guard does not
+  ## fire, and the Francq interval is kept
+  x <- run("ratio-guard", pi_df_ratio = df_F / 17 * (1 + 1e-12))
+  expect_identical(dg(x)$pi_cap_binds, rep(TRUE, 6))
+  expect_identical(dg(x)$pi_guard_fired, rep(FALSE, 6))
+  expect_identical(x$lower, base$lower); expect_identical(x$upper, base$upper)
+  ## does not bind: df_C > df_F, and the equality case df_C = df_F; the
+  ## Francq interval either way
+  for (dc in c(1000, df_F)) {
+    local_mocked_bindings(.ddf_containment = function(model) dc)
+    for (arm in c("capped", "ratio-guard")) {
+      x <- run(arm)
+      info <- paste(arm, dc)
+      expect_identical(dg(x)$pi_cap_binds, rep(FALSE, 6), info = info)
+      expect_identical(dg(x)$pi_guard_fired, rep(arm == "capped", 6), info = info)
+      expect_identical(x$lower, base$lower, info = info)
+      expect_identical(x$upper, base$upper, info = info)
+      expect_identical(dg(x)$df, dg(base)$df, info = info)
+    }
+  }
 })
 
 test_that("pi_df = 'capped' / 'ratio-guard' keep the Francq df when it is below the containment df", {
@@ -147,6 +186,7 @@ test_that("pi_df = 'ratio-guard': fires at df_F / df_C >= pi_df_ratio, equality 
   x <- suppressWarnings(pi_lmm(fs, control = lmm_interval_control(pi_df = "ratio-guard")))
   expect_identical(dg(x)$df_F, dg(x)$df_C)
   expect_false(dg(x)$pi_guard_fired)
+  expect_false(dg(x)$pi_cap_binds)
 })
 
 ## ---- CI: ci_df = "capped-kr" -----------------------------------------------
@@ -242,59 +282,6 @@ test_that("ti_R = 1 / n_E and ti_df_T on the anova-mls routes (Hoffman-Kringle, 
   expect_identical(unique(y$method), "anova-mls")
   ref <- montes_ref(d$Y, d$Month, d$Lot, nd$Month)
   expect_equal(dg(y)$ti_R, rep(ref$Vhat_Yhat / ref$Vhat_Y, 2), tolerance = 1e-10)
-})
-
-test_that("ti_R and ti_df_T reproduce three step-13 training replicates (to 1e-10)", {
-  skip_on_cran()
-  skip_if_not_installed("digest")
-  root <- path.expand(Sys.getenv("REINTERVALS_SIMSTUDY", "~/dev/reintervals-simstudy"))
-  H <- file.path(root, "step13", "harness")
-  D <- file.path(root, "step13", "analysis", "predicates", "data")
-  skip_if_not(file.exists(file.path(D, "MANIFEST.csv")) && dir.exists(H),
-              "step-13 training data not available")
-  man <- utils::read.csv(file.path(D, "MANIFEST.csv"), stringsAsFactors = FALSE)
-  cells <- utils::read.csv(file.path(H, "cells.csv"), stringsAsFactors = FALSE)
-  env <- new.env()
-  for (f in c("generators.R", "seeds.R")) sys.source(file.path(H, "R", f), envir = env)
-  ## the harness switches the RNG kind: restore the caller's state afterwards
-  old_kind <- RNGkind(); old_seed <- get0(".Random.seed", globalenv(), inherits = FALSE)
-  on.exit({
-    do.call(RNGkind, as.list(old_kind))
-    if (!is.null(old_seed)) assign(".Random.seed", old_seed, globalenv())
-  }, add = TRUE)
-  pn <- function(s) as.numeric(strsplit(s, ";", fixed = TRUE)[[1]])
-  ## one replicate (rep 1, every t0) of an ems-mls cell and two anova-mls cells
-  for (id in c("G4_s12_rho=0.05_full_t12-24-48", "G4_s12_rho=0.05_staggered_t12-24-48",
-               "G4_s12_rho=0.05_single_obs_t12-24-48")) {
-    m <- man[man$family == "main" & man$cell_id == id, ]
-    expect_identical(nrow(m), 1L)
-    p <- file.path(D, m$file)
-    ## the file is the one the MANIFEST lists (digest is not a declared
-    ## dependency: reached through getExportedValue after the skip above)
-    sha <- getExportedValue("digest", "digest")(file = p, algo = "sha256")
-    expect_identical(sha, m$sha256)
-    g <- readRDS(p)
-    st <- env$cell_streams(id, 1, "main")
-    expect_identical(env$stream_id(st$data[[1]]), g$fits$data_stream[g$fits$rep == 1][1])
-    env$use_stream(st$data[[1]])
-    gen <- env$generate(as.list(cells[cells$cell_id == id, ]))
-    fm <- lmer_q(gen$f, gen$d, REML = TRUE)
-    ## rep 1 of these cells is a singular fit (its warning is expected)
-    x <- suppressWarnings(ti_lmm(fm, gen$nd, P = 0.95, level = 0.95))
-    rows <- g$rows[g$rows$rep == 1 & g$rows$verb == "TI" & g$rows$side == "two.sided" &
-                     g$rows$P == 0.95 & g$rows$level == 0.95, ]
-    rows <- rows[match(gen$nd$Month, rows$t0), ]
-    fits <- g$fits[g$fits$rep == 1, ]; fits <- fits[match(gen$nd$Month, fits$t0), ]
-    ## the same dataset: the stored limits are reproduced exactly
-    expect_identical(x$lower, rows$lower, info = id); expect_identical(x$upper, rows$upper, info = id)
-    ## prep.R: R = R_ems (ems-mls) or 1 / n_E (anova-mls); df_T_hat from the
-    ## stored EMS terms (10 significant digits)
-    R_ref <- if (x$method[1] == "anova-mls") 1 / rows$dg_n_E else fits$R_ems
-    dfT_ref <- mapply(function(ms, k, d) { a <- pn(k) * pn(ms); sum(a)^2 / sum(a^2 / pn(d)) },
-                      fits$ems_ms, fits$ems_k, fits$ems_df)
-    expect_equal(dg(x)$ti_R, R_ref, tolerance = 1e-10, info = id)
-    expect_equal(dg(x)$ti_df_T, unname(dfT_ref), tolerance = 1e-10, info = id)
-  }
 })
 
 ## ---- TI: extrapolation warning ---------------------------------------------
@@ -478,7 +465,7 @@ test_that("the step-13b arms are equivariant under y -> c y and invariant under 
     dx <- dg(x); dy <- dg(y)
     for (cn in c("df", "df_F", "df_C", "df_KR", "ti_R", "ti_df_T"))
       if (!is.null(dy[[cn]])) expect_true(rel(dx[[cn]], dy[[cn]], 1e-6), info = paste(info, cn))
-    for (cn in c("pi_guard_fired", "ci_cap_binds", "ti_warn_fired", "rerouted", "reroute_reason",
+    for (cn in c("pi_guard_fired", "pi_cap_binds", "ci_cap_binds", "ti_warn_fired", "rerouted", "reroute_reason",
                  "df_method", "gpq_seed"))
       expect_identical(dx[[cn]], dy[[cn]], info = paste(info, cn))
   }

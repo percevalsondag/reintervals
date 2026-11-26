@@ -103,10 +103,18 @@ keeping the Francq centre and variance: \code{"capped"}, with
 \code{df = min(df_F, df_C)} when \code{df_F / df_C >= pi_df_ratio} and \code{df_F}
 otherwise; \code{df_F} is the Francq df after its own containment fallback
 (so \code{df_F = df_C} on a fallback and the guard never fires there) and
-\code{df_C} the containment df. Every random-intercept PI row reports \code{df_F},
-\code{df_C} and \code{pi_guard_fired} (\code{TRUE} on \code{"capped"} rows; \code{TRUE}/\code{FALSE} on
-\code{"ratio-guard"} rows; \code{NA} on the other arms) in \code{attr(., "diagnostics")};
-random-slope PI rows report them as \code{NA}. There is no
+\code{df_C} the containment df. Every random-intercept PI row reports, in
+\code{attr(., "diagnostics")}, \code{df_F}, \code{df_C} and two flags:
+\code{pi_guard_fired}, whether the arm's predicate holds, so whether the df
+used is \code{min(df_F, df_C)} (\code{TRUE} on every \code{"capped"} row;
+\code{df_F / df_C >= pi_df_ratio} on \code{"ratio-guard"} rows; \code{NA} on the other
+arms), and \code{pi_cap_binds}, \code{df_C < df_F}, whether the containment df is
+the smaller of the two (on \code{"capped"} and \code{"ratio-guard"} rows; \code{NA} on
+the other arms), the counterpart of \code{ci_cap_binds}. The df used differs
+from \code{df_F} exactly when both are \code{TRUE}; on a \code{"ratio-guard"} row
+\code{pi_cap_binds} can be \code{TRUE} while the guard does not fire, and a fired
+ratio guard always has \code{pi_cap_binds = TRUE} (\code{pi_df_ratio > 1}). Random-slope
+PI rows report all four fields as \code{NA}. There is no
 Kenward-Roger prediction interval: KR adjusts fixed-effect contrasts only,
 and the prediction variance includes estimated variance components. Not
 applied to random-slope models (see \code{slope_pi_method}).}

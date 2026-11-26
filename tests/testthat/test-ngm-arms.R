@@ -378,7 +378,7 @@ test_that("B2 (d): GPQ NGM is within 15% (half-width) of the reml NGM on sleepst
 })
 
 ## Reference pins for fv-anova: lotline() of the simstudy pilot,
-## ~/dev/reintervals-simstudy pilot/methods.R at commit f4ce68e (only the
+## the reintervals-simstudy repository, pilot/methods.R at commit f4ce68e (only the
 ## lotline() definition evaluated; the file is not sourced here), run on
 ## 2026-11-08. Fixtures: balanced sleepstudy; sleepstudy with Days > 5 dropped
 ## for subjects 308, 309, 310, 330, 331, 332; stab_unbal_v2_a.csv (simulated,
