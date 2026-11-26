@@ -82,6 +82,31 @@
   below nominal (extrapolated, small between-lot variance), its coverage was
   at least nominal - 0.01 in every cell, where the default GPQ reached
   0.85-0.97; widths grew by at most 22% there and 8% in passing control cells.
+* **Guarded prediction and confidence intervals for random-intercept models**
+  (validation arms, package-original; under validation, step 13b; each signals
+  `reintervals_warning_unvalidated`; the defaults are unchanged).
+  `lmm_interval_control(pi_df = "capped")` keeps the Francq centre and
+  variance with `df = min(df_F, df_C)` (`df_F` the Francq df after its
+  fallback, `df_C` the containment df); `pi_df = "ratio-guard"` uses that df
+  only when `df_F / df_C >= pi_df_ratio` (new control, default 1.5, must be
+  > 1). `ci_df = "capped-kr"` uses the Kenward-Roger standard error with
+  `df = min(df_KR, df_C)`. The diagnostics of every random-intercept PI row
+  gain `df_F`, `df_C` and `pi_guard_fired`, and of every random-intercept CI
+  row `df_KR`, `df_C` and `ci_cap_binds` (`NA` on random-slope rows). The
+  constructions come from a post hoc training analysis of the step-13 data
+  and are being tested on fresh seeds in step 13b.
+* **`lmm_interval_control(reroute = TRUE)`** (validation arm,
+  package-original; under validation, step 13b; signals
+  `reintervals_warning_unvalidated`; default `FALSE`). Two-sided `ems-mls` /
+  `anova-mls` tolerance-interval rows of a random-intercept model with
+  `R > ti_reroute_R` (default 0.25) and `df_T_hat >= ti_reroute_dfT` (default
+  20) are computed with `method = "gpq"` and `gpq_two_sided = "content"` when
+  the fit is eligible for the random-intercept GPQ, with the same seed / `M`
+  contract as an explicit call; the rows carry `method = "gpq"`,
+  `rerouted = TRUE` and `reroute_reason`. On an ineligible fit nothing is
+  rerouted (`reroute_reason = "not GPQ-eligible"`). `reroute` applies to this
+  tolerance interval only; the guarded PI and CI are the `pi_df` / `ci_df`
+  values above.
 * **Vectorised `P`, `level` / `alpha` and `sides`.** `ti_lmm()` accepts vectors
   of `P`, `level` (or `alpha`) and `sides`; `ci_lmm()`, `pi_lmm()`,
   `new_group_mean_lmm()` and `lmm_predict()` accept vectors of `level` (or
@@ -343,6 +368,20 @@
 
 ## Other changes
 
+* **Two-sided MLS tolerance interval under extrapolation: new warning, on by
+  default** (provisional until step 13b). Every two-sided `ems-mls` /
+  `anova-mls` row of a random-intercept model now reports `ti_R` (variance of
+  the predicted mean over the estimated total variance), `ti_df_T` (the
+  Satterthwaite df of the estimated total variance), `ti_warn_fired`,
+  `rerouted` and `reroute_reason` in `attr(., "diagnostics")` (`NA` /
+  `"not_applicable"` on one-sided rows and on the GPQ routes). When
+  `ti_R > ti_warn_R` and `ti_df_T >= ti_warn_dfT` (new controls, defaults
+  0.25 and 40) on some row, `ti_lmm()` signals one
+  `reintervals_warning_limitation` per call: in the step-13 training data such
+  intervals covered 0.76-0.88 at confidence 0.90 and 0.84-0.95 at 0.95. The
+  warning is on by default although its thresholds are provisional: it adds
+  information and changes no number (every interval is bit-identical to the
+  previous version). Set `ti_warn_R = Inf` to turn it off.
 * **One-sided GPQ tolerance limits: documented limitation.** One-sided GPQ
   tolerance-interval rows (`ti_lmm()` random-slope route and
   `method = "gpq"` random-intercept route, `ti_gpq_raw()`) signal a

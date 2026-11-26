@@ -49,7 +49,10 @@ models and, under validation (step 13b), for random-intercept models with
 a single random factor (see the eligibility rule above). \code{"reml-mls"} is
 defunct (removed in 1.0.0) and errors.}
 
-\item{control}{\code{\link[=lmm_interval_control]{lmm_interval_control()}} tuning (GPQ seed / M).}
+\item{control}{\code{\link[=lmm_interval_control]{lmm_interval_control()}} tuning: the GPQ \code{seed} / \code{M}, the
+two-sided GPQ construction \code{gpq_two_sided}, the extrapolation-warning
+thresholds \code{ti_warn_R} / \code{ti_warn_dfT}, and \code{reroute} with its
+thresholds (under validation, step 13b).}
 }
 \value{
 An \code{lmm_interval} object (a data frame), one row per evaluation point

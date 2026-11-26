@@ -467,6 +467,37 @@
 #' `"gpq_one_sided_lowconf"`, `"gpq_one_sided_group_mean"`, or `NA` (every
 #' two-sided row, and one-sided rows outside both cases).
 #'
+#' @section Known limitation (two-sided MLS tolerance interval under extrapolation):
+#' **Provisional until step 13b.** On random-intercept models the two-sided
+#' `ems-mls` and `anova-mls` intervals (auto or forced) can under-cover when
+#' the predicted mean is uncertain relative to the estimated total variance
+#' and that total variance is well-determined, typically at an evaluation
+#' point beyond the observed times with a small between-lot variance. Every
+#' two-sided row of these routes reports in `attr(., "diagnostics")`:
+#' * `ti_R`, the variance of the predicted mean at the evaluation point over
+#'   the estimated total variance: on `ems-mls` rows
+#'   `var_mean / sigma2_t` (`var_mean = x0' V x0`, the fixed-effect variance of
+#'   the predicted mean; `sigma2_t = sum_j k_j EMS_j`); on `anova-mls` rows
+#'   `1 / n_E = VhatYh / Vhat_Y` (the Montes / Hoffman-Kringle variance of the
+#'   centre over the content variance);
+#' * `ti_df_T`, the Satterthwaite df of `sigma2_t` from the expected-mean-square
+#'   decomposition, `(sum_j k_j EMS_j)^2 / sum_j (k_j EMS_j)^2 / df_j`, on
+#'   either route (`NA` when the decomposition is unavailable);
+#' * `ti_warn_fired`, `TRUE` when `ti_R > ti_warn_R` and
+#'   `ti_df_T >= ti_warn_dfT` ([lmm_interval_control()]; defaults 0.25 and 40);
+#' * `rerouted` and `reroute_reason` (see `reroute` in
+#'   [lmm_interval_control()]): `FALSE` / `NA` unless `reroute = TRUE`.
+#'
+#' One-sided rows carry `NA` (`reroute_reason = "not_applicable"`), as do the
+#' GPQ routes (random slope, `method = "gpq"`). When some row has
+#' `ti_warn_fired = TRUE`, one warning of class `reintervals_warning_limitation`
+#' (condition field `limitation = "ti_mls_extrapolation"`) is signalled per
+#' call; the interval is unchanged. In the step-13 training data (simulation,
+#' `R > 0.25` and `df_T_hat >= 40`, per-cell coverage on the replicates where
+#' it fires) the interval covered 0.76-0.88 at a confidence of 0.90 and
+#' 0.84-0.95 at 0.95. The thresholds and ranges were derived in-sample and are
+#' being tested on fresh seeds in step 13b.
+#'
 #' @section Availability:
 #' Tolerance intervals require a closed-form variance decomposition. They are
 #' available for one-way, nested, and crossed-with-interaction random-intercept
@@ -502,7 +533,10 @@
 #'   models and, under validation (step 13b), for random-intercept models with
 #'   a single random factor (see the eligibility rule above). `"reml-mls"` is
 #'   defunct (removed in 1.0.0) and errors.
-#' @param control [lmm_interval_control()] tuning (GPQ seed / M).
+#' @param control [lmm_interval_control()] tuning: the GPQ `seed` / `M`, the
+#'   two-sided GPQ construction `gpq_two_sided`, the extrapolation-warning
+#'   thresholds `ti_warn_R` / `ti_warn_dfT`, and `reroute` with its
+#'   thresholds (under validation, step 13b).
 #'
 #' @inherit ci_lmm return
 #' @seealso [ci_lmm()], [pi_lmm()], [new_group_mean_lmm()], [lmm_predict()],
@@ -575,6 +609,7 @@ ti_lmm <- function(model, newdata = NULL, P = 0.95,
                           target = target, sides = sides,
                           forced = method == "gpq", seed = seed, M = M,
                           two_sided = two_sided)
+    out <- .ti_step13b_na(out)
     return(.unify_intervals(out, model, kind = "ti", P_value = out$content))
   }
 
@@ -590,6 +625,7 @@ ti_lmm <- function(model, newdata = NULL, P = 0.95,
     out <- .ti_ri_gpq_path(model, newdata = newdata, content = P, conf = conf,
                            target = target, sides = sides, seed = seed, M = M,
                            two_sided = two_sided)
+    out <- .ti_step13b_na(out)
     return(.unify_intervals(out, model, kind = "ti", P_value = out$content))
   }
 
@@ -657,6 +693,9 @@ ti_lmm <- function(model, newdata = NULL, P = 0.95,
   if (nrow(combos) == 1L) {
     out <- native(P, conf, sides)
     out$gpq_two_sided <- "not_applicable"     # a closed-form route: no GPQ
+    ## step 13b: R, df_T_hat, the extrapolation warning, reroute
+    out <- .ti_step13b(out, model, newdata, P_row = rep(P, nrow(out)), n_combos = 1L,
+                       control = control, target = target)
     return(.unify_intervals(out, model, kind = "ti", P_value = P, method_tag = tag))
   }
   ## vectorised: loop the scalar engine over the combinations (warnings once)
@@ -665,5 +704,7 @@ ti_lmm <- function(model, newdata = NULL, P = 0.95,
   P_row <- unlist(Map(function(b, p) rep(p, nrow(b)), blocks, combos$P))
   out <- .bind_natives(blocks)
   out$gpq_two_sided <- "not_applicable"
+  out <- .ti_step13b(out, model, newdata, P_row = P_row, n_combos = nrow(combos),
+                     control = control, target = target)
   .unify_intervals(out, model, kind = "ti", P_value = P_row, method_tag = tag)
 }

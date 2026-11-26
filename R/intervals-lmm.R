@@ -47,8 +47,10 @@
 intervals_lmm <- function(model, newdata = NULL, level = 0.95, conf = 0.95,
                           which = c("CI", "PI"), ci_df = NULL,
                           ci_method = c("satterthwaite", "kenward-roger",
-                                        "containment"),
-                          pi_method = c("francq-satterthwaite", "containment")) {
+                                        "containment", "capped-kr"),
+                          pi_method = c("francq-satterthwaite", "containment",
+                                        "capped", "ratio-guard"),
+                          pi_df_ratio = 1.5) {
   if (!inherits(model, "lmerMod")) {
     .abort("`model` must be a fitted `lmerMod` (an lmer fit).",
            class = "reintervals_error_input")
@@ -74,14 +76,29 @@ intervals_lmm <- function(model, newdata = NULL, level = 0.95, conf = 0.95,
                   var_mean = var_mean, target = "observable")
   }
 
+  ## the containment df (the rank rule), reported on every CI / PI row as
+  ## df_C; a diagnostic only on the arms that do not use it
+  df_C <- tryCatch(.ddf_containment(model), error = function(e) NA_real_)
   blocks <- list()
   if ("CI" %in% which) {
+    ## ci_df = "capped-kr" (step 13b): the Kenward-Roger SE and df, with the df
+    ## capped at the containment df, df = min(df_KR, df_C)
+    capped <- is.null(ci_df) && ci_method == "capped-kr"
+    kr_like <- is.null(ci_df) && ci_method %in% c("kenward-roger", "capped-kr")
     ## Kenward-Roger: one vcovAdj() per call, shared by every newdata row
-    kr <- if (is.null(ci_df) && ci_method == "kenward-roger") .kr_parts(model) else NULL
+    kr <- if (kr_like) .kr_parts(model) else NULL
     dd <- lapply(seq_len(nr), function(i)
-      .ci_ddf(model, fx$L[i, ], theta = theta, ci_df = ci_df, df_method = ci_method,
-              kr = kr))
+      .ci_ddf(model, fx$L[i, ], theta = theta, ci_df = ci_df,
+              df_method = if (capped) "kenward-roger" else ci_method, kr = kr))
     ddf <- vapply(dd, function(x) x$df, numeric(1))
+    df_KR <- if (kr_like) ddf else rep(NA_real_, nr)
+    cap_binds <- rep(NA, nr)
+    if (capped) {
+      if (is.na(df_C)) df_C <- .ddf_containment(model)   # its own error, if any
+      cap_binds <- df_C < df_KR
+      ddf <- pmin(df_KR, df_C)
+      for (i in which(cap_binds)) dd[[i]]$method <- "containment"
+    }
     ## per-row reason a default Satterthwaite CI df fell back (NA otherwise):
     ## the .theta_cov reason when there is no covariance, else .ci_ddf's
     ci_fb <- is.null(ci_df) && ci_method == "satterthwaite"
@@ -101,7 +118,8 @@ intervals_lmm <- function(model, newdata = NULL, level = 0.95, conf = 0.95,
       upper = vapply(cis, function(x) x$upper, numeric(1)),
       df = ddf, df_method = vapply(dd, function(x) x$method, character(1)),
       df_fallback_reason = ci_reason,
-      level = conf, stringsAsFactors = FALSE
+      level = conf, df_KR = df_KR, df_C = df_C, ci_cap_binds = cap_binds,
+      stringsAsFactors = FALSE
     ), row.names = NULL)
   }
   if ("PI" %in% which) {
@@ -109,7 +127,17 @@ intervals_lmm <- function(model, newdata = NULL, level = 0.95, conf = 0.95,
     ## pi_df = "containment": the same variance (V_F + sigma2_T), with the
     ## containment df (.ddf_containment, the rank rule) in place of the Francq
     ## generalized-Satterthwaite df and its fallback.
+    ## pi_df = "capped" / "ratio-guard" (step 13b): the Francq centre and
+    ## variance with df = min(df_F, df_C), always ("capped") or when
+    ## df_F / df_C >= pi_df_ratio ("ratio-guard"); df_F is the Francq df after
+    ## its own fallback (df_F = df_C on a fallback, so the guard never fires)
+    df_F <- theta$df_pi
+    if (pi_method %in% c("capped", "ratio-guard") && is.na(df_C))
+      df_C <- .ddf_containment(model)                     # its own error, if any
+    guard <- switch(pi_method, capped = TRUE,
+                    `ratio-guard` = df_F / df_C >= pi_df_ratio, NA)
     if (pi_method == "containment") theta$df_pi <- .ddf_containment(model)
+    if (isTRUE(guard)) theta$df_pi <- min(df_F, df_C)
     pis <- lapply(seq_len(nr), function(i) pi_newobs(make_comp(i, Inf), level = level))
     blocks$PI <- cbind(base, data.frame(
       type = "PI",
@@ -121,10 +149,20 @@ intervals_lmm <- function(model, newdata = NULL, level = 0.95, conf = 0.95,
       df_fallback_reason = if (pi_method != "containment" &&
                                  isTRUE(theta$pi_df_fallback))
         theta$fallback_reason else NA_character_,
-      level = level, stringsAsFactors = FALSE
+      level = level, df_F = df_F, df_C = df_C, pi_guard_fired = guard,
+      stringsAsFactors = FALSE
     ), row.names = NULL)
   }
 
+  ## the CI and PI blocks carry their own diagnostics columns: fill the other
+  ## block's with NA before binding (a which = c("CI", "PI") call)
+  if (length(blocks) > 1L) {
+    cols <- unique(unlist(lapply(blocks, names)))
+    blocks <- lapply(blocks, function(b) {
+      for (cn in setdiff(cols, names(b))) b[[cn]] <- NA
+      b[cols]
+    })
+  }
   out <- do.call(rbind, blocks)
   rownames(out) <- NULL
   if ("PI" %in% which) {

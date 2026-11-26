@@ -15,8 +15,9 @@
 #'
 #' @section Validation arms:
 #' The non-default values of `ci_df`, `slope_ci_df`, `pi_df`, `ngm_method`,
-#' `slope_ngm_method` and `slope_pi_method` are validation
-#' arms: their coverage is under evaluation in the 1.0.0 validation study, and
+#' `slope_ngm_method`, `slope_pi_method`, `gpq_two_sided` and `reroute` are
+#' validation arms (`ci_df = "capped-kr"`, `pi_df = "capped"` /
+#' `"ratio-guard"` and `reroute = TRUE` are under validation, step 13b): their coverage is under evaluation in the 1.0.0 validation study, and
 #' the defaults are the validated rules. Applying a non-default arm signals a
 #' warning of class `reintervals_warning_unvalidated` on every call (muffle it
 #' by class), except `ci_df = "kenward-roger"` on random-intercept models,
@@ -82,6 +83,16 @@
 #'   within a factor's levels costing one df there --- `A - 1` one-way and
 #'   nested, `A - 2` with one between-group covariate, `min(A, B) - 1` crossed,
 #'   `K - 1` for the fixed-slope design), with the unadjusted standard error.
+#'   `"capped-kr"` (validation arm, package-original; under validation,
+#'   step 13b): the Kenward-Roger standard error with
+#'   `df = min(df_KR, df_C)`, `df_KR` the Kenward-Roger df and `df_C` the
+#'   containment df above, on every row (requires \pkg{pbkrtest}, as
+#'   `"kenward-roger"`); `df_method` is `"containment"` on the rows where the
+#'   cap binds (`df_C < df_KR`) and `"kenward-roger"` elsewhere. Every
+#'   random-intercept CI row reports `df_KR` (the KR df on the
+#'   `"kenward-roger"` and `"capped-kr"` arms, `NA` otherwise), `df_C` and
+#'   `ci_cap_binds` (`TRUE`/`FALSE` on `"capped-kr"` rows, `NA` otherwise) in
+#'   `attr(., "diagnostics")`; random-slope CI rows report them as `NA`.
 #'   Not applied to random-slope models (see `slope_ci_df`).
 #' @param slope_ci_df Denominator-df rule for the confidence interval
 #'   ([ci_lmm()]) on random-slope models: `"hessian-satterthwaite"` (default;
@@ -99,7 +110,17 @@
 #'   random-intercept models: `"francq-satterthwaite"` (default; the Francq et
 #'   al. 2019 generalized Satterthwaite df, with the containment df as its
 #'   fallback on a singular fit or a df below 1) or the validation arm `"containment"` (the same
-#'   variance with the containment df of `ci_df = "containment"`). There is no
+#'   variance with the containment df of `ci_df = "containment"`).
+#'   Validation arms under validation (step 13b), package-original, both
+#'   keeping the Francq centre and variance: `"capped"`, with
+#'   `df = min(df_F, df_C)` on every row, and `"ratio-guard"`, with
+#'   `df = min(df_F, df_C)` when `df_F / df_C >= pi_df_ratio` and `df_F`
+#'   otherwise; `df_F` is the Francq df after its own containment fallback
+#'   (so `df_F = df_C` on a fallback and the guard never fires there) and
+#'   `df_C` the containment df. Every random-intercept PI row reports `df_F`,
+#'   `df_C` and `pi_guard_fired` (`TRUE` on `"capped"` rows; `TRUE`/`FALSE` on
+#'   `"ratio-guard"` rows; `NA` on the other arms) in `attr(., "diagnostics")`;
+#'   random-slope PI rows report them as `NA`. There is no
 #'   Kenward-Roger prediction interval: KR adjusts fixed-effect contrasts only,
 #'   and the prediction variance includes estimated variance components. Not
 #'   applied to random-slope models (see `slope_pi_method`).
@@ -201,10 +222,44 @@
 #'   References: Liao CT, Lin TY, Iyer HK (2005). *Technometrics* 47(3):323-335.
 #'   \doi{10.1198/004017005000000102}. Oliva-Aviles C, Hauser P (2025).
 #'   *Technometrics* 67(2):193-202. \doi{10.1080/00401706.2024.2407324}.
+#' @param pi_df_ratio Threshold of `pi_df = "ratio-guard"` (under validation,
+#'   step 13b): the guard fires when `df_F / df_C >= pi_df_ratio`. A single
+#'   finite number `> 1`; default 1.5. Ignored by the other `pi_df` values.
+#' @param ti_warn_R,ti_warn_dfT Thresholds of the extrapolation warning of the
+#'   two-sided MLS tolerance interval on random-intercept models (under
+#'   validation, step 13b; defaults 0.25 and 40, provisional): [ti_lmm()]
+#'   signals one `reintervals_warning_limitation` per call when a two-sided
+#'   `ems-mls` or `anova-mls` row has `R > ti_warn_R` and
+#'   `df_T_hat >= ti_warn_dfT` (see [ti_lmm()], section "Known limitation
+#'   (two-sided MLS tolerance interval under extrapolation)"). Non-negative
+#'   numbers; `Inf` turns the warning off. The warning changes no number and
+#'   is on by default.
+#' @param reroute `TRUE` or `FALSE` (default). Under validation (step 13b),
+#'   package-original: with `TRUE`, each two-sided `ems-mls` / `anova-mls`
+#'   tolerance-interval row of a random-intercept model with
+#'   `R > ti_reroute_R` and `df_T_hat >= ti_reroute_dfT` is computed instead
+#'   with `method = "gpq"` and `gpq_two_sided = "content"`, when the fit is
+#'   eligible for the random-intercept GPQ (one random factor, no prior
+#'   weights; see [ti_lmm()]). Those rows carry `method = "gpq"`, the GPQ
+#'   diagnostics and `route_reason = "reroute"`, and equal the explicit
+#'   `method = "gpq"`, `gpq_two_sided = "content"` call with the same `seed`
+#'   and `M` (with `seed = NULL`, one seed is drawn from the caller's stream,
+#'   only when some row is rerouted, and reported as `gpq_seed`). On a fit that
+#'   is not eligible nothing is rerouted and `reroute_reason` is
+#'   `"not GPQ-eligible"`. Signals `reintervals_warning_unvalidated` on every
+#'   call where it applies (a two-sided MLS tolerance interval on a
+#'   random-intercept model). `reroute` applies to that tolerance interval
+#'   only: the guarded prediction and confidence intervals are the
+#'   `pi_df = "capped"` / `"ratio-guard"` and `ci_df = "capped-kr"` values,
+#'   not `reroute`.
+#' @param ti_reroute_R,ti_reroute_dfT Thresholds of `reroute = TRUE` (under
+#'   validation, step 13b; defaults 0.25 and 20): non-negative numbers, `Inf`
+#'   allowed.
 #' @return An `lmm_interval_control` list (passed to a verb's `control`
 #'   argument); a list with elements `seed`, `M`, `ci_df`, `slope_ci_df`,
-#'   `pi_df`, `ngm_method`, `slope_ngm_method`, `slope_pi_method` and
-#'   `gpq_two_sided`.
+#'   `pi_df`, `ngm_method`, `slope_ngm_method`, `slope_pi_method`,
+#'   `gpq_two_sided`, `pi_df_ratio`, `ti_warn_R`, `ti_warn_dfT`, `reroute`,
+#'   `ti_reroute_R` and `ti_reroute_dfT`.
 #' @seealso [ci_lmm()], [ti_lmm()], [ti_gpq_raw()].
 #' @examples
 #' lmm_interval_control(seed = 1, M = 5000)
@@ -214,19 +269,27 @@
 #'                      slope_ngm_method = "broad-inference")
 #' lmm_interval_control(slope_pi_method = "hybrid")
 #' lmm_interval_control(gpq_two_sided = "content")
+#' lmm_interval_control(pi_df = "ratio-guard", pi_df_ratio = 1.5)
+#' lmm_interval_control(ci_df = "capped-kr")
+#' lmm_interval_control(reroute = TRUE, seed = 1)
 #' @export
 lmm_interval_control <- function(seed = NULL, M = 20000L,
                                  ci_df = c("satterthwaite", "kenward-roger",
-                                           "containment"),
+                                           "containment", "capped-kr"),
                                  slope_ci_df = c("hessian-satterthwaite",
                                                  "kenward-roger", "k-minus-1"),
-                                 pi_df = c("francq-satterthwaite", "containment"),
+                                 pi_df = c("francq-satterthwaite", "containment",
+                                           "capped", "ratio-guard"),
                                  ngm_method = c("package", "broad-inference", "hts",
                                                 "classical"),
                                  slope_ngm_method = c("reml", "broad-inference", "gpq",
                                                       "fv-anova"),
                                  slope_pi_method = c("reml", "fv-anova", "hybrid"),
-                                 gpq_two_sided = c("approx", "content")) {
+                                 gpq_two_sided = c("approx", "content"),
+                                 pi_df_ratio = 1.5,
+                                 ti_warn_R = 0.25, ti_warn_dfT = 40,
+                                 reroute = FALSE,
+                                 ti_reroute_R = 0.25, ti_reroute_dfT = 20) {
   ## each choice argument as match.arg (default = first choice, partial
   ## matching), with an invalid value an error of class reintervals_error_input
   ## naming the argument and its allowed values
@@ -254,12 +317,47 @@ lmm_interval_control <- function(seed = NULL, M = 20000L,
            "uses 20 MC sections of at least 100 draws each).",
            class = "reintervals_error_input")
   }
+  ## the numeric step-13b controls (under validation): pi_df_ratio > 1; the
+  ## TI thresholds >= 0 (Inf allowed: the predicate never fires)
+  if (!is.numeric(pi_df_ratio) || length(pi_df_ratio) != 1L || is.na(pi_df_ratio) ||
+        !is.finite(pi_df_ratio) || pi_df_ratio <= 1) {
+    .abort("`pi_df_ratio` must be a single finite number > 1.",
+           class = "reintervals_error_input", data = list(argument = "pi_df_ratio"))
+  }
+  for (nm in c("ti_warn_R", "ti_warn_dfT", "ti_reroute_R", "ti_reroute_dfT")) {
+    v <- get(nm)
+    if (!is.numeric(v) || length(v) != 1L || is.na(v) || v < 0) {
+      .abort(sprintf("`%s` must be a single non-negative number (Inf allowed).", nm),
+             class = "reintervals_error_input", data = list(argument = nm))
+    }
+  }
+  if (!is.logical(reroute) || length(reroute) != 1L || is.na(reroute)) {
+    .abort("`reroute` must be TRUE or FALSE.", class = "reintervals_error_input",
+           data = list(argument = "reroute"))
+  }
   structure(list(seed = seed, M = as.integer(M), ci_df = ci_df,
                  slope_ci_df = slope_ci_df, pi_df = pi_df,
                  ngm_method = ngm_method, slope_ngm_method = slope_ngm_method,
                  slope_pi_method = slope_pi_method,
-                 gpq_two_sided = gpq_two_sided),
+                 gpq_two_sided = gpq_two_sided,
+                 pi_df_ratio = as.numeric(pi_df_ratio),
+                 ti_warn_R = as.numeric(ti_warn_R), ti_warn_dfT = as.numeric(ti_warn_dfT),
+                 reroute = reroute,
+                 ti_reroute_R = as.numeric(ti_reroute_R),
+                 ti_reroute_dfT = as.numeric(ti_reroute_dfT)),
             class = "lmm_interval_control")
+}
+
+## A numeric step-13b control (pi_df_ratio, ti_warn_*, ti_reroute_*) or
+## `reroute`, with its default when the control predates the option (a
+## hand-built list).
+.ctl_value <- function(control, opt) {
+  v <- control[[opt]]
+  if (!is.null(v)) return(v)
+  switch(opt, pi_df_ratio = 1.5, ti_warn_R = 0.25, ti_warn_dfT = 40,
+         reroute = FALSE, ti_reroute_R = 0.25, ti_reroute_dfT = 20,
+         .abort("Internal: unknown control '", opt, "'.",
+                class = "reintervals_error_internal"))
 }
 
 ## match.arg(arg, choices) for an lmm_interval_control() argument: the same
@@ -501,6 +599,12 @@ lmm_interval_control <- function(seed = NULL, M = 20000L,
          new_group_mean = "new_group_mean", tolower(kind))
 }
 
+## Per-row diagnostics of the step-13b arms (under validation): CI rows
+## df_KR, df_C, ci_cap_binds; PI rows df_F, df_C, pi_guard_fired; TI rows
+## ti_R, ti_df_T, ti_warn_fired, rerouted, reroute_reason.
+.step13b_cols <- c("df_KR", "df_C", "ci_cap_binds", "df_F", "pi_guard_fired",
+                   "ti_R", "ti_df_T", "ti_warn_fired", "rerouted", "reroute_reason")
+
 ## Value columns an engine may emit; everything else in the native frame is an
 ## eval-point (predictor) column. "time" is the slope/raw engines' generic
 ## placeholder -- renamed to the actual covariate when a model is in hand.
@@ -513,7 +617,8 @@ lmm_interval_control <- function(seed = NULL, M = 20000L,
                  "slope_ci_df_rule", "pi_df_rule", "ngm_arm", "slope_ngm_arm",
                  "ngm_df_failed", "vc_cov_route", "vc_cov_reason",
                  "df_fallback_reason", "slope_pi_arm", "slope_pi_route_reason",
-                 "fv_df_lots", "gpq_two_sided", "limitation_flag")
+                 "fv_df_lots", "gpq_two_sided", "limitation_flag",
+                 .step13b_cols)
 
 ## The output unifier. Maps any engine's native frame to the single tidy
 ## contract; relabels only, never recomputes. Universal columns, in order:
@@ -582,7 +687,7 @@ lmm_interval_control <- function(seed = NULL, M = 20000L,
                "route_reason", "mls_bound", "n_na_draws", "mc_se_lower",
                "mc_se_upper", "vc_cov_route", "vc_cov_reason", "df_fallback_reason",
                "slope_pi_route_reason", "fv_df_lots", "gpq_two_sided",
-               "limitation_flag")) {
+               "limitation_flag", .step13b_cols)) {
     if (cn %in% names(native)) diag[[cn]] <- native[[cn]]
   }
   for (a in c("beta_hat", "n_E", "U", "Vhat_Y", "C1", "C2", "pi_df_fallback",
@@ -964,6 +1069,12 @@ new_group_mean_lmm <- function(model, newdata = NULL, alpha = NULL, level = NULL
     out <- .bind_natives(blocks)
   }
   .warn_df_fallback(out, model, kind, applied)
+  ## the step-13b CI / PI diagnostics, NA where the engine does not set them
+  ## (random-slope rows: ci_df / pi_df do not apply)
+  new_cols <- switch(kind, CI = c("df_KR", "df_C", "ci_cap_binds"),
+                     PI = c("df_F", "df_C", "pi_guard_fired"), character(0))
+  for (cn in setdiff(new_cols, names(out)))
+    out[[cn]] <- if (cn %in% c("ci_cap_binds", "pi_guard_fired")) NA else NA_real_
   ## the df arm of every option: the value applied here, or "not_applicable"
   for (r in names(rules <- .arm_rules(applied))) out[[r]] <- rules[[r]]
   tag <- if (.has_random_slope(model)) NULL else "ems-mls"   # slope row already tagged

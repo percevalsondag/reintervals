@@ -50,7 +50,10 @@ models and, under validation (step 13b), for random-intercept models with
 a single random factor (see the eligibility rule above). \code{"reml-mls"} is
 defunct (removed in 1.0.0) and errors.}
 
-\item{control}{\code{\link[=lmm_interval_control]{lmm_interval_control()}} tuning (GPQ seed / M).}
+\item{control}{\code{\link[=lmm_interval_control]{lmm_interval_control()}} tuning: the GPQ \code{seed} / \code{M}, the
+two-sided GPQ construction \code{gpq_two_sided}, the extrapolation-warning
+thresholds \code{ti_warn_R} / \code{ti_warn_dfT}, and \code{reroute} with its
+thresholds (under validation, step 13b).}
 }
 \value{
 An \code{lmm_interval} object (a data frame), one row per evaluation point
@@ -247,6 +250,41 @@ from random-slope designs; on the random-intercept GPQ route
 Each GPQ row records \code{attr(., "diagnostics")$limitation_flag}:
 \code{"gpq_one_sided_lowconf"}, \code{"gpq_one_sided_group_mean"}, or \code{NA} (every
 two-sided row, and one-sided rows outside both cases).
+}
+
+\section{Known limitation (two-sided MLS tolerance interval under extrapolation)}{
+
+\strong{Provisional until step 13b.} On random-intercept models the two-sided
+\code{ems-mls} and \code{anova-mls} intervals (auto or forced) can under-cover when
+the predicted mean is uncertain relative to the estimated total variance
+and that total variance is well-determined, typically at an evaluation
+point beyond the observed times with a small between-lot variance. Every
+two-sided row of these routes reports in \code{attr(., "diagnostics")}:
+\itemize{
+\item \code{ti_R}, the variance of the predicted mean at the evaluation point over
+the estimated total variance: on \code{ems-mls} rows
+\code{var_mean / sigma2_t} (\verb{var_mean = x0' V x0}, the fixed-effect variance of
+the predicted mean; \verb{sigma2_t = sum_j k_j EMS_j}); on \code{anova-mls} rows
+\code{1 / n_E = VhatYh / Vhat_Y} (the Montes / Hoffman-Kringle variance of the
+centre over the content variance);
+\item \code{ti_df_T}, the Satterthwaite df of \code{sigma2_t} from the expected-mean-square
+decomposition, \verb{(sum_j k_j EMS_j)^2 / sum_j (k_j EMS_j)^2 / df_j}, on
+either route (\code{NA} when the decomposition is unavailable);
+\item \code{ti_warn_fired}, \code{TRUE} when \code{ti_R > ti_warn_R} and
+\code{ti_df_T >= ti_warn_dfT} (\code{\link[=lmm_interval_control]{lmm_interval_control()}}; defaults 0.25 and 40);
+\item \code{rerouted} and \code{reroute_reason} (see \code{reroute} in
+\code{\link[=lmm_interval_control]{lmm_interval_control()}}): \code{FALSE} / \code{NA} unless \code{reroute = TRUE}.
+}
+
+One-sided rows carry \code{NA} (\code{reroute_reason = "not_applicable"}), as do the
+GPQ routes (random slope, \code{method = "gpq"}). When some row has
+\code{ti_warn_fired = TRUE}, one warning of class \code{reintervals_warning_limitation}
+(condition field \code{limitation = "ti_mls_extrapolation"}) is signalled per
+call; the interval is unchanged. In the step-13 training data (simulation,
+\code{R > 0.25} and \code{df_T_hat >= 40}, per-cell coverage on the replicates where
+it fires) the interval covered 0.76-0.88 at a confidence of 0.90 and
+0.84-0.95 at 0.95. The thresholds and ranges were derived in-sample and are
+being tested on fresh seeds in step 13b.
 }
 
 \section{Availability}{

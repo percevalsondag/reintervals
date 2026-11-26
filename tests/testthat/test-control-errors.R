@@ -4,9 +4,9 @@
 # partial matching and the defaults are unchanged.
 
 control_choices <- list(
-  ci_df            = c("satterthwaite", "kenward-roger", "containment"),
+  ci_df            = c("satterthwaite", "kenward-roger", "containment", "capped-kr"),
   slope_ci_df      = c("hessian-satterthwaite", "kenward-roger", "k-minus-1"),
-  pi_df            = c("francq-satterthwaite", "containment"),
+  pi_df            = c("francq-satterthwaite", "containment", "capped", "ratio-guard"),
   ngm_method       = c("package", "broad-inference", "hts", "classical"),
   slope_ngm_method = c("reml", "broad-inference", "gpq", "fv-anova"),
   slope_pi_method  = c("reml", "fv-anova", "hybrid"),

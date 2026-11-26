@@ -366,7 +366,8 @@
     return(.ngm_ri(model, newdata = newdata, level = level, sides = sides))
   }
   out <- intervals_lmm(model, newdata = newdata, level = level, conf = level,
-                       which = kind, ci_method = ci_df, pi_method = pi_df)
+                       which = kind, ci_method = ci_df, pi_method = pi_df,
+                       pi_df_ratio = .ctl_value(control, "pi_df_ratio"))
   .one_sided_t(out, level = level, sides = sides)
 }
 

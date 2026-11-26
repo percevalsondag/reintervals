@@ -134,8 +134,13 @@ test_that("A2 (g): ti_gpq_raw() returns the same diagnostics as the ti_lmm() GPQ
     a <- ti_lmm(fs, newdata = data.frame(Days = c(2, 7)), method = "gpq", sides = sd,
                 control = ctl)
     b <- ti_gpq_raw(d$Reaction, d$Days, d$Subject, t0 = c(2, 7), sides = sd, control = ctl)
-    expect_identical(names(attr(b, "diagnostics")), names(attr(a, "diagnostics")))
-    expect_equal(attr(b, "diagnostics"), attr(a, "diagnostics"), info = sd)
+    ## the step-13b MLS-TI fields (NA / "not_applicable" on GPQ rows) are
+    ## ti_lmm() diagnostics only; the raw engine does not carry them
+    da <- attr(a, "diagnostics")
+    expect_true(all(c("ti_R", "ti_df_T", "ti_warn_fired", "rerouted", "reroute_reason") %in% names(da)))
+    da <- da[setdiff(names(da), .step13b_cols)]
+    expect_identical(names(attr(b, "diagnostics")), names(da))
+    expect_equal(attr(b, "diagnostics"), da, info = sd)
     expect_identical(b$sides, rep(sd, 2))       # raw engine labels one-sided output
     expect_equal(c(b$lower, b$upper), c(a$lower, a$upper))
   }

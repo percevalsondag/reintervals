@@ -7,13 +7,19 @@
 lmm_interval_control(
   seed = NULL,
   M = 20000L,
-  ci_df = c("satterthwaite", "kenward-roger", "containment"),
+  ci_df = c("satterthwaite", "kenward-roger", "containment", "capped-kr"),
   slope_ci_df = c("hessian-satterthwaite", "kenward-roger", "k-minus-1"),
-  pi_df = c("francq-satterthwaite", "containment"),
+  pi_df = c("francq-satterthwaite", "containment", "capped", "ratio-guard"),
   ngm_method = c("package", "broad-inference", "hts", "classical"),
   slope_ngm_method = c("reml", "broad-inference", "gpq", "fv-anova"),
   slope_pi_method = c("reml", "fv-anova", "hybrid"),
-  gpq_two_sided = c("approx", "content")
+  gpq_two_sided = c("approx", "content"),
+  pi_df_ratio = 1.5,
+  ti_warn_R = 0.25,
+  ti_warn_dfT = 40,
+  reroute = FALSE,
+  ti_reroute_R = 0.25,
+  ti_reroute_dfT = 20
 )
 }
 \arguments{
@@ -61,6 +67,16 @@ smallest random-stratum df, each fixed-effect column that is constant
 within a factor's levels costing one df there --- \code{A - 1} one-way and
 nested, \code{A - 2} with one between-group covariate, \code{min(A, B) - 1} crossed,
 \code{K - 1} for the fixed-slope design), with the unadjusted standard error.
+\code{"capped-kr"} (validation arm, package-original; under validation,
+step 13b): the Kenward-Roger standard error with
+\code{df = min(df_KR, df_C)}, \code{df_KR} the Kenward-Roger df and \code{df_C} the
+containment df above, on every row (requires \pkg{pbkrtest}, as
+\code{"kenward-roger"}); \code{df_method} is \code{"containment"} on the rows where the
+cap binds (\code{df_C < df_KR}) and \code{"kenward-roger"} elsewhere. Every
+random-intercept CI row reports \code{df_KR} (the KR df on the
+\code{"kenward-roger"} and \code{"capped-kr"} arms, \code{NA} otherwise), \code{df_C} and
+\code{ci_cap_binds} (\code{TRUE}/\code{FALSE} on \code{"capped-kr"} rows, \code{NA} otherwise) in
+\code{attr(., "diagnostics")}; random-slope CI rows report them as \code{NA}.
 Not applied to random-slope models (see \code{slope_ci_df}).}
 
 \item{slope_ci_df}{Denominator-df rule for the confidence interval
@@ -80,7 +96,17 @@ Not applied to random-intercept models (see \code{ci_df}).}
 random-intercept models: \code{"francq-satterthwaite"} (default; the Francq et
 al. 2019 generalized Satterthwaite df, with the containment df as its
 fallback on a singular fit or a df below 1) or the validation arm \code{"containment"} (the same
-variance with the containment df of \code{ci_df = "containment"}). There is no
+variance with the containment df of \code{ci_df = "containment"}).
+Validation arms under validation (step 13b), package-original, both
+keeping the Francq centre and variance: \code{"capped"}, with
+\code{df = min(df_F, df_C)} on every row, and \code{"ratio-guard"}, with
+\code{df = min(df_F, df_C)} when \code{df_F / df_C >= pi_df_ratio} and \code{df_F}
+otherwise; \code{df_F} is the Francq df after its own containment fallback
+(so \code{df_F = df_C} on a fallback and the guard never fires there) and
+\code{df_C} the containment df. Every random-intercept PI row reports \code{df_F},
+\code{df_C} and \code{pi_guard_fired} (\code{TRUE} on \code{"capped"} rows; \code{TRUE}/\code{FALSE} on
+\code{"ratio-guard"} rows; \code{NA} on the other arms) in \code{attr(., "diagnostics")};
+random-slope PI rows report them as \code{NA}. There is no
 Kenward-Roger prediction interval: KR adjusts fixed-effect contrasts only,
 and the prediction variance includes estimated variance components. Not
 applied to random-slope models (see \code{slope_pi_method}).}
@@ -186,12 +212,50 @@ rows and on the closed-form routes). A non-default value signals
 References: Liao CT, Lin TY, Iyer HK (2005). \emph{Technometrics} 47(3):323-335.
 \doi{10.1198/004017005000000102}. Oliva-Aviles C, Hauser P (2025).
 \emph{Technometrics} 67(2):193-202. \doi{10.1080/00401706.2024.2407324}.}
+
+\item{pi_df_ratio}{Threshold of \code{pi_df = "ratio-guard"} (under validation,
+step 13b): the guard fires when \code{df_F / df_C >= pi_df_ratio}. A single
+finite number \verb{> 1}; default 1.5. Ignored by the other \code{pi_df} values.}
+
+\item{ti_warn_R, ti_warn_dfT}{Thresholds of the extrapolation warning of the
+two-sided MLS tolerance interval on random-intercept models (under
+validation, step 13b; defaults 0.25 and 40, provisional): \code{\link[=ti_lmm]{ti_lmm()}}
+signals one \code{reintervals_warning_limitation} per call when a two-sided
+\code{ems-mls} or \code{anova-mls} row has \code{R > ti_warn_R} and
+\code{df_T_hat >= ti_warn_dfT} (see \code{\link[=ti_lmm]{ti_lmm()}}, section "Known limitation
+(two-sided MLS tolerance interval under extrapolation)"). Non-negative
+numbers; \code{Inf} turns the warning off. The warning changes no number and
+is on by default.}
+
+\item{reroute}{\code{TRUE} or \code{FALSE} (default). Under validation (step 13b),
+package-original: with \code{TRUE}, each two-sided \code{ems-mls} / \code{anova-mls}
+tolerance-interval row of a random-intercept model with
+\code{R > ti_reroute_R} and \code{df_T_hat >= ti_reroute_dfT} is computed instead
+with \code{method = "gpq"} and \code{gpq_two_sided = "content"}, when the fit is
+eligible for the random-intercept GPQ (one random factor, no prior
+weights; see \code{\link[=ti_lmm]{ti_lmm()}}). Those rows carry \code{method = "gpq"}, the GPQ
+diagnostics and \code{route_reason = "reroute"}, and equal the explicit
+\code{method = "gpq"}, \code{gpq_two_sided = "content"} call with the same \code{seed}
+and \code{M} (with \code{seed = NULL}, one seed is drawn from the caller's stream,
+only when some row is rerouted, and reported as \code{gpq_seed}). On a fit that
+is not eligible nothing is rerouted and \code{reroute_reason} is
+\code{"not GPQ-eligible"}. Signals \code{reintervals_warning_unvalidated} on every
+call where it applies (a two-sided MLS tolerance interval on a
+random-intercept model). \code{reroute} applies to that tolerance interval
+only: the guarded prediction and confidence intervals are the
+\code{pi_df = "capped"} / \code{"ratio-guard"} and \code{ci_df = "capped-kr"} values,
+not \code{reroute}.}
+
+\item{ti_reroute_R, ti_reroute_dfT}{Thresholds of \code{reroute = TRUE} (under
+validation, step 13b; defaults 0.25 and 20): non-negative numbers, \code{Inf}
+allowed.}
 }
 \value{
 An \code{lmm_interval_control} list (passed to a verb's \code{control}
 argument); a list with elements \code{seed}, \code{M}, \code{ci_df}, \code{slope_ci_df},
-\code{pi_df}, \code{ngm_method}, \code{slope_ngm_method}, \code{slope_pi_method} and
-\code{gpq_two_sided}.
+\code{pi_df}, \code{ngm_method}, \code{slope_ngm_method}, \code{slope_pi_method},
+\code{gpq_two_sided}, \code{pi_df_ratio}, \code{ti_warn_R}, \code{ti_warn_dfT}, \code{reroute},
+\code{ti_reroute_R} and \code{ti_reroute_dfT}.
 }
 \description{
 Tuning knobs only --- the RNG seed and Monte-Carlo size used when the
@@ -202,8 +266,9 @@ interval. Algorithm \emph{selection} is the \code{method} argument, not this.
 \section{Validation arms}{
 
 The non-default values of \code{ci_df}, \code{slope_ci_df}, \code{pi_df}, \code{ngm_method},
-\code{slope_ngm_method} and \code{slope_pi_method} are validation
-arms: their coverage is under evaluation in the 1.0.0 validation study, and
+\code{slope_ngm_method}, \code{slope_pi_method}, \code{gpq_two_sided} and \code{reroute} are
+validation arms (\code{ci_df = "capped-kr"}, \code{pi_df = "capped"} /
+\code{"ratio-guard"} and \code{reroute = TRUE} are under validation, step 13b): their coverage is under evaluation in the 1.0.0 validation study, and
 the defaults are the validated rules. Applying a non-default arm signals a
 warning of class \code{reintervals_warning_unvalidated} on every call (muffle it
 by class), except \code{ci_df = "kenward-roger"} on random-intercept models,
@@ -236,6 +301,9 @@ lmm_interval_control(ngm_method = "broad-inference",
                      slope_ngm_method = "broad-inference")
 lmm_interval_control(slope_pi_method = "hybrid")
 lmm_interval_control(gpq_two_sided = "content")
+lmm_interval_control(pi_df = "ratio-guard", pi_df_ratio = 1.5)
+lmm_interval_control(ci_df = "capped-kr")
+lmm_interval_control(reroute = TRUE, seed = 1)
 }
 \seealso{
 \code{\link[=ci_lmm]{ci_lmm()}}, \code{\link[=ti_lmm]{ti_lmm()}}, \code{\link[=ti_gpq_raw]{ti_gpq_raw()}}.
