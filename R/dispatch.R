@@ -161,6 +161,7 @@
     n_na_draws = g$n_na_draws,
     mc_se_lower = g$mc_se_lower, mc_se_upper = g$mc_se_upper,
     K = g$K, df_resid = g$df_resid, phi1 = g$phi1, c_resid = g$c_resid,
+    gpq_two_sided = g$gpq_two_sided,
     stringsAsFactors = FALSE
   )
   ## per-call (not per-row) Monte-Carlo provenance
@@ -179,7 +180,7 @@
 ## gone there is no per-t0 or per-fit choice left to report. The field is kept
 ## so code reading attr(., "diagnostics")$route_reason still finds it.
 .ti_slope_path <- function(model, newdata, content, conf, target, sides,
-                           forced, seed, M) {
+                           forced, seed, M, two_sided = "approx") {
   fe <- lme4::fixef(model)
   time_var <- setdiff(names(fe), "(Intercept)")
   if (length(time_var) != 1L) {
@@ -200,7 +201,8 @@
   c_resid <- if (target == "observable") 1 else 0       # future-obs vs batch-mean
   g <- .gpq_core(yts$y, yts$time, yts$batch, t0 = t0s,
                  content = content, conf = conf, sides = sides,
-                 c_resid = c_resid, M = M, seed = seed)
+                 c_resid = c_resid, M = M, seed = seed, two_sided = two_sided)
+  .warn_gpq_two_sided(two_sided, g$sides)
   out <- .gpq_rows(g, design = .slope_design(model), sides = sides,
                    singular = singular)
   rownames(out) <- NULL
@@ -237,7 +239,8 @@
 ## (P, conf, sides) combination on one draw set. target "observable" ->
 ## c_resid = 1 (over = "observation"); "true_value" -> c_resid = 0
 ## (over = "group_mean", the lot-mean distribution).
-.ti_ri_gpq_path <- function(model, newdata, content, conf, target, sides, seed, M) {
+.ti_ri_gpq_path <- function(model, newdata, content, conf, target, sides, seed, M,
+                            two_sided = "approx") {
   why <- .gpq_ri_ineligible(model)
   if (!is.null(why)) .abort(why, class = "reintervals_error_method")
   X  <- lme4::getME(model, "X")
@@ -251,7 +254,7 @@
   pts <- lapply(seq_len(nrow(L0)), function(i) as.numeric(L0[i, ]))
   c_resid <- if (target == "observable") 1 else 0
   g <- .gpq_run(pre, pts, content = content, conf = conf, sides = sides,
-                c_resid = c_resid, M = M, seed = seed)
+                c_resid = c_resid, M = M, seed = seed, two_sided = two_sided)
   rows <- .gpq_rows(g, design = .model_class(model), singular = .is_singular(model))
   rows$time <- NULL
   nd <- fx$newdata[rep(seq_len(nrow(L0)), length.out = nrow(rows)), , drop = FALSE]
@@ -265,6 +268,7 @@
                "evaluated. The default route is method = \"auto\"."),
         class = "reintervals_warning_unvalidated",
         data = list(option = "method", value = "gpq"))
+  .warn_gpq_two_sided(two_sided, g$sides)
   out
 }
 
@@ -489,6 +493,7 @@ ti_lmm <- function(model, newdata = NULL, P = 0.95,
   }
   seed <- control$seed
   M    <- control$M
+  two_sided <- .gpq_two_sided_value(control)
   target <- if (over == "observation") "observable" else "true_value"
 
   ## ---- random slope present -> GPQ (both targets, all sides) -----------------
@@ -502,7 +507,8 @@ ti_lmm <- function(model, newdata = NULL, P = 0.95,
     .slope_newdata_guard(model, newdata)
     out <- .ti_slope_path(model, newdata = newdata, content = P, conf = conf,
                           target = target, sides = sides,
-                          forced = method == "gpq", seed = seed, M = M)
+                          forced = method == "gpq", seed = seed, M = M,
+                          two_sided = two_sided)
     return(.unify_intervals(out, model, kind = "ti", P_value = out$content))
   }
 
@@ -516,7 +522,8 @@ ti_lmm <- function(model, newdata = NULL, P = 0.95,
   if (method == "gpq") {
     .slope_newdata_guard(model, newdata)
     out <- .ti_ri_gpq_path(model, newdata = newdata, content = P, conf = conf,
-                           target = target, sides = sides, seed = seed, M = M)
+                           target = target, sides = sides, seed = seed, M = M,
+                           two_sided = two_sided)
     return(.unify_intervals(out, model, kind = "ti", P_value = out$content))
   }
 
@@ -583,6 +590,7 @@ ti_lmm <- function(model, newdata = NULL, P = 0.95,
   combos <- .combo_grid(sides = sides, P = P, level = conf)
   if (nrow(combos) == 1L) {
     out <- native(P, conf, sides)
+    out$gpq_two_sided <- "not_applicable"     # a closed-form route: no GPQ
     return(.unify_intervals(out, model, kind = "ti", P_value = P, method_tag = tag))
   }
   ## vectorised: loop the scalar engine over the combinations (warnings once)
@@ -590,5 +598,6 @@ ti_lmm <- function(model, newdata = NULL, P = 0.95,
     native(combos$P[j], combos$level[j], combos$sides[j]))
   P_row <- unlist(Map(function(b, p) rep(p, nrow(b)), blocks, combos$P))
   out <- .bind_natives(blocks)
+  out$gpq_two_sided <- "not_applicable"
   .unify_intervals(out, model, kind = "ti", P_value = P_row, method_tag = tag)
 }

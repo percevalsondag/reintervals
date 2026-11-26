@@ -446,3 +446,40 @@ test_that("ti_lmm(method = 'gpq') on a random-intercept fit is equivariant under
     }
   }
 })
+
+test_that("gpq_two_sided = 'content' is equivariant under y -> c y and invariant under t -> c t (random slope and random intercept, same seed)", {
+  skip_if_not_installed("lme4")
+  ## the GPQ uses only (y, X, lot), never the REML fit, so genuine refits are used
+  ctl <- lmm_interval_control(seed = 13L, M = 2000L, gpq_two_sided = "content")
+  ss <- lme4::sleepstudy
+  set.seed(3)
+  nk <- c(5, 1, 4, 7, 1, 3, 6, 2); tt <- c(0, 3, 6, 9, 12, 18, 24)
+  d <- data.frame(lot = factor(rep(seq_along(nk), nk)))
+  d$time <- unlist(lapply(nk, function(k) tt[seq_len(k)]))
+  d$y <- 100 - 0.3 * d$time + rnorm(length(nk), 0, 1.2)[d$lot] + rnorm(nrow(d), 0, 0.8)
+  fx <- list(
+    slope = list(d = data.frame(y = ss$Reaction, time = ss$Days, lot = ss$Subject),
+                 f = y ~ time + (1 + time | lot), nd = data.frame(time = c(0, 4.5, 9)), method = "auto"),
+    ri = list(d = d, f = y ~ time + (1 | lot), nd = data.frame(time = c(0, 12, 30)), method = "gpq"))
+  for (nm in names(fx)) for (ov in c("observation", "group_mean")) {
+    x <- fx[[nm]]
+    run <- function(dd, ndd) run_verb(ti_lmm(lmer_q(x$f, dd), ndd, P = c(0.9, 0.99),
+                                             sides = c("two.sided", "lower"), over = ov,
+                                             method = x$method, control = ctl))
+    b <- run(x$d, x$nd)
+    expect_identical(unique(attr(b$value, "diagnostics")$gpq_two_sided),
+                     c("content", "not_applicable"))
+    for (c in y_scales) {
+      s <- run(transform(x$d, y = y * c), x$nd)
+      info <- sprintf("content %s %s y x %g", nm, ov, c)
+      expect_identical(s$warnings, b$warnings, info = info)
+      expect_equivariant(b$value, s$value, c, info, kind = "y")
+    }
+    for (c in t_scales) {
+      s <- run(transform(x$d, time = time * c), transform(x$nd, time = time * c))
+      info <- sprintf("content %s %s t x %g", nm, ov, c)
+      expect_identical(s$warnings, b$warnings, info = info)
+      expect_equivariant(b$value, s$value, c, info, kind = "time", time_col = "time")
+    }
+  }
+})

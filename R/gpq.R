@@ -76,18 +76,24 @@
 ## ---------------------------------------------------------------------------
 .gpq_core <- function(y, time, batch, t0, content = 0.99, conf = 0.95,
                       sides = "two.sided",
-                      c_resid = 1, M = 20000L, seed = NULL) {
+                      c_resid = 1, M = 20000L, seed = NULL,
+                      two_sided = "approx") {
   sides <- .resolve_sides(sides)               # input errors before data errors, as before
   pre <- .gpq_prepare(y, time, batch)          # errors here leave the RNG untouched
   .gpq_run(pre, t0, content = content, conf = conf, sides = sides,
-           c_resid = c_resid, M = M, seed = seed)
+           c_resid = c_resid, M = M, seed = seed, two_sided = two_sided)
 }
 
 ## The Monte Carlo on a prepared design `pre` (.gpq_prepare: random slope;
 ## .gpq_prepare_ri: random intercept) at the evaluation points `t0` (time
 ## values for the slope design; a list of x0 rows for the random-intercept
 ## design).
-.gpq_run <- function(pre, t0, content, conf, sides, c_resid, M, seed) {
+## `two_sided` (lmm_interval_control(gpq_two_sided)): the two-sided construction,
+## "approx" (Liao, Lin & Iyer 2005 eq. 2 = Oliva-Aviles & Hauser 2025 eq. 1) or
+## "content" (the per-draw solution of the exact content criterion; see
+## .gpq_content_h). One-sided rows ignore it.
+.gpq_run <- function(pre, t0, content, conf, sides, c_resid, M, seed,
+                     two_sided = "approx") {
   ## B3: content, conf and sides may be vectors; every (content, conf, sides)
   ## combination is evaluated on the same pivot draws and the same tau2 solve.
   ## Rows: t0 fastest, then sides, then content, then conf (.combo_grid).
@@ -97,7 +103,8 @@
 
   ## per t0: one draw set / tau2 solve, one row per combination
   by_t0 <- lapply(t0, function(tt)
-    .gpq_eval_t0(pre, piv, tt, combos = combos, c_resid = c_resid))
+    .gpq_eval_t0(pre, piv, tt, combos = combos, c_resid = c_resid,
+                 two_sided = two_sided))
   rows <- unlist(lapply(seq_len(nrow(combos)), function(j)
     lapply(by_t0, `[[`, j)), recursive = FALSE)
   out <- do.call(rbind, rows); rownames(out) <- NULL
@@ -388,7 +395,7 @@
 ## sides, P = content, level = conf). Only the content quantile (zP, zP2), the
 ## side and the confidence quantile depend on the combination. Returns a list
 ## of one-row data frames, in the order of `combos`.
-.gpq_eval_t0 <- function(pre, piv, tt, combos, c_resid) {
+.gpq_eval_t0 <- function(pre, piv, tt, combos, c_resid, two_sided = "approx") {
   dr <- .gpq_theta_draws(pre, piv, tt)
   Rtheta <- dr$Rtheta; Rtau2 <- dr$Rtau2; Rs2e <- dr$Rs2e; sec <- dr$sec
   S <- dr$S; K <- dr$K; phi1 <- dr$phi1; n_na <- dr$n_na; boundary <- dr$boundary
@@ -401,6 +408,16 @@
   est <- stats::median(Rtheta)
   tau2_med <- stats::median(Rtau2); s2e_med <- stats::median(Rs2e)
   frac_b <- mean(boundary)
+  ## "content": the per-draw half-widths depend on (content, draws used) only,
+  ## not on conf, so they are cached per content and MC section (0 = all draws)
+  h_cache <- list()
+  content_h <- function(i, content, key) {
+    if (is.null(h_cache[[key]])) {
+      h_cache[[key]] <<- .gpq_content_h(stats::median(Rtheta[i]), Rtheta[i],
+                                        content_var[i], content)
+    }
+    h_cache[[key]]
+  }
 
   lapply(seq_len(nrow(combos)), function(j) {
     sides <- combos$sides[j]; content <- combos$P[j]; conf <- combos$level[j]
@@ -413,8 +430,13 @@
     }
     ## the limits from the draws indexed by i (all draws: the reported limit;
     ## one MC section: that section's replicate of it)
-    limits <- function(i) {
-      if (sides == "two.sided") {
+    limits <- function(i, sec_id = 0L) {
+      if (sides == "two.sided" && two_sided == "content") {
+        theta_hat <- stats::median(Rtheta[i])
+        h <- content_h(i, content, sprintf("%.17g|%d", content, sec_id))
+        h_g <- stats::quantile(h, conf, names = FALSE, type = 7)
+        c(theta_hat - h_g, theta_hat + h_g)
+      } else if (sides == "two.sided") {
         theta_hat <- stats::median(Rtheta[i])
         Rzeta_g   <- stats::quantile(Rzeta[i], conf, names = FALSE, type = 7)
         c(theta_hat - zP2 * Rzeta_g, theta_hat + zP2 * Rzeta_g)
@@ -426,7 +448,7 @@
     }
     lim <- limits(seq_along(Rtheta))
     ## Monte-Carlo SE by MC sections: sd of the S section replicates / sqrt(S)
-    sec_lim <- vapply(sec_idx, limits, numeric(2))
+    sec_lim <- vapply(seq_len(S), function(s) limits(sec_idx[[s]], s), numeric(2))
     mc_se <- apply(sec_lim, 1L, stats::sd) / sqrt(S)
     mc_se[!is.finite(lim)] <- NA_real_
 
@@ -440,8 +462,63 @@
                frac_boundary = frac_b, n_na_draws = n_na,
                K = K, df_resid = pre$df_resid, phi1 = phi1,
                content = content, conf = conf, c_resid = c_resid,
-               sides = sides, stringsAsFactors = FALSE)
+               sides = sides,
+               gpq_two_sided = if (sides == "two.sided") two_sided else "not_applicable",
+               stringsAsFactors = FALSE)
   })
+}
+
+## ---------------------------------------------------------------------------
+## .gpq_content_h: the per-draw half-widths of the "content" two-sided GPQ
+## tolerance interval (lmm_interval_control(gpq_two_sided = "content");
+## package-original, under validation, step 13b).
+##
+## Liao, Lin & Iyer (2005, Technometrics 47(3):323-335, eq. 1, p. 324) state the
+## two-sided requirement as Pr{F(T + D) - F(T - D) >= beta} = gamma and then
+## approximate it (Howe 1969 expansion, Wald & Wolfowitz 1946 moment
+## substitution, two-term truncation) by T +/- z_{(1+beta)/2} R_{zeta,gamma}.
+## "content" solves the criterion draw by draw instead: for draw k, with
+## R_theta_k, v_k = max(0, R_tau2_k + c R_s2e_k) and the common centre T
+## (median of R_theta), h_k >= 0 solves
+##     Phi((T + h_k - R_theta_k) / sqrt(v_k)) - Phi((T - h_k - R_theta_k) / sqrt(v_k)) = beta,
+## i.e. h_k is the half-width around T that gives content beta under the
+## draw's N(R_theta_k, v_k); h_k = |T - R_theta_k| when v_k = 0. The interval
+## is T +/- (gamma-quantile of h_k).
+##
+## Solver: with d = |T - R_theta_k|, s = sqrt(v_k), the miss mass
+##   g(h) = Phi(-(d + h)/s) + Phi((d - h)/s)   (= 1 - content, upper tails, so
+## beta near 1 does not cancel) is strictly decreasing in h, and the root of
+## g(h) = 1 - beta lies in [z s, d + z s], z = z_{(1+beta)/2} (the content at
+## z s is at most beta, the content at d + z s at least beta). Safeguarded
+## Newton on that bracket: a Newton step that leaves the bracket is replaced
+## by bisection; stops when every step is below 4 ulp of h.
+## ---------------------------------------------------------------------------
+.gpq_content_h <- function(T, Rtheta, v, beta) {
+  d <- abs(T - Rtheta)
+  h <- d                                  # v == 0: the point mass at R_theta
+  pos <- v > 0
+  if (!any(pos)) return(h)
+  dd <- d[pos]; s <- sqrt(v[pos])
+  z  <- stats::qnorm((1 + beta) / 2)
+  miss <- 1 - beta
+  lo <- z * s; hi <- dd + z * s
+  x <- (lo + hi) / 2
+  gfun <- function(x) stats::pnorm(-(dd + x) / s) + stats::pnorm((dd - x) / s) - miss
+  for (it in seq_len(200L)) {
+    gx <- gfun(x)
+    hi <- ifelse(gx < 0, x, hi)           # g decreasing: g < 0 -> root below x
+    lo <- ifelse(gx > 0, x, lo)
+    dg <- -(stats::dnorm((dd + x) / s) + stats::dnorm((dd - x) / s)) / s
+    xn <- x - gx / dg
+    bad <- !is.finite(xn) | xn <= lo | xn >= hi
+    xn[bad] <- (lo[bad] + hi[bad]) / 2
+    done <- abs(xn - x) <= 4 * .Machine$double.eps * pmax(abs(x), .Machine$double.xmin) |
+      gx == 0
+    x <- ifelse(gx == 0, x, xn)
+    if (all(done)) break
+  }
+  h[pos] <- x
+  h
 }
 
 ## ---------------------------------------------------------------------------
@@ -635,8 +712,11 @@ ti_gpq_raw <- function(y, time, batch, t0, P = 0.95, alpha = NULL, level = NULL,
   sides <- match.arg(sides)
   ## boundary: public alpha/level -> internal `conf`; public `P` -> `content`.
   conf  <- 1 - .resolve_alpha(alpha, level)
+  two_sided <- .gpq_two_sided_value(control)
   g <- .gpq_core(y, time, batch, t0, content = P, conf = conf, sides = sides,
-                 c_resid = c_resid, M = control$M, seed = control$seed)
+                 c_resid = c_resid, M = control$M, seed = control$seed,
+                 two_sided = two_sided)
+  .warn_gpq_two_sided(two_sided, g$sides)
   .warn_extrapolation(t0, time, random = TRUE, var = "t0")
   ## the same row schema (and so the same diagnostics) as the ti_lmm() GPQ route;
   ## route_reason = "method": the GPQ engine was called explicitly

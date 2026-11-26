@@ -69,6 +69,19 @@
   Monte-Carlo error. Random-slope GPQ results are unchanged (bit-identical).
   Two or more random factors (nested, crossed) still signal
   `reintervals_error_method`. The diagnostics carry `M` on this route.
+* **`lmm_interval_control(gpq_two_sided = "content")`** (validation arm,
+  package-original; under validation, step 13b; signals
+  `reintervals_warning_unvalidated`). A two-sided GPQ tolerance interval that
+  solves the content criterion of Liao, Lin & Iyer (2005, eq. 1) draw by draw,
+  in place of their Wald-Wolfowitz / Howe approximation
+  `T +/- z_{(1+P)/2} R_zeta` (Oliva-Aviles & Hauser 2025, eq. 1), which stays
+  the default (`"approx"`, bit-identical). Every GPQ tolerance-interval route
+  (random slope, random intercept, `ti_gpq_raw()`), two-sided only; the option
+  is recorded per row in `attr(., "diagnostics")$gpq_two_sided`. In a
+  1000-replicate check on the 16 two-sided step-13 random-intercept cells
+  below nominal (extrapolated, small between-lot variance), its coverage was
+  at least nominal - 0.01 in every cell, where the default GPQ reached
+  0.85-0.97; widths grew by at most 22% there and 8% in passing control cells.
 * **Vectorised `P`, `level` / `alpha` and `sides`.** `ti_lmm()` accepts vectors
   of `P`, `level` (or `alpha`) and `sides`; `ci_lmm()`, `pi_lmm()`,
   `new_group_mean_lmm()` and `lmm_predict()` accept vectors of `level` (or

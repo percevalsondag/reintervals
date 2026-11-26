@@ -12,7 +12,8 @@ lmm_interval_control(
   pi_df = c("francq-satterthwaite", "containment"),
   ngm_method = c("package", "broad-inference", "hts", "classical"),
   slope_ngm_method = c("reml", "broad-inference", "gpq", "fv-anova"),
-  slope_pi_method = c("reml", "fv-anova", "hybrid")
+  slope_pi_method = c("reml", "fv-anova", "hybrid"),
+  gpq_two_sided = c("approx", "content")
 )
 }
 \arguments{
@@ -165,11 +166,34 @@ points, no residual df, fewer than two lots, or a zero variance) it uses
 \code{"reml"} with a warning of class \code{reintervals_warning_hybrid_fallback}, and
 its rows record why in \code{slope_pi_route_reason} (\code{NA} when there was no
 fallback).}
+
+\item{gpq_two_sided}{Construction of the two-sided GPQ tolerance interval
+(\code{\link[=ti_lmm]{ti_lmm()}} GPQ routes, random slope and random intercept, both targets;
+\code{\link[=ti_gpq_raw]{ti_gpq_raw()}}). \code{"approx"} (default) is Liao, Lin & Iyer (2005, eq. 2) =
+Oliva-Aviles & Hauser (2025, eq. 1): \verb{T +/- z_\{(1+P)/2\} R_zeta}, \code{T} the
+median of the GPQ draws of the mean, \code{R_zeta} the \code{level}-quantile of the
+draws of \verb{sqrt(tau2 + c s2e + var(T))}; it rests on the Wald-Wolfowitz /
+Howe approximation of the content criterion. \code{"content"} (validation arm,
+package-original; under validation, step 13b) solves that criterion, eq.
+(1) of Liao, Lin & Iyer (2005), directly, draw by draw: for draw \code{k}, with
+\code{R_theta_k} and \verb{v_k = max(0, R_tau2_k + c R_s2e_k)}, \code{h_k >= 0} is the
+half-width for which \verb{[T - h_k, T + h_k]} holds content \code{P} of
+\code{N(R_theta_k, v_k)} (\verb{h_k = |T - R_theta_k|} when \code{v_k = 0}); the interval
+is \verb{T +/- h}, \code{h} the \code{level}-quantile of the \code{h_k}. Same draws, centre,
+seed contract and Monte-Carlo SE (MC sections) as \code{"approx"}. One-sided
+intervals are unaffected; rows record the option in
+\code{attr(., "diagnostics")$gpq_two_sided} (\code{"not_applicable"} on one-sided
+rows and on the closed-form routes). A non-default value signals
+\code{reintervals_warning_unvalidated} where it is applied.
+References: Liao CT, Lin TY, Iyer HK (2005). \emph{Technometrics} 47(3):323-335.
+\doi{10.1198/004017005000000102}. Oliva-Aviles C, Hauser P (2025).
+\emph{Technometrics} 67(2):193-202. \doi{10.1080/00401706.2024.2407324}.}
 }
 \value{
 An \code{lmm_interval_control} list (passed to a verb's \code{control}
 argument); a list with elements \code{seed}, \code{M}, \code{ci_df}, \code{slope_ci_df},
-\code{pi_df}, \code{ngm_method}, \code{slope_ngm_method} and \code{slope_pi_method}.
+\code{pi_df}, \code{ngm_method}, \code{slope_ngm_method}, \code{slope_pi_method} and
+\code{gpq_two_sided}.
 }
 \description{
 Tuning knobs only --- the RNG seed and Monte-Carlo size used when the
@@ -213,6 +237,7 @@ lmm_interval_control(slope_ci_df = "k-minus-1", pi_df = "containment")
 lmm_interval_control(ngm_method = "broad-inference",
                      slope_ngm_method = "broad-inference")
 lmm_interval_control(slope_pi_method = "hybrid")
+lmm_interval_control(gpq_two_sided = "content")
 }
 \seealso{
 \code{\link[=ci_lmm]{ci_lmm()}}, \code{\link[=ti_lmm]{ti_lmm()}}, \code{\link[=ti_gpq_raw]{ti_gpq_raw()}}.

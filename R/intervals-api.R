@@ -182,9 +182,31 @@
 #'   `"reml"` with a warning of class `reintervals_warning_hybrid_fallback`, and
 #'   its rows record why in `slope_pi_route_reason` (`NA` when there was no
 #'   fallback).
+#' @param gpq_two_sided Construction of the two-sided GPQ tolerance interval
+#'   ([ti_lmm()] GPQ routes, random slope and random intercept, both targets;
+#'   [ti_gpq_raw()]). `"approx"` (default) is Liao, Lin & Iyer (2005, eq. 2) =
+#'   Oliva-Aviles & Hauser (2025, eq. 1): `T +/- z_{(1+P)/2} R_zeta`, `T` the
+#'   median of the GPQ draws of the mean, `R_zeta` the `level`-quantile of the
+#'   draws of `sqrt(tau2 + c s2e + var(T))`; it rests on the Wald-Wolfowitz /
+#'   Howe approximation of the content criterion. `"content"` (validation arm,
+#'   package-original; under validation, step 13b) solves that criterion, eq.
+#'   (1) of Liao, Lin & Iyer (2005), directly, draw by draw: for draw `k`, with
+#'   `R_theta_k` and `v_k = max(0, R_tau2_k + c R_s2e_k)`, `h_k >= 0` is the
+#'   half-width for which `[T - h_k, T + h_k]` holds content `P` of
+#'   `N(R_theta_k, v_k)` (`h_k = |T - R_theta_k|` when `v_k = 0`); the interval
+#'   is `T +/- h`, `h` the `level`-quantile of the `h_k`. Same draws, centre,
+#'   seed contract and Monte-Carlo SE (MC sections) as `"approx"`. One-sided
+#'   intervals are unaffected; rows record the option in
+#'   `attr(., "diagnostics")$gpq_two_sided` (`"not_applicable"` on one-sided
+#'   rows and on the closed-form routes). A non-default value signals
+#'   `reintervals_warning_unvalidated` where it is applied.
+#'   References: Liao CT, Lin TY, Iyer HK (2005). *Technometrics* 47(3):323-335.
+#'   \doi{10.1198/004017005000000102}. Oliva-Aviles C, Hauser P (2025).
+#'   *Technometrics* 67(2):193-202. \doi{10.1080/00401706.2024.2407324}.
 #' @return An `lmm_interval_control` list (passed to a verb's `control`
 #'   argument); a list with elements `seed`, `M`, `ci_df`, `slope_ci_df`,
-#'   `pi_df`, `ngm_method`, `slope_ngm_method` and `slope_pi_method`.
+#'   `pi_df`, `ngm_method`, `slope_ngm_method`, `slope_pi_method` and
+#'   `gpq_two_sided`.
 #' @seealso [ci_lmm()], [ti_lmm()], [ti_gpq_raw()].
 #' @examples
 #' lmm_interval_control(seed = 1, M = 5000)
@@ -193,6 +215,7 @@
 #' lmm_interval_control(ngm_method = "broad-inference",
 #'                      slope_ngm_method = "broad-inference")
 #' lmm_interval_control(slope_pi_method = "hybrid")
+#' lmm_interval_control(gpq_two_sided = "content")
 #' @export
 lmm_interval_control <- function(seed = NULL, M = 20000L,
                                  ci_df = c("satterthwaite", "kenward-roger",
@@ -204,13 +227,15 @@ lmm_interval_control <- function(seed = NULL, M = 20000L,
                                                 "classical"),
                                  slope_ngm_method = c("reml", "broad-inference", "gpq",
                                                       "fv-anova"),
-                                 slope_pi_method = c("reml", "fv-anova", "hybrid")) {
+                                 slope_pi_method = c("reml", "fv-anova", "hybrid"),
+                                 gpq_two_sided = c("approx", "content")) {
   ci_df       <- match.arg(ci_df)
   slope_ci_df <- match.arg(slope_ci_df)
   pi_df       <- match.arg(pi_df)
   ngm_method  <- match.arg(ngm_method)
   slope_ngm_method <- match.arg(slope_ngm_method)
   slope_pi_method <- match.arg(slope_pi_method)
+  gpq_two_sided <- match.arg(gpq_two_sided)
   if (!is.null(seed) && (!is.numeric(seed) || length(seed) != 1L || is.na(seed) ||
                            abs(seed) > .Machine$integer.max)) {
     .abort("`seed` must be NULL or a single number in the integer range.",
@@ -227,7 +252,8 @@ lmm_interval_control <- function(seed = NULL, M = 20000L,
   structure(list(seed = seed, M = as.integer(M), ci_df = ci_df,
                  slope_ci_df = slope_ci_df, pi_df = pi_df,
                  ngm_method = ngm_method, slope_ngm_method = slope_ngm_method,
-                 slope_pi_method = slope_pi_method),
+                 slope_pi_method = slope_pi_method,
+                 gpq_two_sided = gpq_two_sided),
             class = "lmm_interval_control")
 }
 
@@ -293,6 +319,29 @@ lmm_interval_control <- function(seed = NULL, M = 20000L,
                          "%s = \"%s\"."), o, applied[[o]], o, a$default),
           class = "reintervals_warning_unvalidated",
           data = list(option = o, value = applied[[o]]))
+  }
+  invisible(NULL)
+}
+
+## lmm_interval_control(gpq_two_sided): the two-sided GPQ tolerance-interval
+## construction ("approx" when the control predates the option). It applies to
+## the two-sided rows of the GPQ tolerance-interval routes only; every other
+## TI row records "not_applicable" in diagnostics$gpq_two_sided.
+.gpq_two_sided_value <- function(control) {
+  v <- control$gpq_two_sided
+  if (is.null(v)) "approx" else v
+}
+
+## One reintervals_warning_unvalidated per call when gpq_two_sided = "content"
+## is applied (a GPQ route with at least one two-sided row).
+.warn_gpq_two_sided <- function(value, sides) {
+  if (identical(value, "content") && any(sides == "two.sided")) {
+    .warn(paste0("gpq_two_sided = \"content\" is a validation arm (package-original; ",
+                 "under validation, step 13b): its coverage is being evaluated for ",
+                 "reintervals 1.0.0. The default is gpq_two_sided = \"approx\" ",
+                 "(Liao, Lin & Iyer 2005; Oliva-Aviles & Hauser 2025)."),
+          class = "reintervals_warning_unvalidated",
+          data = list(option = "gpq_two_sided", value = value))
   }
   invisible(NULL)
 }
@@ -446,7 +495,7 @@ lmm_interval_control <- function(seed = NULL, M = 20000L,
                  "slope_ci_df_rule", "pi_df_rule", "ngm_arm", "slope_ngm_arm",
                  "ngm_df_failed", "vc_cov_route", "vc_cov_reason",
                  "df_fallback_reason", "slope_pi_arm", "slope_pi_route_reason",
-                 "fv_df_lots")
+                 "fv_df_lots", "gpq_two_sided")
 
 ## The output unifier. Maps any engine's native frame to the single tidy
 ## contract; relabels only, never recomputes. Universal columns, in order:
@@ -514,7 +563,7 @@ lmm_interval_control <- function(seed = NULL, M = 20000L,
                "frac_boundary", "K", "df_resid", "phi1", "c_resid",
                "route_reason", "mls_bound", "n_na_draws", "mc_se_lower",
                "mc_se_upper", "vc_cov_route", "vc_cov_reason", "df_fallback_reason",
-               "slope_pi_route_reason", "fv_df_lots")) {
+               "slope_pi_route_reason", "fv_df_lots", "gpq_two_sided")) {
     if (cn %in% names(native)) diag[[cn]] <- native[[cn]]
   }
   for (a in c("beta_hat", "n_E", "U", "Vhat_Y", "C1", "C2", "pi_df_fallback",
